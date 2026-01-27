@@ -1,6 +1,6 @@
-gymnasium==0.29.1
+gymnasium
 torch==2.5.0
-numpy==1.26.4
+numpy
 matplotlib==3.8.3
 pandas==2.2.1
 seaborn==0.13.2
