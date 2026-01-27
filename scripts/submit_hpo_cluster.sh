@@ -11,6 +11,10 @@
 #SBATCH --partition=RTX3090  # Default to RTX3090, change to A100-40GB if needed
 #SBATCH --array=1-50%5       # Run 50 trials total, max 5 concurrently for better BO
 
+# Notifications (Optional - Uncomment and set email)
+# #SBATCH --mail-type=END,FAIL
+# #SBATCH --mail-user=your.email@dfki.de
+
 # =============================================================================
 # DFKI Pegasus HPO Launcher
 # =============================================================================
