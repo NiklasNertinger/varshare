@@ -8,7 +8,7 @@
 #SBATCH --partition=RTXA6000,L40S,batch,RTX3090,A100-40GB
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8      # Bumped to 8 to match colleague's safe baseline
-#SBATCH --mem=32G
+#SBATCH --mem=16G
 #SBATCH --array=1-50%5
 
 # Notifications (Optional - Uncomment and set email)
