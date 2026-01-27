@@ -28,7 +28,7 @@ set -euo pipefail
 source /netscratch/$USER/varshare/venv/bin/activate
 
 # Add the current directory (repo root) to PYTHONPATH so scripts can find 'src'
-export PYTHONPATH=$PYTHONPATH:$(pwd)
+export PYTHONPATH="${PYTHONPATH:-}:$(pwd)"
 
 # 2. Database Location
 DB_DIR="/netscratch/$USER/varshare/hpo_db"
