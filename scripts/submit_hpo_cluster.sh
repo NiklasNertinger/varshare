@@ -24,7 +24,8 @@ set -euo pipefail
 # 1. Setup Environment
 # 'module' command is proving problematic in non-interactive batch mode.
 # We rely on the pre-installed drivers and the venv's PyTorch/CUDA binaries.
-source .venv/bin/activate
+# Use ABSOLUTE path to venv to avoid "No such file" errors
+source /netscratch/$USER/varshare/venv/bin/activate
 
 # 2. Database Location
 DB_DIR="/netscratch/$USER/varshare/hpo_db"
