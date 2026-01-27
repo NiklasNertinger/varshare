@@ -22,6 +22,9 @@ set -euo pipefail
 # =============================================================================
 
 # 1. Setup Environment
+# Ensure 'module' command is available (Fix for "module: command not found")
+source /etc/profile.d/modules.sh 2>/dev/null || true
+
 module load cuda/12.1 
 source .venv/bin/activate
 
