@@ -1,0 +1,31 @@
+\BOOKMARK [1][-]{section.1}{Introduction}{}% 1
+\BOOKMARK [1][-]{section.2}{Preliminaries}{}% 2
+\BOOKMARK [2][-]{subsection.2.1}{Markov Decision Process \(MDP\)}{section.2}% 3
+\BOOKMARK [2][-]{subsection.2.2}{Soft Actor-Critic}{section.2}% 4
+\BOOKMARK [1][-]{section.3}{Revisiting and Analyzing Multi-Task Reinforcement Learning}{}% 5
+\BOOKMARK [2][-]{subsection.3.1}{Multi-Task Reinforcement Learning Setting}{section.3}% 6
+\BOOKMARK [2][-]{subsection.3.2}{Challenges in Multi-Task Reinforcement Learning}{section.3}% 7
+\BOOKMARK [1][-]{section.4}{Parameter-Compositional Multi-Task RL}{}% 8
+\BOOKMARK [2][-]{subsection.4.1}{Formulation}{section.4}% 9
+\BOOKMARK [2][-]{subsection.4.2}{Stable Multi-Task Reinforcement Learning}{section.4}% 10
+\BOOKMARK [2][-]{subsection.4.3}{Unified Perspective on Some Existing Methods}{section.4}% 11
+\BOOKMARK [1][-]{section.5}{Related Work}{}% 12
+\BOOKMARK [1][-]{section.6}{Experiments}{}% 13
+\BOOKMARK [2][-]{subsection.6.1}{Benchmark Results on Meta-World}{section.6}% 14
+\BOOKMARK [2][-]{subsection.6.2}{Stable MTRL Training}{section.6}% 15
+\BOOKMARK [2][-]{subsection.6.3}{Ablation Study}{section.6}% 16
+\BOOKMARK [2][-]{subsection.6.4}{Qualitative Results on Parameter Set and Compositional Vectors}{section.6}% 17
+\BOOKMARK [1][-]{section.7}{Conclusion, Limitation and Future Work}{}% 18
+\BOOKMARK [1][-]{appendix.A}{Appendix}{}% 19
+\BOOKMARK [2][-]{subsection.A.1}{Additional Results}{appendix.A}% 20
+\BOOKMARK [3][-]{subsubsection.A.1.1}{Analyze Stability of PaCo on MT10-rand from Training Curve}{subsection.A.1}% 21
+\BOOKMARK [3][-]{subsubsection.A.1.2}{Additional Details on Meta-World Benchmarks and Results}{subsection.A.1}% 22
+\BOOKMARK [3][-]{subsubsection.A.1.3}{Additional Results: Performance Scores During Training}{subsection.A.1}% 23
+\BOOKMARK [3][-]{subsubsection.A.1.4}{Compositional Vector Visualization}{subsection.A.1}% 24
+\BOOKMARK [2][-]{subsection.A.2}{Implementation Details}{appendix.A}% 25
+\BOOKMARK [3][-]{subsubsection.A.2.1}{Practical Implementation of PaCo}{subsection.A.2}% 26
+\BOOKMARK [3][-]{subsubsection.A.2.2}{MTRL Implementation Details and Hyper-parameters}{subsection.A.2}% 27
+\BOOKMARK [3][-]{subsubsection.A.2.3}{Details on Computational Resources}{subsection.A.2}% 28
+\BOOKMARK [3][-]{subsubsection.A.2.4}{Loss Explosion and Training Stability}{subsection.A.2}% 29
+\BOOKMARK [2][-]{subsection.A.3}{Initial Attempts on Some Possible Future Extensions with PaCo}{appendix.A}% 30
+\BOOKMARK [3][-]{subsubsection.A.3.1}{PaCo-based Transfer Learning}{subsection.A.3}% 31

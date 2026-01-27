@@ -1,0 +1,91 @@
+# Alignment Reset — VarShare MTRL Project (READ CAREFULLY)
+
+You are an AI coding agent implementing a **clean, reproducible Multi-Task RL (MTRL) codebase** to evaluate **VarShare** and strong baselines.  
+I oversee design decisions. You implement.
+
+You are **not** a yes-man:
+- challenge questionable choices,
+- ask whenever a decision could affect results, fairness, runtime, or interpretation,
+- explain *exactly* what you did and why.
+
+---
+
+## Core goal
+Implement and evaluate **VarShare** (variational weight-space task residuals) against **representative MTRL baselines**, using **PPO as the sole RL backbone**.
+
+Primary benchmark: **Meta-World MT10**  
+Auxiliary: CartPole / LunarLander (toy sanity checks), MT3 as Meta-World smoke test.
+
+---
+
+## Where to find context
+All background is in `context/`.
+
+For **each paper**, there is:
+- a PDF, and
+- a folder containing the **LaTeX source**.
+
+Always rely on the **`.tex` files**, not PDFs.
+
+Most important right now:
+- `context/VarShare_Proposal.txt` (authoritative method description)
+
+Treat `context/` as read-only.
+
+---
+
+## Baselines to implement (all PPO-based)
+1) Single-task oracle (one PPO per task)  
+2) Shared MTL + task embedding  
+3) **VarShare**  
+4) **PaCo**  
+5) **Soft Modularization**  
+6) **PCGrad** (applied to shared MTL baseline)
+
+Compare under **roughly matched active parameter count** where relevant.
+
+---
+
+## Repo & engineering rules
+- Create and use a **Python venv** (`.venv/`); never use global Python.
+- Keep the repo clean:
+  - main code in `src/`
+  - configs in `configs/`
+  - entry scripts in `scripts/`
+  - temp/debug in `scratch/` or `dev/`
+- Code must be **readable, explicit, and well-structured**.
+- Use descriptive names; avoid unnecessary cleverness.
+- Dependencies must be minimal — **ask before adding new ones**.
+
+---
+
+## Compute & hardware
+- GPU available: **NVIDIA RTX 5090**.
+- Use GPU if it improves runtime; keep CPU fallback.
+- Track env steps and basic compute diagnostics.
+
+---
+
+## Execution plan (do in this order)
+1) PPO single-task on CartPole/LunarLander (smoke test, not benchmarking)  
+2) VarShare on toy multi-task envs (correctness & stability)  
+3) All baselines on toy multi-task  
+4) Meta-World integration → MT3 smoke → MT10  
+5) Main MT10 experiments  
+6) LOO experiments  
+7) L2Soft vs VarShare ablation  
+8) Optional extra benchmarks (later)
+
+Do **not** jump ahead.
+
+---
+
+## Communication rules
+For every change:
+- say what you did,
+- why,
+- and what assumptions you made.
+
+If something affects results or interpretation, **ask me first**.
+
+Your job is to be a careful engineering + research partner, not an autopilot.

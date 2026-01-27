@@ -1,0 +1,41 @@
+We consider a finite horizon Markov decision processe (MDP) for each task $\task$ and there are $M$ tasks in total, which can be represented by $(S, A, P, R, H, \gamma)$, where the state $s \in S$ and action $a \in A$ are continuous. $P(s_{t+1}|s_t, a_t)$ represents the stochastic transition dynamics. $R(s_t, a_t)$ represents the reward function. $H$ is the horizon and  $\gamma$ is the discount factor. We use $\pi_\phi (a_t|s_t)$ to represent the policy parameterized by $\phi$
+and the goal is to learn a policy maximizing the expected return.
+In multi-task RL, tasks are sampled from a distribution $p(\task)$, and different tasks have different MDPs. 
+
+\vspace{-0.07in}
+\subsection{Reinforcement Learning with Soft Actor-Critic} 
+\vspace{-0.07in}
+
+In this paper, we train policy with Soft Actor-Critic (SAC)~\cite{DBLP:journals/corr/abs-1801-01290}. SAC is an off-policy actor-critic deep reinforcement learning approach, where actor aims to succeed at the task as well as act as randomly as possible. We consider the parameterized soft Q-function is $Q_\theta(s_t, a_t)$ where $Q$ is parameterized by $\theta$. There are three types of parameters to optimize in SAC: The policy parameters $\phi$, the parameters of Q-function $\theta$ and a temperature $\alpha$. The objective of policy optimization is:
+\vspace{-0.05in}
+\begin{align}
+J_\pi(\phi) = \E_{s_t\sim\mathcal{D}}\left[\E_{a_t\sim\pi_\phi}[\alpha \log \pi_\phi(a_t|s_t) - Q_\theta(s_t, a_t)]\right],
+\label{eq:reparam_objective}
+\end{align}
+where $\alpha$ is a learnable temperature served as an entropy penalty coefficient. It can be learned to maintain the entropy level of the policy, using:
+% The optimization loss for the temperature $\alpha$ is:
+\vspace{-0.05in}
+\begin{align}
+J(\alpha)  = \E{a_t \sim \pi_\phi} \left[ - \alpha\log\pi_\phi(a_t|s_t) - \alpha \bar{\mathcal{H}}\right],
+\label{eq:ecsac:alpha_objective}
+\end{align}
+where $\bar{\mathcal{H}}$ is a desired minimum expected entropy. If $\log \pi_t(a_t|s_t)$ is optimized to increase its value, and the entropy is becoming smaller, $\alpha$ will be adjusted to increase in the process. 
+
+
+\vspace{-0.07in}
+\subsection{Multi-task Reinforcement Learning}
+\vspace{-0.07in}
+
+We extend SAC from single task to multi-task by learning a single, task-conditioned policy $\pi(a|s, z)$, where $z$ represents a task embedding. We optimize the policy to maximize the average expected return across all tasks sampled from $p(\task)$.
+The objective of policy optimization is,
+\vspace{-0.05in}
+\begin{align}
+J_\pi(\phi)=\mathbb{E}_{\task \sim p(\task)} \left[ J_{\pi, \task}(\phi) \right],
+\label{eq:jphi}
+\end{align}
+where $J_{\pi, \task}(\phi)$ is adopted directly from Eq.~\ref{eq:reparam_objective} with task $\task$. Similarly for  Q-function, the objective is:
+\vspace{-0.05in}
+\begin{align}
+J_Q(\theta)=\mathbb{E}_{\task \sim p(\task)} \left[ J_{Q, \task}(\theta) \right].
+\label{eq:jtheta}
+\end{align}

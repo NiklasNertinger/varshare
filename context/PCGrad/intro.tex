@@ -1,0 +1,33 @@
+\section{Introduction}
+
+While deep learning and deep reinforcement learning (RL) have shown considerable promise in enabling systems to learn complex tasks, the data requirements of current methods make it difficult to learn a breadth of capabilities, particularly when all tasks are learned individually from scratch. A natural approach to such multi-task learning problems is to train a network on all tasks jointly, with the aim of discovering shared structure across the tasks in a way that achieves greater efficiency and performance than solving tasks individually. However, learning multiple tasks all at once results is a difficult optimization problem, sometimes leading to \emph{worse} overall performance and data efficiency compared to learning tasks individually~\citep{parisotto2015actor,rusu2015policydistillation}. These optimization challenges are so prevalent that multiple multi-task RL algorithms have considered using independent training as a subroutine of the algorithm before distilling the independent models into a multi-tasking model~\citep{levine2016end,parisotto2015actor,rusu2015policydistillation,ghosh2017dnc,teh2017distral}, producing a multi-task model but losing out on the efficiency gains over independent training. If we could tackle the optimization challenges of multi-task learning effectively, we may be able to actually realize the hypothesized benefits of multi-task learning without the cost in final performance.
+
+\begin{wrapfigure}{R}{0.59\textwidth}
+%
+    \centering
+    \includegraphics[width=1.0\linewidth]{figures/pcgrad_example.png}
+    \vspace{-0.4cm}
+    \caption{\footnotesize Visualization of \arxiv{PCGrad} on a 2D multi-task optimization problem. (a) A multi-task objective landscape. (b) \& (c) Contour plots of the individual task objectives that comprise (a). (d) Trajectory of gradient updates on the multi-task objective using the Adam optimizer. The gradient vectors of the two tasks at the end of the trajectory are indicated by blue and red arrows, where the relative lengths are on a log scale.(e) Trajectory of gradient updates on the multi-task objective using Adam with PCGrad. For (d) and (e), the optimization trajectory goes from black to yellow.}
+    \vspace{-0.3cm}
+    \label{fig:optlandscape}
+%
+\end{wrapfigure}
+
+While there has been a significant amount of research in multi-task learning~\citep{caruana97multitask,ruder2017overview}, the optimization challenges are not well understood. Prior work has described varying learning speeds of different tasks~\citep{chen2017gradnorm,hessel2019popart} and \arxiv{plateaus} in the optimization landscape~\citep{schaul2019ray} as potential causes, whereas a range of other works have focused on the model architecture~\citep{misra2016crossstitch,liu2018attention}. In this work, we instead hypothesize that one of the main optimization issues in multi-task learning arises from gradients from different tasks conflicting with one another in a way that is detrimental to making progress. We define two gradients to be conflicting if they point away from one another, i.e., have a negative cosine similarity. We hypothesize that such conflict is detrimental when a) conflicting gradients coincide with b) high positive curvature and c) a large difference in gradient magnitudes.
+
+As an illustrative example, consider the 2D optimization landscapes of two task objectives in Figure~\ref{fig:optlandscape}a-c.
+\icml{The optimization landscape of each task consists of a deep valley, a property that has been observed in neural network optimization landscapes~\citep{goodfellow2014qualitatively}, and the bottom of each valley is characterized by high positive curvature and large differences in the task gradient magnitudes.
+%
+Under such circumstances, the multi-task gradient is dominated by one task gradient, which comes at the cost of degrading the performance of the other task. Further, due to high curvature, the improvement in the dominating task may be overestimated, while the degradation in performance of the non-dominating task may be underestimated.
+As a result, the optimizer struggles to make progress on the optimization objective. In Figure~\ref{fig:optlandscape}d), the optimizer reaches the deep valley of task 1, but is unable to traverse the valley in a parameter setting where there are \icmllast{\emph{conflicting gradients}, \emph{high curvature}, and \emph{a large difference in gradient magnitudes}} (see gradients plotted in Fig.~\ref{fig:optlandscape}d).
+In Section~\ref{sec:analysis}, we find experimentally that this \emph{tragic triad}
+also occurs in a higher-dimensional neural network multi-task learning problem.}
+
+The core contribution of this work is a method for mitigating gradient interference by altering the gradients directly, i.e. by performing ``gradient surgery.'' If two gradients are conflicting, we alter the gradients by projecting each onto the normal plane of the other, preventing the interfering components of the gradient from being applied to the network. We refer to this particular form of gradient surgery as \emph{projecting conflicting gradients} (PCGrad). PCGrad is model-agnostic, requiring only a single modification to the application of gradients. Hence, it is easy to apply to a range of problem settings, including multi-task supervised learning
+and multi-task reinforcement learning, and can also be readily combined with other multi-task learning approaches, such as those that modify the architecture. \icml{We theoretically prove the local conditions under which PCGrad improves upon standard multi-task gradient descent}, and we empirically evaluate PCGrad on a variety of challenging problems, including multi-task CIFAR classification, multi-objective scene understanding, a challenging multi-task RL domain, and goal-conditioned RL. Across the board, we find PCGrad leads to substantial improvements in terms of data efficiency, optimization speed, and final performance compared to prior approaches, including a more than 30\% absolute improvement in multi-task reinforcement  learning problems. Further, on multi-task supervised learning tasks, PCGrad can be successfully combined with prior state-of-the-art methods for multi-task learning for even greater performance. 
+
+
+
+
+%
+

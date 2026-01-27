@@ -1,0 +1,27 @@
+\subsection{Preliminaries: Problem and Notation}
+\label{sec:prelim}
+
+
+\newcommand{\task}{\mathcal{T}}
+%
+%
+
+The goal of multi-task learning is to find parameters $\theta$ of a model $f_\theta$ that achieve high average performance across all the training tasks drawn from a distribution of tasks $p(\task)$. 
+More formally, we aim to solve the problem: $\min\limits_{\theta} \mathbb{E}_{\task_i \sim p(\task)} \left[ \mathcal{L}_i(\theta) \right]$, where $\mathcal{L}_i$ is a loss function for the $i$-th task $\task_i$ that we want to minimize. For a set of tasks, $\{\task_i\}$, we denote the multi-task loss as $\loss(\theta) = \sum_i \loss_i(\theta)$, and the gradients of each task as $\mathbf{g}_i = \nabla \loss_i(\theta)$ for a particular $\theta$. (We drop the reliance on $\theta$ in the notation for brevity.)
+%
+To obtain a model that solves a specific task from the task distribution $p(\task)$, we define a task-conditioned model $f_\theta(y|x, z_i)$, with input $x$, output $y$, and encoding $z_i$ for task $\task_i$, which could be provided as a one-hot vector or in any other form.
+
+
+%
+
+%
+%
+
+%
+
+%
+%
+%
+%
+%
+%

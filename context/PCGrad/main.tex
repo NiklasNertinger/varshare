@@ -1,0 +1,182 @@
+
+\documentclass{article} %
+
+%
+%
+%
+
+%
+%
+
+%
+%
+%
+
+%
+%
+
+%
+     \usepackage[final,nonatbib]{neurips_2020}
+
+\usepackage[numbers]{natbib}
+\usepackage{times}
+\usepackage{graphicx, mathtools, amsthm,wrapfig}
+\usepackage{thm-restate}
+\usepackage[noend]{algorithmic}
+\usepackage{amssymb}
+\usepackage{thmtools}
+\usepackage{mathtools}
+\usepackage{amsmath}
+%
+\usepackage[shortlabels]{enumitem}
+\usepackage{sidecap}
+\usepackage[capbesideposition=outside,capbesidesep=quad]{floatrow}
+\usepackage{float}
+
+
+%
+\input{math_commands.tex}
+\input{defs.tex}
+
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{url}
+
+%
+\newcommand{\theHalgorithm}{\arabic{algorithm}}
+
+\usepackage{booktabs}       %
+\usepackage{amsfonts}       %
+\usepackage{nicefrac}       %
+\usepackage{microtype, todonotes}      %
+\usepackage{algorithm}
+\usepackage{algorithmic}
+%
+\usepackage{subcaption}
+\usepackage{enumitem}
+
+\usepackage{amsthm, amssymb, bbm, bm}
+\usepackage{amsmath}
+\usepackage{fleqn, tabularx}
+\usepackage{multirow}
+\usepackage[export]{adjustbox}
+\usepackage{titlesec}
+\usepackage{lipsum}
+
+\hypersetup{
+ colorlinks=True,
+ linkcolor=blue,
+ citecolor=blue,
+ urlcolor=blue}
+
+
+\makeatletter
+\newcommand{\mybox}{%
+    \collectbox{%
+        \setlength{\fboxsep}{1pt}%
+        \fbox{\BOXCONTENT}%
+    }%
+}
+\makeatother
+
+
+
+\newcommand{\arxiv}[1]{\textcolor{black}{#1}}
+\newcommand{\icml}[1]{\textcolor{black}{#1}}
+\newcommand{\KH}[1]{\textcolor{black}{#1}}
+\newcommand{\icmllast}[1]{\textcolor{black}{#1}}
+\newcommand{\neurips}[1]{\textcolor{black}{#1}}
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+\title{Gradient Surgery for Multi-Task Learning}
+
+\author{%
+ Tianhe Yu$^1$, Saurabh Kumar$^1$, Abhishek Gupta$^2$, Sergey Levine$^2$,\\
+ \textbf{Karol Hausman}$^3$, \textbf{Chelsea Finn}$^1$\\
+ Stanford University$^1$, UC Berkeley$^2$, Robotics at Google$^3$\\
+ \texttt{tianheyu@cs.stanford.edu} \\
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+ %
+}
+
+\begin{document}
+
+\maketitle
+
+\titlespacing\section{0pt}{2pt plus 2pt minus 2pt}{0pt plus 2pt minus 2pt}
+\titlespacing\subsection{0pt}{2pt plus 3pt minus 2pt}{0pt plus 2pt minus 2pt}
+\setlength{\textfloatsep}{5pt plus 2.0pt minus 1.0pt}
+\setlength{\dbltextfloatsep}{7pt plus 2.0pt minus 1.0pt}
+%
+
+
+\begin{abstract}
+While deep learning and deep reinforcement learning (RL) systems have demonstrated impressive results in domains such as image classification, game playing, and robotic control, data efficiency remains a major challenge. %
+Multi-task learning has emerged as a promising approach for sharing structure across multiple tasks to enable more efficient learning. However, the multi-task setting presents a number of optimization challenges, making it difficult to realize large efficiency gains compared to learning tasks independently.
+The reasons why multi-task learning is so challenging compared to single-task learning are not fully understood.
+\icml{In this work, we identify a set of three conditions of the multi-task optimization landscape that cause detrimental gradient interference,} and develop a simple yet general approach for avoiding such interference between task gradients. We propose a form of gradient surgery that projects a task's gradient onto the normal plane of the gradient of any other task that has a \emph{conflicting} gradient.
+On a series of challenging multi-task supervised and multi-task RL problems,  this approach leads to substantial gains in efficiency and performance. Further, it is model-agnostic and can be combined with previously-proposed multi-task architectures for enhanced performance. 
+\end{abstract}
+
+\input{intro.tex}
+
+\input{method.tex}
+
+\input{related_work.tex}
+
+\input{experiments.tex}
+
+\section{Conclusion}
+
+
+In this work, we identified a set of conditions that underlies major challenges in multi-task optimization: conflicting gradients, high positive curvature, and large gradient differences. We proposed a simple algorithm (PCGrad) to mitigate these challenges via ``gradient surgery.'' PCGrad provides a simple solution to mitigating gradient interference, which substantially improves optimization performance. We provide simple didactic examples and subsequently show significant improvement in optimization for a variety of multi-task supervised learning and reinforcement learning problems. We show that, when some optimization challenges of multi-task learning are alleviated by PCGrad, we can obtain hypothesized benefits in efficiency and asymptotic performance of multi-task settings.
+
+While we studied multi-task supervised learning and multi-task reinforcement learning in this work, we suspect the problem of conflicting gradients to be prevalent in a range of other settings and applications, such as meta-learning, continual learning, multi-goal imitation learning~\citep{codevilla2018end}, and multi-task problems in natural language processing applications~\citep{mccann2018natural}. Due to its simplicity and model-agnostic nature, we expect that applying PCGrad in these domains to be a promising avenue for future investigation. Further, the general idea of gradient surgery may be an important ingredient for alleviating a broader class of optimization challenges in deep learning, such as the challenges in the stability challenges in two-player games~\citep{roth2017stabilizing} and multi-agent optimizations~\citep{nedic2009distributed}. We believe this work to be a step towards simple yet general techniques for addressing some of these challenges.
+
+\section*{Broader Impact}
+\paragraph{Applications and Benefits.}
+Despite recent success, current deep learning and deep RL methods mostly focus on tackling a single specific task from scratch. Prior methods have proposed methods that can perform multiple tasks, but they often yield comparable or even higher data complexity compared to learning each task individually. Our method enables deep learning systems that mitigate inferences between differing tasks and thus achieves data-efficient multi-task learning. Since our method is general and simple to apply to various problems, there are many possible real-world applications, including but not limited to computer vision systems, autonomous driving, and robotics. For computer vision systems, our method can be used to develop algorithms that enable efficient classification, instance and semantics segmentation and object detection at the same time, which could improve performances of computer vision systems by reusing features obtained from each task and lead to a leap in real-world domains such as autonomous driving. For robotics, there are many situations where multi-task learning is needed. For example, surgical robots are required to perform a wide range of tasks such as stitching and removing tumour from the patient’s body. Kitchen robots should be able to complete multiple chores such as cooking and washing dishes at the same time. Hence, our work represents a step towards making multi-task reinforcement learning more applicable to those settings.
+
+\paragraph{Risks.}
+However, there are potential risks that apply to all machine learning and reinforcement learning systems including ours, including but not limited to safety, reward specification in RL which is often difficult to acquire in the real world, bias in supervised learning systems due to the composition of training data, and compute/data-intensive training procedures. For example, safety issues arise when autonomous driving cars fail to generalize to out-of-distribution data, which leads to crashing or even hurting people. Moreover, reward specification in RL is generally inaccessible in the real world, making RL unable to scale to real robots. In supervised learning domains, learned models could inherit the bias that exists in the training dataset. Furthermore, training procedures of ML models are generally compute/data-intensive, which cause inequitable access to these models. Our method is not immune to these risks. Hence, we encourage future research to design more robust and safe multi-task RL algorithms that can prevent unsafe behaviors. It is also important to push research in self-supervised and unsupervised multi-task RL in order to resolve the issue of reward specification. For supervised learning, we recommend researchers to publish their trained multi-task learning models to make access to those models equitable to everyone in field and develop new datasets that can mitigate biases and also be readily used in multi-task learning.
+
+
+%
+%
+%
+
+\begin{ack}
+
+The authors would like to thank Annie Xie for reviewing an earlier draft of the paper, Eric Mitchell for technical guidance, and Aravind Rajeswaran and Deirdre Quillen for helpful discussions. Tianhe Yu is partially supported by Intel Corporation. Saurabh Kumar is supported by an NSF Graduate Research Fellowship and the Stanford Knight Hennessy Fellowship. Abhishek Gupta is supported by an NSF Graduate Research Fellowship. Chelsea Finn is a CIFAR Fellow in the Learning in Machines and Brains program.
+
+\end{ack}
+
+\bibliography{reference}
+\bibliographystyle{plainnat}
+
+\newpage
+{\Large \bf Appendix}
+\input{appendix.tex}
+
+\end{document}

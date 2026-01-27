@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environments
+.venv/
+venv/
+env/
+
+# IDEs
+.vscode/
+.idea/
+.gemini/
+
+# Results & Data
+analysis/
+logs/
+checkpoints/
+wandb/
+*.db
+*.sqlite
+optuna_mt10.db
+
+# System
+.DS_Store
+Thumbs.db
+
+# Cluster Artifacts
+slurm-*.out

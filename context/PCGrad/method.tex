@@ -1,0 +1,285 @@
+\def\rvgone{{\mathbf{g}_1}}
+\def\rvgtwo{{\mathbf{g}_2}}
+\def\rvg{{\mathbf{g}}}
+
+\section{Multi-Task Learning with PCGrad}
+
+\newcommand{\btheta}{\bm \theta}
+
+While the multi-task problem can in principle be solved by simply applying a standard single-task algorithm with a suitable task identifier provided to the model, or a simple multi-head or multi-output model, a number of prior works~\citep{parisotto2015actor,rusu2015policydistillation,sener2018multi} have found this learning problem to be difficult. %
+%
+In this section, we introduce notation, identify possible causes for the difficulty of multi-task optimization, propose a simple and general approach to mitigate it, and theoretically analyze the proposed approach. 
+
+\input{prelim.tex}
+
+\subsection{\!\!\!The Tragic Triad: Conflicting Gradients, Dominating Gradients, High Curvature}
+\label{sec:tragictriad}
+
+\icml{We hypothesize that a key optimization issue in multi-task learning arises from conflicting gradients, where gradients for different tasks point away from one another as measured by a negative inner product. However, conflicting gradients are not detrimental on their own. Indeed, simply averaging task gradients should provide the correct solution to descend the multi-task objective. However, there are conditions under which such conflicting gradients lead to significantly degraded performance. Consider a two-task optimization problem. If the gradient of one task is much larger in magnitude than the other, it will dominate the average gradient. %
+If there is also high positive curvature along the directions of the task gradients, then the improvement in performance from the dominating task may be significantly overestimated, while the degradation in performance from the dominated task may be significantly underestimated.
+Hence, we can characterize the co-occurrence of three conditions as follows: (a) when gradients from multiple tasks are in conflict with one another (b) when the difference in gradient magnitudes is large, leading to some task gradients dominating others, and (c) when there is high curvature in the multi-task optimization landscape. We formally define the three conditions below.}
+
+\begin{definition}
+\label{def:angle}
+We define $\phi_{ij}$ as the angle between two task gradients $\mathbf{g}_i$ and $\mathbf{g}_j$. We define the gradients as \textbf{conflicting} when $\cos\phi_{ij}<0$.
+\end{definition}
+
+\begin{definition}
+\label{def:div}
+We define the \textbf{gradient magnitude similarity} between two gradients $\mathbf{g}_i$ and $\mathbf{g}_j$
+as 
+$
+    \Phi(\mathbf{g}_i, \mathbf{g}_j) = \frac{2\|\mathbf{g}_i\|_2\|\mathbf{g}_j\|_2}{\|\mathbf{g}_i\|_2^2 + \|\mathbf{g}_j\|_2^2}.
+$
+\end{definition}
+When the magnitude of two gradients is the same, this value is equal to 1. As the gradient magnitudes become increasingly different, this value goes to zero.
+
+\begin{definition}
+\label{def:curvature}
+We define \textbf{multi-task curvature} as 
+$
+    \mathbf{H}(\loss; \theta, \theta') = \int_0^1\nabla\loss(\theta)^T\nabla^2\loss(\theta + a(\theta'-\theta))\nabla\loss(\theta)da,
+$
+which is the averaged curvature of $\loss$ between $\theta$ and $\theta'$ in the direction of the multi-task gradient $\nabla\loss(\theta)$.
+\end{definition}
+
+When $\mathbf{H}(\loss; \theta, \theta') > C$ for some large positive constant $C$, for model parameters $\theta$ and $\theta'$ at the current and next iteration, we characterize the optimization landscape as having high curvature.
+
+%
+
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+
+\icml{We aim to study the tragic triad and observe the presence of the three conditions through two examples. First, consider the two-dimensional optimization landscape illustrated in Fig.~\ref{fig:optlandscape}a, where the landscape for each task objective corresponds to a deep and curved valley with large curvatures (Fig.~\ref{fig:optlandscape}b and~\ref{fig:optlandscape}c). The optima of this multi-task objective correspond to where the two valleys meet. More details on the optimization landscape are in Appendix~\ref{app:optimization_landscape_details}. Particular points of this optimization landscape exhibit the three described conditions, and we observe that, the Adam~\citep{kingma2014adam} optimizer stalls precisely at one of these points (see Fig.~\ref{fig:optlandscape}d), preventing it from reaching an optimum. This provides some empirical evidence for our hypothesis. Our experiments in Section~\ref{sec:analysis} further suggest that this phenomenon occurs in multi-task learning with deep networks.
+Motivated by these observations, we develop an algorithm that aims to alleviate the optimization challenges caused by conflicting gradients, dominating gradients, and high curvature, which we describe next.}
+
+\iffalse
+\icml{We also aim to detect if a similar phenomenon occurs in multi-task learning with a neural network on the multi-task CIFAR-100 domain (see Section~\ref{sec:experiments} for details).
+\KH{To analyze the extent of these three conditions, we measure the occurrence of conflicting gradients, the occurrence of dominating gradients, and the estimated curvature along the direction of the multi-task gradient.}
+%
+We indeed observe a significant occurrence of these three conditions when training deep neural networks on multi-task problems --- the percentage of the conflicting gradients is at least 38\%, a gradient dominates XX\% of the time, and the curvature along the gradient remains positive throughout training.}
+\todo{Kevin -- fill in the above statistic about dominating gradients, in a way that makes sense}
+\fi
+
+
+
+\subsection{\!\!\!PCGrad: Project Conflicting Gradients}\label{sec:pcgrad}
+\newcommand{\bg}{\mathbf{g}}
+\newcommand{\batch}{\mathcal{B}}
+
+Our goal is to break one condition of \icml{the tragic triad} by directly altering the gradients themselves to prevent conflict. In this section, we outline our approach for altering the gradients. \icml{In the next section, we will theoretically show that de-conflicting gradients can benefit multi-task learning when dominating gradients and high curvatures are present}.
+
+To be maximally effective and widely applicable, we aim to alter the gradients in a way that allows for positive interactions between the task gradients and does not introduce assumptions on the form of the model. Hence, when gradients do not conflict, we do not change the gradients.
+%
+When gradients do conflict, the goal of PCGrad is to modify the gradients for each task so as to minimize negative conflict with other task gradients, which will in turn mitigate under- and over-estimation problems arising from \icml{high curvature}.
+%
+%
+
+To deconflict gradients during optimization, PCGrad adopts a simple procedure: if the gradients between two tasks are in conflict, i.e. their cosine similarity is negative, we project the gradient of each task onto the normal plane of the gradient of the other task. 
+This amounts to removing the conflicting component of the gradient for the task, thereby reducing the amount of destructive gradient interference between tasks. 
+A pictorial description of this idea is shown in Fig.~\ref{fig:conflict}.
+\begin{minipage}[t]{\linewidth}
+\centering
+      \begin{minipage}[t]{0.495\linewidth}
+          \begin{algorithm}[H]
+            \caption{ PCGrad Update Rule}
+            \label{alg:dgrad-o}
+            \begin{algorithmic}[1]
+            {\small
+            %
+            \REQUIRE Model parameters $\theta$, task minibatch $\batch =\{\task_k\}$
+            %
+            \STATE $\bg_k \leftarrow \nabla_\theta \loss_k(\theta) ~~\forall k$
+            \STATE $\bg_k^{\text{PC}} \leftarrow \bg_k ~~\forall k$
+            \FOR{$\task_i \in \batch$ } %
+                %
+                \FOR{$\task_j \stackrel{\text{\scriptsize uniformly}}{\sim} \batch \setminus \task_i$ \arxiv{in random order}}
+                      %
+                      %
+                    %
+                      \IF{$\bg_i^{\text{PC}} \cdot \bg_j < 0$}
+                      %
+                        \STATE \textit{// Subtract the projection of} $\bg_i^{\text{PC}}$ \textit{onto} $\bg_j$
+                        \STATE Set $\bg_i^{\text{PC}} = \bg_i^{\text{PC}} - \frac{\bg_i^{\text{PC}} \cdot \bg_j}{\|\bg_j\|^2} \bg_j $ 
+                      \ENDIF
+                \ENDFOR
+                %
+             \ENDFOR
+            \STATE \textbf{return} update $\Delta \theta = \bg^\text{PC} = \sum_i \bg_i^{\text{PC}}$
+            }
+            \end{algorithmic}
+            \end{algorithm}
+            \vspace{-0.1cm}
+      \end{minipage}
+    %
+      \begin{minipage}[t]{0.495\linewidth}
+          \begin{figure}[H]
+              \includegraphics[width=0.99\linewidth]{figures/grads.png}
+              \vspace{-0.5cm}
+              \captionof{figure}{\footnotesize Conflicting gradients and PCGrad. In (a), tasks $i$ and $j$ have conflicting gradient directions, which can lead to destructive interference. In (b) and (c), we illustrate the PCGrad algorithm in the case where gradients are conflicting. PCGrad projects task $i$'s gradient onto the normal vector of task $j$'s gradient, and vice versa. Non-conflicting task gradients (d) are not altered under PCGrad, allowing for constructive interaction.}
+              \label{fig:conflict}
+          \end{figure}
+      \end{minipage}
+\end{minipage}
+Suppose the gradient for task $\task_i$ is $\bg_i$, and the gradient for task $\task_j$ is $\bg_j$. PCGrad proceeds as follows: (1) First, it determines whether $\bg_i$ conflicts with $\bg_j$ by computing the cosine similarity between vectors $\bg_i$ and $\bg_j$, where negative values indicate conflicting gradients. (2) If the cosine similarity is negative, we replace $\bg_i$ by its projection onto the normal plane of $\bg_j$: $\bg_i = \bg_i - \frac{\bg_i \cdot \bg_j}{\|\bg_j\|^2}\bg_j$. 
+If the gradients are not in conflict, i.e. cosine similarity is non-negative, the original gradient $\bg_i$ remains unaltered. (3) PCGrad repeats this process across all of the other tasks sampled \arxiv{in random order from} the current batch $\task_j~ \forall~j\neq i$, resulting in the gradient $\bg_i^{\text{PC}}$ that is applied for task $\task_i$.
+We perform the same procedure for all tasks in the batch to obtain their respective gradients. 
+The full update procedure is described in Algorithm~\ref{alg:dgrad-o} \arxiv{and a discussion on using a random task order is included in Appendix~\ref{app:ablation_order}}.
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+
+\iffalse
+, and can also be expressed as a single equation as follows:
+\begin{align}
+\Delta \theta = \sum_{\task_i\in\batch} \left[ \bg_i - \sum_{\task_j\in\batch}  \mathbbm{1}(\cos(\theta_{ij})<0) \frac{\bg_i\cdot\bg_j}{\|\bg_i\|^2}\bg_j    \right]\\
+\text{where } ~~~ \bg_k = \nabla_\theta \loss_k(\theta), ~~~~~ \cos(\theta_{ij}) = \frac{\bg_i \cdot \bg_j}{\|\bg_j\|\|\bg_j\|} \nonumber
+\end{align}
+and where $\batch$ corresponds to a minibatch of tasks sampled from $p(\task)$ and where the PCGrad update $\Delta \theta$ can be plugged into SGD algorithms such as momentum and Adam without modification.
+\fi
+
+
+This procedure, while simple to implement, ensures that the gradients that we apply for each task per batch interfere minimally with the other tasks in the batch, mitigating the \icml{conflicting gradient} problem, producing a variant on standard first-order gradient descent in the multi-objective setting. In practice,  PCGrad can be combined with any gradient-based optimizer, including commonly used methods such as SGD with momentum and Adam~\citep{kingma2014adam}, by simply passing the computed update to the respective optimizer instead of the original gradient. Our experimental results verify the hypothesis that this procedure reduces the problem of \icml{conflicting gradients}, and find that, as a result, learning progress is substantially improved.
+
+
+
+
+\subsection{Theoretical Analysis of PCGrad}
+\label{sec:theory}
+
+\icml{
+In this section, we theoretically analyze the performance of PCGrad with two tasks:
+\begin{definition}
+\label{def:setup}
+Consider two task loss functions $\loss_1 : \mathbb{R}^n \rightarrow \mathbb{R}$ and $\loss_2 : \mathbb{R}^n \rightarrow \mathbb{R}$. We define the two-task learning objective as $\loss(\theta) = \loss_1(\theta) + \loss_2(\theta)$ for all $\theta \in \mathbb{R}^n$, where $\rvgone = \nabla \loss_1(\theta)$, $\rvgtwo = \nabla \loss_2(\theta)$, and $\rvg = \rvgone + \rvgtwo$.
+\end{definition}
+}
+
+We first aim to verify that the PCGrad update corresponds to a sensible optimization procedure under simplifying assumptions. We analyze convergence of PCGrad in the convex setting, under standard assumptions in Theorem~\ref{thm:converge}.
+%
+\neurips{For additional analysis on convergence, including the non-convex setting, with more than two tasks, and with momentum-based optimizers, see Appendices~\ref{app:proof} and \ref{app:momentum}}
+%
+%
+\begin{restatable}{theorem}{theoremconvergence}
+\label{thm:converge}
+Assume $\loss_1$ and $\loss_2$ are convex and differentiable.
+Suppose the gradient of $\loss$ is $L$-Lipschitz with $L > 0$.
+%
+Then, the PCGrad update rule with step size $t \leq \frac{1}{L}$ will converge to either (1) a location in the optimization landscape where $\cos(\phi_{12}) = -1$ or (2) the optimal value $\loss(\theta^*)$.
+\end{restatable}
+
+\vspace{-0.3cm}
+\begin{proof}
+See Appendix~\ref{app:proof}.
+\end{proof}
+\vspace{-0.3cm}
+
+Theorem~\ref{thm:converge} states that application of the PCGrad update in the two-task setting with a convex and Lipschitz multi-task loss function $\loss$ leads to convergence to either the minimizer of $\loss$ or a potentially sub-optimal objective value. A sub-optimal solution occurs when the cosine similarity between the gradients of the two tasks is exactly $-1$, i.e. the gradients directly conflict, leading to zero gradient after applying PCGrad. However, in practice, since we are using SGD, which is a noisy estimate of the true batch gradients, the cosine similarity between the gradients of two tasks in a minibatch is unlikely to be $-1$, thus avoiding this scenario. 
+%
+%
+\neurips{Note that, in theory, convergence may be slow if $\cos(\phi_{12})$ hovers near $-1$. However, we don't observe this in practice, as seen in the objective-wise learning curves in Appendix~\ref{app:objective-wise}.}
+
+
+Now that we have checked the sensibility of PCGrad, we aim to understand how PCGrad relates to the three conditions in the tragic triad. In particular, we derive sufficient conditions under which PCGrad achieves lower loss after one update. Here, we still analyze the two task setting, but no longer assume convexity of the loss functions.
+
+\begin{definition}
+\label{def:bounding}
+\icml{We define the \textbf{multi-task curvature bounding measure}
+$\xi(\rvgone, \rvgtwo) = (1 - \cos^2\phi_{12})\frac{\|\rvgone-\rvgtwo\|_2^2}{\|\rvgone + \rvgtwo\|_2^2}.$}
+\end{definition}
+With the above definition, we present our next theorem:
+\begin{restatable}{theorem}{theoremlocal}
+\label{thm:local}
+Suppose $\loss$ is differentiable and the gradient of $\loss$ is Lipschitz continuous with constant $L > 0$. 
+Let $\theta^{\text{MT}}$ and $\theta^{\text{PCGrad}}$ be the parameters after applying one update to $\theta$ with $\rvg$ and PCGrad-modified gradient $\rvg^{\text{PC}}$ respectively, with step size $t > 0$. 
+Moreover, assume $\mathbf{H}(\loss; \theta, \theta^{\text{MT}}) \geq \ell\|\rvg\|_2^2$ for some constant $\ell \leq L$, i.e. the multi-task curvature is lower-bounded.
+Then $\loss(\theta^{\text{PCGrad}}) \leq \loss(\theta^{\text{MT}})$ if \textbf{(a)} $\cos\phi_{12} \leq -\Phi(\rvgone, \rvgtwo)$, \textbf{(b)} $\ell \geq \xi(\rvgone, \rvgtwo)L$, and \textbf{(c)} $t \geq \frac{2}{\ell - \xi(\rvgone, \rvgtwo)L}.$
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+\end{restatable}
+
+\vspace{-0.3cm}
+\begin{proof}
+See Appendix~\ref{app:proof2}.
+\end{proof}
+\vspace{-0.3cm}
+
+%
+\icml{Intuitively, Theorem~\ref{thm:local} implies that PCGrad achieves lower loss value after a single gradient update compared to standard gradient descent in multi-task learning when (i) the angle between task gradients is not too small, i.e. the two tasks need to conflict sufficiently (\textbf{condition (a)}), (ii) the difference in magnitude needs to be sufficiently large (\textbf{condition (a)}), (iii) the curvature of the multi-task gradient should be large (\textbf{condition (b)}), (iv) and the learning rate should be big enough so that large curvature would lead to overestimation of performance improvement on the dominating task and underestimation of performance degradation on the dominated task (\textbf{condition (c)}). These first three points (i-iii) correspond to exactly the triad of conditions outlined in Section~\ref{sec:tragictriad}, while the latter condition (iv) is desirable as we hope to learn quickly. We empirically validate that the first three points, (i-iii), are frequently met in a neural network multi-task learning problem in Figure~\ref{fig:analysis} in Section~\ref{sec:analysis}.} \neurips{For additional analysis, including complete sufficient and necessary conditions for the PCGrad update to outperform the vanilla multi-task gradient, see Appendix~\ref{app:theorem3}.}
+%
+%
+
+
+
+\section{PCGrad in Practice}
+\label{sec:pcgrad_practical}
+
+We use PCGrad in supervised learning and reinforcement learning problems with multiple tasks or goals. Here, we discuss the practical application of PCGrad to those settings. %
+
+In multi-task supervised learning, each task $\task_i \sim p(\task)$ has a corresponding training dataset $\mathcal{D}_i$ consisting of labeled training examples, i.e. $\mathcal{D}_i = \{(x, y)_n\}$. 
+The objective for each task in this supervised setting is then defined as $\loss_i(\theta) = \mathbb{E}_{(x,y) \sim \data_i} \left[ - \log f_\theta(y | x, z_i ) \right]$, where $z_i$ is a one-hot encoding of task $\task_i$. 
+At each training step, we randomly sample a batch of data points $\mathcal{B}$ from the whole dataset $\bigcup_i \mathcal{D}_i$ and then group the sampled data with the same task encoding into small batches denoted as $\mathcal{B}_{i}$ for each $\task_i$ represented in $\mathcal{B}$. We denote the set of tasks appearing in $\mathcal{B}$ as $\mathcal{B}_\task$. After sampling, we precompute the gradient of each task in $\mathcal{B}_\task$ as
+$
+    \nabla_\theta \mathcal{L}_i(\theta) = \mathbb{E}_{(x,y) \sim \mathcal{B}_i} \left[ - \nabla_\theta\log f_\theta(y | x, z_i ) \right]\text{.}
+$
+Given the set of precomputed gradients $\nabla_\theta \mathcal{L}_i(\theta)$, we also precompute the cosine similarity between all pairs of the gradients in the set. Using the pre-computed gradients and their similarities, we can obtain the PCGrad  update by following Algorithm~\ref{alg:dgrad-o}, without re-computing task gradients nor backpropagating into the network.
+Since the PCGrad procedure is only modifying the gradients of shared parameters in the optimization step, it is \textit{model-agnostic} and can be applied to any architecture with shared parameters.
+%
+\neurips{We empirically validate PCGrad with multiple architectures in Section~\ref{sec:experiments}}.
+
+\icml{For multi-task RL and goal-conditioned RL, PCGrad can be readily applied to policy gradient methods by directly updating the computed policy gradient of each task, following Algorithm~\ref{alg:dgrad-o}, analogous to the supervised learning setting. For actor-critic algorithms, it is also straightforward to apply PCGrad: we simply replace task gradients for both the actor and the critic by their gradients computed via PCGrad.} \neurips{For more details on the practical implementation for RL, see Appendix~\ref{app:practical_rl}.}
+%
+
+
+%
+%
+
+

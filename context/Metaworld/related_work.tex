@@ -1,0 +1,59 @@
+% First, cover benchmarks like robosuite, whatever robosuite cites, rllab, gym, YCB, Sonic games, Atari, driving envs like Carla, all those navigation environments like Habitat, Gibson, etc.
+
+% Discuss multi-task analysis papers for both supervised learning and RL, like ones that indicate that conflicting gradients is an issue.
+
+% http://www.kavrakilab.org/publications/lagriffoul2018tmp-benchmarks.pdf
+
+% Describe other multi-task benchmarks and works comparing multi-task algorithms
+
+Previous works that have proposed benchmarks for reinforcement learning have largely focused on single task learning settings~\cite{brockman2016openai,cobbe2018quantifying,tassa2018deepmind}.
+One popular benchmark used to study multi-task learning is the Arcade Learning Environment, a suite of dozens of Atari 2600 games~\cite{DBLP:journals/corr/abs-1709-06009}.
+While having a tremendous impact on the multi-task reinforcement learning research community~\cite{parisotto2015actor,rusu2015policy,DBLP:journals/corr/abs-1809-04474,espeholt2018impala,sharma2017online}, the Atari games included in the benchmark have significant differences in visual appearance, controls, and objectives, making it challenging to acquire any efficiency gains through shared learning.
+In fact, many prior multi-task learning methods have observed substantial negative transfer between the Atari games~\cite{parisotto2015actor,rusu2015policy}.
+In contrast, we would like to study a case where positive transfer between the different tasks should be possible. 
+We therefore propose a set of related yet diverse tasks that share the same robot, action space, and workspace.
+
+Meta-reinforcement learning methods have been evaluated on a number of different problems, including maze navigation~\cite{DBLP:journals/corr/DuanSCBSA16,wang1611learning,mishra2017simple},
+%%CF.7.3: need to cite the previous paper that does learning to navigate in the same way as meta-RL algos.
+continuous control domains with parametric variation across tasks~\cite{finn2017model,rothfuss2018promp,rakelly2019efficient,fernando2018meta}, bandit problems~\cite{wang1611learning,DBLP:journals/corr/DuanSCBSA16,mishra2017simple,ritter2018been}, levels of an arcade game~\cite{nichol2018gotta}, and locomotion tasks with varying dynamics~\cite{nagabandi2018learning,saemundsson2018meta}.
+%%CF.7.3: I'm pretty sure we're are missing a large number of meta-RL papers that we should cite. This includes the model-based meta-RL paper by Katja and Marc Deisenroth, the meta-critic paper that evaluates on cartpole and doesn't really work, the Jane Wang's episodic recall paper, the baldwin effect paper, and MAML extensions like CAML and CAVIA. I'm not 100% sure if all of these evaluate on meta-RL problems, but I think most of them do. Can also look at the PEARL paper for more. %%KH: I've added more papers that you suggested (looking at PEARL, I think that should be mostly it), is there anything else that you think we should include here?
+Complementary to these evaluations, we aim to develop a testbed of tasks and an evaluation protocol that are reflective of the challenges in applying meta-learning to robotic manipulation problems, including both parameteric and non-parametric variation in tasks.
+
+%While each one of these settings provides interesting insights, we believe that a large set of challenging control environments provided in this paper can help scaling up meta-reinforcement learning research and will allow to bring a unifying perspective on evaluating different meta-RL approaches.
+%%CF: Karol, I'm not sure what you were trying to say here.
+%% I wanted to say that we can scale up meta-RL experiments, and hopefully have others evaluate their methods against our benchmark. It's not a crucial sentence though, happy to leave it out.
+
+There is a long history of robotics benchmarks~\cite{calli2015benchmarking,DBLP:journals/corr/abs-1911-07246,james2019rlbench}, datasets~\cite{lenz2015deep,finn2016unsupervised,yu2016more,chebotar2016bigs,gupta2018robot,mandlekar2018roboturk,sharma2018multiple}, competitions~\cite{correll2016analysis} and standardized object sets~\cite{calli2015ycb,choi2009list} that have played an important role in robotics research.
+Similarly, there exists a number of robotics simulation benchmarks including visual navigation~\cite{savva2019habitat,kolve2017ai2,brodeur2017home,savva2017minos,xia2018gibson}, autonomous driving~\cite{dosovitskiy2017carla,wymann2000torcs,richter2017playing}, grasping~\cite{kappler2015leveraging,kasper2012kit,goldfeder2008columbia}, single-task manipulation~\cite{corl2018surreal}, among others.
+In this work, our aim is to continue this trend and provide a large suite of tasks that will allow researchers to study multi-task learning, meta-learning, and transfer in general. Further, unlike these prior simulation benchmarks, we particularly focus on providing a suite of many diverse manipulation tasks and a protocol for multi-task and meta RL evaluation.
+%%SL.7.4: Shouldn't we cite the Stanford benchmarking paper from last year's CoRL?
+%%CF.7.4: we had cited it above, but I also added it here.
+%% End of KH 6.29
+
+
+\iffalse
+Previous works have proposed benchmarks for reinforcement learning. 
+%%CF.6.29: I would rephrase the above sentence to: "Previous works have proposed benchmarks for reinforcement learning, largely focusing on single task settings~\cite{gym,minigrid,coinrun,etc}." (Coin Run is a paper by John Schulman on generalization in RL)
+The most widely used benchmark in deep reinforcement learning is the Arcade Learning Environment, a suite of dozens of Atari 2600 games \cite{DBLP:journals/corr/abs-1709-06009}.
+%%CF.6.29: I think this above sentence is debatable. Gym has also been used widely. I also don't think we need to make claims about what is used the most widely. We can just say that "One popular deep reinforcement learning benchmark is ..."
+While this benchmark has been fruitful for developing aspects of reinforcement learning algorithms, we wish to consider model robotics systems that are able to interact in the real world. 
+%%CF.6.29: I think the next point, about multi-task is much more important than the former sentence. Let's reverse them.
+While a number of works have studied multi-task learning on the Arcade Learning Environment \cite{DBLP:journals/corr/TehBCQKHHP17, DBLP:journals/corr/abs-1809-04474}, 
+%%CF.6.29:  There are a lot more papers than this. Not sure which two papers these are, but there is also policy distillation, actor-mimic, learning to sample tasks, popart, IMPALA. You can also look for all the papers that cite these papers, the papers that the most recent paper cites, and search for "multi-task Atari" on google scholar (or something similar)
+the dynamics between games are dissimilar. 
+%%CF.6.29: Not just the dynamics, but also the visual appearance, the state space, really everything. Would be good to emphsaize that there is very little in common between the games, and indeed, prior works have observed substantial negative transfer between games~\cite{policydistillation,actormimic}. We instead would like to study a case where substantial positive transfer should be positive, with a shared robot, action space, and workspace (i.e. table).
+This makes it difficult to study multitask learning, where we would like to study tasks that are closely related yet diverse.
+
+% Meta-learning benchmarks
+%%CF.6.29: I would discuss all of the meta-learning benchmarks here, and perhaps don't call them benchmarks, but rather tasks in which meta-learning has been evaluated on. This includes the bandits and random MDPs in RL^2 and Jane Wang et al., the maze navigation tasks in RL^2 and its predecessor, the dumb MAML tasks, the varying dynamics tasks in Anusha's model-based meta-RL ICLR paper, the OpenAI sonic benchmark thing.
+%%CF.6.29: Also, I would specifically call them meta-RL benchmarks. There are a lot of meta-learning benchmarks that don't do RL
+Meta-learning works in the past have evaluated on maze navigation benchmarks with variable mazes \cite{DBLP:journals/corr/DuanSCBSA16}. However, though the mazes are of different sizes, a potential limitation of maze search and navigation is that navigation can be performed in different mazes with the same policy.
+%%CF.6.29: We should be sure to cite all of the relevant meta-RL algorithms papers in this paragraph. We shouldn't describe what they do, but have the citation so that the reviewer who wrote that paper will feel better. You can do this in the first sentence and say "Meta-RL works have evaluated on a number of different problems, including maze navigation~\cite{everyone_who_evaluates_on_these}, continuous control domains with parametric variation across tasks~\cite{cite_everyone_who evaluates on these}, ...
+
+% Describe other task robotics benchmarks
+Other robotics benchmark that has been proposed that propose less than 10 robotics tasks \cite{corl2018surreal, DBLP:journals/corr/BrockmanCPSSTZ16}.
+%%CF.6.29: I would probably put these at the very top, as RL/robotics benchmarks that have focused on single-task learning settings.
+However our aim to create a larger dataset of tasks that allows us to study the problem of learning the shared structure between tasks. Other works \cite{Lagriffoul2018PlatformIndependentBF} have designed multitask robotics benchmarks for the purpose of designing general purpose algorithms for task and motion planning, but such works do not address concurrently learning the shared structure between tasks.
+
+%%CF.6.29: Other robotics benchmarks include: visual navigation (look at the papers that this paper cites: https://arxiv.org/abs/1904.01201), driving (Look at CARLA and what it cites), and real world benchmarks like the YCB object set and Amazon picking challenge. These are important to cover.
+\fi

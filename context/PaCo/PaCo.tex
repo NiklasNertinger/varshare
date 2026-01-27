@@ -1,0 +1,1080 @@
+\documentclass{article}
+
+
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2022
+
+
+% ready for submission
+% \usepackage{neurips_2022}
+% to compile a preprint version, e.g., for submission to arXiv, add add the
+% [preprint] option:
+% \usepackage[preprint]{neurips_2022}
+% to compile a camera-ready version, add the [final] option, e.g.:
+\usepackage[final]{neurips_2022}
+
+% Recommended, but optional, packages for figures and better typesetting:
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{subfigure}
+%\usepackage{booktabs} % for professional tables
+
+% \usepackage[square,sort]{natbib}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+\usepackage{natbib}
+\PassOptionsToPackage{square,comma,numbers,sort&compress,super}{natbib}
+
+\usepackage{multirow}
+\usepackage{scalerel}[2016/12/29]
+\usepackage{xcolor}
+
+
+
+\makeatletter
+\def\@fnsymbol#1{\ensuremath{\ifcase#1\or * \or \dagger\or \ddagger\or
+\mathsection\or \mathparagraph\or \|\or **\or \dagger\dagger
+\or \ddagger\ddagger \else\@ctrerr\fi}}
+\makeatother
+
+\newcommand{\vTheta}{{\boldsymbol \Theta}}
+\newcommand{\vtheta}{{\boldsymbol \theta}}
+\newcommand{\vPhi}{{\boldsymbol{\Phi}}}
+\newcommand{\vphi}{{\boldsymbol{\phi}}}
+\newcommand{\vpsi}{{\boldsymbol{\psi}}}
+\newcommand{\B}{{\mathbf{B}}}
+\newcommand{\W}{\scaleobj{0.85}{\mathbf{W}}}
+\newcommand{\w}{{\mathbf{w}}}
+
+\newcommand{\vbeta}{{\boldsymbol \beta}}
+
+\usepackage{epsfig}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{overpic}
+\usepackage{graphicx}
+\usepackage{wrapfig}
+
+\usepackage[breaklinks=true]{hyperref}
+\usepackage{url}
+\usepackage{graphicx}
+
+
+\usepackage{enumitem}
+\newlist{myitemize}{itemize}{3}
+\setlist[myitemize,1]{label=\textbullet,leftmargin=0.1in}
+
+\usepackage{xcolor}
+\definecolor{Comments1}{rgb}{0.8,0.3,0.8}
+\definecolor{Comments2}{rgb}{0.,0.3,0.8}
+\newcommand\smallpercent{\vcenter{\hbox{\scalebox{0.8}{$\%$}}}}
+
+% for color square
+\usepackage{tikz}
+\newcommand{\mycbox}[1]{\tikz{\path[draw=#1,fill=#1] (0,0) rectangle (0.2cm, 0.2cm);}}
+\newcommand{\myccircle}[1]{\tikz[baseline=-0.65ex]\draw[#1,radius=2.8pt] (0,0) circle ;}
+\newcommand{\Arrow}[1]{\parbox{#1}{\tikz{\draw[->](0,0)--(#1,0);}}}
+% \usetikzlibrary{shapes}
+% \newcommand\mystar{\raisebox{-.7em}{\tikz{\node[draw,star,star point height=.2em,minimum size=1.5em]{};} }}
+% \usepackage{fdsymbol}
+\usepackage{pifont}
+\newcommand{\cmark}{\ding{51}}%
+\newcommand{\xmark}{{\scalebox{0.75}{\ding{55}}}}
+
+\definecolor{darkgreen}{rgb}{0.55, 0.71, 0.0}
+
+
+
+
+
+
+
+% to avoid loading the natbib package, add option nonatbib:
+
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+\usepackage{capt-of}
+
+
+\title{PaCo: Parameter-Compositional Multi-Task Reinforcement Learning}
+
+
+
+\author{Lingfeng Sun$^{1}\thanks{Equal contribution.}\,~\thanks{Work done while interning at Horizon Robotics.}$ \quad  Haichao Zhang$^{2}\footnotemark[1]$  \quad  Wei Xu$^{2}$ \quad Masayoshi Tomizuka$^{1}$\\
+	{\fontsize{10}{10} \selectfont \begin{tabular}{l}
+			{$^{1}$University of California Berkeley \qquad  $^{2}$Horizon Robotics}
+		\end{tabular}} \\
+		{\fontsize{8.}{8}	\texttt{lingfengsun@berkeley.edu\quad \{haichao.zhang, wei.xu\}@horizon.ai \, tomizuka@berkeley.edu}}\\
+	}
+
+
+\begin{document}
+
+
+\maketitle
+
+
+
+\begin{abstract}
+The purpose of multi-task reinforcement learning (MTRL) is to train a single policy that can be applied to a set of different tasks. Sharing parameters allows us to take advantage of the similarities among tasks. However, the gaps between contents and difficulties of different tasks bring us challenges on both which tasks should share the parameters and what parameters should be shared, as well as the optimization challenges due to parameter sharing.
+In this work, we introduce a parameter-compositional approach (PaCo) as an attempt to address these challenges. In this framework, a policy subspace represented by a set of parameters is learned. Policies for all the single tasks lie in this subspace and can be composed by interpolating with the learned set. It allows not only flexible parameter sharing but also a natural way to improve training.
+We demonstrate the state-of-the-art performance on Meta-World benchmarks, verifying the effectiveness of the proposed approach.
+\end{abstract}
+
+\section{Introduction}
+\label{intro}
+
+
+Deep reinforcement learning (RL) has made massive progress in solving complex tasks in different domains. Despite the success of RL in various robotic tasks, most of the improvements are restricted to single tasks in locomotion or manipulation. Although many similar tasks with different target and interacting objects are accomplished by the same robot, they are usually defined as individual tasks and solved separately. On the other hand, as intelligent agents, humans usually spend less time learning similar tasks and can acquire new skills using existing ones. This motivates us to think about the advantages of training a set of tasks with certain similarities together efficiently. Multi-task reinforcement learning (MTRL) aims to train an effective policy that can be applied to the same robot to solve different tasks. Compared to training each task separately, a multi-task policy should be efficient in the number of parameters and training samples and benefit from the sharing process.
+
+
+The key challenge in multi-task RL methods is determining what should be shared among tasks and how to share. It is reasonable to assume the existence of similarities among all the tasks picked (usually on the same robot) since training completely different tasks together is meaningless. However, the gaps between different tasks can be significant even within the set. For tasks using the same skill but with different goals, it's natural to share all the parameters and add the goal into state representation to turn the policy into a goal-conditioned policy. For tasks with different skills, sharing policy parameters can be efficient for related tasks but may bring additional difficulties for uncorrelated skills (e.g., push and peg-insert-side in Meta-World~\citep{metaworld}),
+due to additional challenges in learning brought by the conflictions between tasks.
+
+
+Recent works on multi-task RL proposed different methods on this problem, which can be roughly divided into three categories. Some focus on modeling share-structures for sub-policies of different tasks~\cite{sparse_mtrl,soft_module}, while some focus more on algorithms and aim to handle conflicting gradients from different tasks losses during training~\cite{pcgrad}. In addition, many works attempt to select or learn better representations as better task-condition for the policies~\cite{care}. In this paper, we focus on the share-structure design for multiple tasks. We propose a parameter-compositional MTRL method that learns a task-agnostic parameter set forming a subspace in the policy parameter space for all tasks. We infer the task-specific policy in this subspace using a compositional vector for each task. Instead of interpolating different policies' output in the action space, we directly compose the policies in the parameter space. In this way, two different tasks can have identical or independent policies. With different subspace dimensions (\emph{i.e.}, size of parameter set) and additional constraints, this compositional formulation can unify many previous works on sharing structures of MTRL. Moreover, separating the task-specific and the task-agnostic parameter set brings advantages in dealing with instability RL training of certain tasks, which helps improve the multi-task training stability.
+
+
+
+The key contributions of our work are summarized as below. \textbf{\emph{i)}} We present a general Parameter Compositional (PaCo) MTRL training framework that can learn representative parameter sets used to compose policies for different tasks. \textbf{\emph{ii)}}~We introduce a scheme to stabilize MTRL training by leveraging PaCo's decompositional structure. \textbf{\emph{iii)}} We validate the state-of-the-art performance of PaCo on Meta-World benchmark compared with a number of existing methods.
+
+
+
+\begin{figure}[t]
+	\centering
+	\begin{overpic}[width=14.cm]{imgs/metaworld_7tasks.pdf}
+	\end{overpic}
+	\vspace{-0.2in}
+	\caption{\textbf{Example tasks} from Meta-World~\cite{metaworld}.}
+	\vspace{-0.1in}
+	\label{fig:example_tasks}
+\end{figure}
+
+
+% \vspace{-0.1in}
+\section{Preliminaries}
+% \vspace{-0.1in}
+\subsection{Markov Decision Process (MDP)}
+A discrete-time Markov decision process is defined by a tuple $(\mathcal{S, A}, P, r, \mu, \gamma)$, where $\mathcal{S}$ is the state space; $\mathcal{A}$ is the action space; $P$ is the transition process between states; $r: \mathcal{S\times A} \!\rightarrow\!\mathbb{R}$ is the reward function; $\mu\in \mathcal{P(S)}$ is distribution of the initial state, and $\gamma\!\in\![0, 1]$ is the discount factor. At each time step $t$, the learning agent generates the action with a policy $\pi(a_t|s_t)$ as the decision. The goal is to learn a policy to maximize the accumulated discounted return.
+
+\subsection{Soft Actor-Critic}
+%TODO parameter of actor critic
+In the scope of this work, we will use Soft Actor-Critic (SAC) \cite{sac} to train the universal policy for the multi-task RL problem. SAC is an off-policy actor-critic method that uses the maximum entropy framework. The parameters in SAC framework include the policy network $\pi(a_t|s_t)$ used in evaluation, the critic network $Q(s_t, a_t)$ as a soft Q-function. A temperature parameter $\alpha$ is used to maintain the entropy level of policy. In multi-task learning, the one-hot id of task skill and the goal is appended to the state space. Different from single-task SAC, multiple tasks may have different learning dynamics. Therefore, we follow previous works \cite{care} to assign a separate temperature $\alpha_{\tau}$ for each task with different skills. The policy and critic function optimization procedure remains the same as the single-task setting.
+
+
+
+
+
+\section{Revisiting and Analyzing Multi-Task Reinforcement Learning}\label{sec:revisit_mtrl}
+
+
+
+\subsection{Multi-Task Reinforcement Learning Setting}
+
+Each single task can be defined by a unique MDP, and changes in state space, action space, transition, reward function can result in completely different tasks. In MTRL, instead of solving a single MDP, we solve a bunch of MDPs from a task family using a universal policy $\pi_\theta(a|s)$. The first assumption for MTRL is to have a universal shared state space $\mathcal{S}$ and each task has a disjoint state space $S^{\tau} \!\subset \! S$, where $\tau \!\in \! \mathcal{T}$ is any task from the full task distribution.
+In this way, the policy would be able to recognize which task it is currently solving. Adding the one-hot encoding for task id is a common implementation of getting disjoint state space during experiments.
+
+
+In general MTRL setting, we don't have strict restrictions on the which tasks are involved, but we assume that tasks in the full task distribution share some similarities. In real applications, depending on how a task is defined, we can divide it into Multi-Goal MTRL and Multi-Skill MTRL. For the former one, the task set is defined by various ``goals'' in the same environment. The reward function $r^{\tau}$ is different for each goal, but the state and transition remains the same. Typical examples of this Multi-goal settings are locomotion tasks like \textit{Cheetah-Velocity/Direction}~\footnote{By \textit{Cheetah/Ant-Velocity/Direction}, we refer to the tasks that have the same dynamics as the standard locomotion tasks but with a goal of running at a specific velocity or in a specific direction.} and all kinds of goal-conditioned manipulation tasks~\cite{multi_goal}. For the later one, besides changes in goals in the same environment, the task set also involves different environments that share similar dynamics (transition functions). This happens more in manipulation tasks where different environments train different skills of a robot, and one natural example is the Meta-World \cite{metaworld} benchmark which includes multiple goal-conditioned manipulation tasks using the same robot arm. In this setting, the state space of different tasks changes across different skills since the robot is manipulating different objects (\emph{c.f.} Figure~\ref{fig:example_tasks}). In both Multi-goal and Multi-skill setting, we have to form the set of MDPs into a universal Multi-task MDP and find a universal policy that works for all tasks. For multi-goal tasks, we need to append ``goal'' information into state; for multi-skill tasks, we need to append ``goal'' (usually position) as well as ``skill'' (usually one-hot encoding). After getting state $\mathcal{S}^{\tau}$, the corresponding transition and reward $P^{\tau}, r^{\tau}$ can be defined accordingly.
+
+
+\subsection{Challenges in Multi-Task Reinforcement Learning}
+{\textbf{Parameter-Sharing.}}  Multi-task learning aims to learn a single model that can be applied to a set of different tasks. Sharing parameters allows us to take advantage of the similarities among tasks. However, the gaps between contents and difficulties of different tasks bring us the challenges on both which tasks should share the parameters and what parameters should be shared. Failure in the design may result in low success rate on certain tasks that could have been solved if trained separately.
+\emph{This is a challenge in designing an effective structure to solve the MTRL task.}
+
+{\textbf{Multi-Task Training Stability.}} Although we have assumed some similarity in the task sets used for multi-task learning, conflicts between different skills may affect the whole training process~\cite{pcgrad}. Also, failure like loss explosion in some tasks can severely affect the training of other tasks due to parameter sharing~\cite{care}. In multi-task training with large task numbers, the uncertainty of single task training is enlarged.
+\emph{This is a challenge in designing an algorithm to avoid negative influence brought by parameter-sharing among multiple tasks.}
+
+
+
+\section{Parameter-Compositional Multi-Task RL}
+Motivated by the challenges in training universal policies for multiple tasks discussed in Section~\ref{sec:revisit_mtrl}, we will present a Parameter-Compositional approach to MTRL.
+The proposed approach is conceptually simple, yet offers opportunities in addressing the MTRL challenges
+as detailed in the sequel.
+
+
+\subsection{Formulation}\label{sec:paco}
+In this section, we describe how we formulate the parameter-compositional framework for MTRL.
+Given a task $\tau\!\sim\!\mathcal{T}$, where $\mathcal{T}$ denotes the set of tasks with $|\mathcal{T}|\!=\!T$, we use $\vtheta_{\tau} \in \mathbb{R}^{n}$ to denote the vector
+of \emph{all the trainable parameters} of the model (\emph{i.e.}, policy and critic networks) for task $\tau$.
+We employ the following decomposition for the \emph{task parameter vector} $\vtheta_{\tau}$:
+\begin{equation}\label{eq:paco}
+\vtheta_{\tau}=\vPhi\w_{\tau},
+\end{equation}
+where  $\vPhi=[\vphi_1, \vphi_2, \cdots, \vphi_i, \cdots, \vphi_K] \in \mathbb{R}^{n\times K}$ denotes a matrix formed by a set of $K$ parameter vectors $\{\vphi_i\}_{i=1}^K$ (referred to as \emph{parameter set}, which is also overloaded for referring to $\vPhi$), each of which has the same dimensionality as $\vtheta_{\tau}$, \emph{i.e.}, $\vphi_i \in \mathbb{R}^{n}$.
+$\w_{\tau} \!\in\! \mathbb{R}^{K}$ is a \emph{compositional vector}, which is implemented as a trainable embedding vector for the task index $\tau$.
+We refer a model with parameters in the form of Eqn.(\ref{eq:paco}) as a \emph{parameter-compositional} model.
+
+\begin{figure}[t]
+	\centering
+	\begin{overpic}[width=10cm]{imgs/framework2.pdf}
+	\end{overpic}
+	\vspace{-0.1in}
+	\caption{\textbf{Parameter-Compositional method (PaCo)}  for multi-task reinforcement learning. In this framework, the network parameter vector $\vtheta_{\tau}$ for a task $\tau$ is instantiated in a compositional form based on the \emph{shared} base parameter set $\vPhi$ and the \emph{task-specific} compositional vector $\w_{\tau}$. Then the networks are used in the standard way for generating actions or computing the loss~\cite{sac}. During training, $\vPhi$ will be impacted by all the task losses, while $\w_{\tau}$ is  impacted by the  corresponding task loss only.}
+	\label{fig:framework}
+\end{figure}
+
+In the presence of a single task, the decomposition in Eqn.(\ref{eq:paco}) brings no additional benefits, as it is essentially equivalent to the standard way of parameterizing the model.
+However, when faced with multiple tasks, as in the MTRL setting considered in this work, the decomposition in Eqn.(\ref{eq:paco}) offers opportunities for tackling the challenges posed by the MTRL setting.
+More concretely, since Eqn.(\ref{eq:paco}) decomposes the parameters to two parts:
+\emph{i)} task-agnostic $\vPhi$ and \emph{ii)} task-aware $\w_{\tau}$,
+we can share the task-agnostic $\vPhi$ across all the tasks, while still ensure task awareness via $\w_{\tau}$, leading to:
+\begin{eqnarray}\label{eq:paco_multi}
+\begin{split}
+[\vtheta_{1}, \cdots, \vtheta_{\tau}, \cdots, \vtheta_{T}] &= \vPhi [\w_{1}, \cdots,  \w_{\tau}, \cdots\w_{T}] \\
+\vTheta &=\vPhi\W.
+\end{split}
+\end{eqnarray}
+
+For MTRL, let $J_{\tau}(\vtheta)$ denotes the summation of both actor and critic losses  implemented in the same way as in SAC~\cite{sac} for task $\tau$, the multi-task loss is defined as the summation of individual loss $J_{\tau}$  across tasks:
+\begin{equation}\nonumber
+J_{\vTheta} \!\triangleq \! {\textstyle\sum_{\tau} J_{\tau}(\vtheta)}
+\end{equation}
+where $\vTheta$ denotes the collection of all the trainable parameters of both actor and critic networks.
+Together with Eqn.(\ref{eq:paco_multi}), it can be observed that the multi-task loss $J_{\vTheta}$  contributes to the learning of the model parameters in two ways:
+\begin{myitemize}
+	% 	\vspace{-0.1in}
+	\item $\partial J_{\vTheta}/\partial \vPhi \!=\! \sum_{\tau} \partial  J_{\tau}/\partial \vPhi$: all the $T$ tasks contribute to the learning of the shared parameter set  $\vPhi$;
+	% \vspace{-0.05in}
+	\item $\partial J_{\vTheta}/\partial \W \!=\! \sum_{\tau} \partial  J_{\tau}/\partial \w_{\tau}$: as for the training of the the task specific compositional vectors,  each task loss $J_{\tau}$ will impact only its own task specific compositional vector $\w_{\tau}$.
+	% \vspace{-0.1in}
+\end{myitemize}
+
+The PaCo framework is illustrated in Figure~\ref{fig:framework}.
+Additional implementation details about PaCo are provided in  Appendix~\ref{sec:implementation_details}.
+The proposed approach has several attractive properties towards addressing the MTRL challenges discussed earlier:
+\begin{myitemize}
+    % \vspace{-0.05in}
+	\item the compositional form of parameters as in Eqn.(\ref{eq:paco_multi}) offers flexible
+    parameter sharing between tasks, by learning the appropriate compositional vectors for each task over the
+    shared parameter set;
+    \item  because of the clear separation between task-specific and task-agnostic parameters, it also offers a natural solution for improving the stability of MTRL training, as detailed in the sequel.
+\end{myitemize}
+In addition, the separation between task-specific and task-agnostic information has other benefits that beyond the scope of the current work. For example, the task-agnostic parameter set $\vPhi$ could be reused as a pre-trained policy basis in some transfer scenarios (initial attempts in Appendix~\ref{sec:init_attempt}).
+
+
+
+
+
+
+
+
+
+\subsection{Stable Multi-Task Reinforcement Learning}
+\label{sec:mask_reset}
+One inherent challenge in MTRL is the interference during training among tasks due to parameter sharing.
+One consequence of this is that the failure of training on one task may adversely impact the training of
+other tasks~\cite{Distral, pcgrad}. For example, it has been empirically observed that some task losses may explode during training on Meta-World~\cite{care}, which will contribute a significant portion in updating the shared parameters because of their dominance.
+As a consequence, this will significantly impact the training of the other tasks through the shared parameters.
+To mitigate this issue, \cite{care} adopted an empirical trick by terminating the training once this issue is spotted and the whole training is discarded (referred to as \emph{stop-relaunch}).
+\footnote{\tiny{\url{https://github.com/facebookresearch/mtrl/blob/eea3c99cc116e0fadc41815d0e7823349fcc0bf4/mtrl/agent/sac.py\#L322}}}
+Here we show that in PaCo, there is a natural way to mitigate this issue without resorting to an ad-hoc training pipeline ~\cite{care} or more expensive schemes~\cite{pcgrad}.
+
+
+The straightforward idea is to mask out $J_{\eta}$ of task $\eta$ with exploding loss from the total loss $J$ to avoid its adverse impacts on others. More specifically, once a task loss $J_{\eta}$ surpasses some threshold $\epsilon$, it will be excluded from the training loss. We will refer to this step as \emph{loss maskout}.
+
+Because of the compositional nature of the PaCo model, we can introduce further improvement beyond loss maskout. This can be achieved by re-initializing $\w_{\eta}$ without impacting the parameters of other tasks and then following the normal training. One way to re-initialize $\w_{\eta}$ is:
+\begin{equation} \label{eq:reset}
+\w_{\eta} =  \sum_{j\in \mathcal{V}} \beta_j \w_j, \quad \vbeta \!=\! [\beta_1, \beta_2, \cdots] \! \sim \! \Delta^{|\mathcal{V}|-1}
+\end{equation}
+where   $\mathcal{V} \!\triangleq\! \{j| J_{j} \le \epsilon \}$, and  $\vbeta$ is uniformly sampled from  a unit $|\mathcal{V}|\!-\!1$-simplex $\Delta^{|\mathcal{V}|-1}$.
+We refer to this step as \emph{$\w$-reset}.
+During training, \emph{$w$-reset} offers an opportunity to continue learning for the task with exploding loss by resetting its $w$-parameter, which will generate a new task parameter vector when composed with $\vPhi$ and $w_{\eta}$. At the same time, this reset has no influence on other non-exploding tasks, which provides opportunities to further improves over \emph{loss maskout}. The overall stabilization scheme including both \emph{loss maskout} and \emph{$\w$-reset} is termed as \emph{Reset}. The complete procedure of PaCo is presented in Algorithm~\ref{alg:algo}.
+
+
+It is worthwhile to point out that the ability to use the scheme of \emph{$\w$-reset} is a unique feature of PaCo, due to its clear separation between task-agnostic and task-specific parameters.
+Previous methods such as Soft Modularization~\cite{soft_module} and CARE~\cite{care} cannot employ this due to the lack of clear decomposition between the two parts.
+Instead, the \emph{stop-relaunch} trick is applied to all the baselines following~\cite{care}, which is related to but more expensive than loss maskout as it discards the whole training.
+Results show that the proposed \emph{Reset} scheme can improve training with better performance (\emph{c.f.} Table~\ref{tab:mt10}$\sim$\ref{tab:stable}).
+
+
+\begin{algorithm}[t]
+	\centering
+	\caption[Caption for LOF]{Parameter-Compositional MTRL (PaCo)\footnotemark}
+	\label{alg:algo}
+	%\scalebox{0.75}{
+% 	\resizebox{16.5cm}{!}{
+% 		\begin{minipage}[T]{1\textwidth}
+			\begin{algorithmic}
+				\STATE {\bfseries Input:}  param-set size $K$, \, loss threshold $\epsilon$, learning rate $\lambda$  \\
+				\WHILE{termination condition is not satisfied}
+				\STATE   $\vtheta_{\tau} = \vPhi \w_{\tau}$  \qquad \qquad  {$\triangleright$ \, \text{\textcolor{Comments2}{{\small compose task parameter vector}}}} \\
+				\STATE ${J}_{\tau} \leftarrow J_{\tau}(\vtheta)$  \; \qquad \quad{$\triangleright$  \text{\textcolor{Comments2}{{\small loss (actor+critic as in SAC) across tasks}}}}
+				\STATE 	(\emph{Reset Step 1: loss maskout})  \, $J_{\eta} \leftarrow  0 \quad \text{if} \; J_{\eta} > \epsilon$\\
+				\STATE $J_{\vTheta}  \leftarrow \sum_{\tau} {J}_{\tau}$  \quad \qquad {$\triangleright$ \; \text{\textcolor{Comments2}{{\small calculate multi-task loss}}}}
+				\STATE $\vPhi \leftarrow \vPhi - \lambda \nabla_{\vPhi} J_{\vTheta} $  \; \;\quad   {$\triangleright$ \, \text{\textcolor{Comments2}{{\small parameter set update}}}}\\
+				\FOR{each task $\tau$ }
+				\STATE $\w_{\tau} \!\leftarrow\! \w_{\tau} \!-\! \lambda \nabla_{\w_{\tau}} J_{\tau}(\w_{\tau}) $  \quad {$\triangleright$  \text{\textcolor{Comments2}{{\small composition parameter update}}}}\\
+				\ENDFOR
+				\STATE 	(\emph{Reset Step 2: $\w$-reset}) \, $\w_{\eta} \leftarrow  \text{Eqn.(\ref{eq:reset})} \quad \text{if} \, J_{\eta} > \epsilon\, $\\
+				\ENDWHILE
+			\end{algorithmic}
+% 		\end{minipage}
+% 	}
+\end{algorithm}
+\footnotetext{To highlight the core algorithm, we have omitted the steps that are identical to standard SAC~\cite{sac}, including environmental unroll, temperature tuning and target critic update.}
+
+
+\subsection{Unified Perspective on Some Existing Methods}
+Apart from the interesting compositional form and the features of PaCo, it also provides a unified perspective on viewing some existing methods.
+Using this formulation, we are able to re-derive some existing methods with specific instantiations of $\vPhi$ and $\w$.
+\begin{myitemize}
+% 	\vspace{-0.1in}
+	\item \textbf{Single-Task Model}: if set $\vPhi \!=\!
+	[\vphi_1, \vphi_2 \cdots]$ and $\w_\tau$ as a one-hot task-id vector, this essentially instantiates a single-task model, \emph{i.e.} each task has its  dedicated parameters.
+	\item \textbf{Multi-Task Model}: if we set $\vPhi \!=\! [\vphi] \!\in\! \mathbb{R}^{n\times 1}$, $\w_1\!\!=\!\!\w_2\!\!=\!\!...\!\!=\!\!1$, then all the tasks share the same parameter vector $\theta^{\tau}\!=\!\vphi$.
+	By taking state and the task-id as input, we have the multi-task model.
+	% this footnote is for alg
+	\item  \textbf{Multi-Head Multi-Task Model}: by setting $\vPhi$ as follows:
+    	\begin{equation*}
+        	\vPhi = \begin{bmatrix}
+        	\vphi'&\vphi'&\cdots &\vphi'&\cdots&\vphi'\\
+        	\vpsi_1 & \vpsi_2 & \cdots & \vpsi_{\tau} & \cdots &\vpsi_{K}
+        	\end{bmatrix} \in \mathbb{R}^{n\times K}
+    	\end{equation*}
+	where $\vpsi_{\tau}$ is the sub-parameter-vector of the output layer for task $\tau$.
+	Setting $\w_\tau$ as a one-hot task-id vector, we recover the multi-head model for MTRL, where all the tasks share the same trunk network parameterized by $\vphi'$ with independent head  $\vpsi^{\tau}$ for each task $\tau$.
+
+        \item \textbf{Soft-Modularization}~\cite{soft_module} divides each layer into several groups of ``modules'' ($\{f_{\vphi_j^i}\}$) and then combines their outputs with ``soft weights'' $\boldsymbol{z}(s, \tau)$ from another ``routing'' network. To obtain these soft weights, the routing network takes both the task id and state as input.
+        Mathematically, it can be represented as
+		\begin{equation} \nonumber
+		f_{\vtheta_{\tau}} =\begin{bmatrix}
+		[f_{\vphi_1^1}&f_{\vphi_2^1}&\cdots&f_{\vphi_K^1}]\boldsymbol{z}^1(s, \tau)\\
+		&&\vdots\\
+		[f_{\vphi_1^m} & f_{\vphi_2^m} & \cdots &f_{\vphi_K^m}]\boldsymbol{z}^m(s, \tau)
+		\end{bmatrix},
+		\end{equation}
+		where $\vPhi$ is in a specially structured form, with the combination done at each level with a ``per-level'' soft combination vector $\boldsymbol{z}(s, \tau)$  conditioned on current state $s$ and task-id $\tau$.
+        % Another key difference is that {Soft-Modularization}~\cite{soft_module} applies the combination on the activation instead of parameters.
+
+        The dependency of the combination vector
+        $\boldsymbol{z}(s, \tau)$ on state $s$ makes it diffuse task-relevant and task-agnostic information together; therefore, all the parameters are entangled with state information and are less flexible in some use cases.
+        For example, \emph{$\w$-reset}-like operation is inapplicable to {Soft-Modularization}~\cite{soft_module} because of the mixed role of $\boldsymbol{z}$ on state $s$ and task $\tau$.
+\end{myitemize}
+
+
+
+
+
+
+
+% \vspace{-0.05in}
+\section{Related Work}
+% \vspace{-0.05in}
+{\flushleft{\textbf{Multi-Task Learning.}}}
+Multi-Task learning is one of the classical paradigm for learning in the presence of multiple
+potentially related tasks~\cite{MTL}. It holds the promise that the joint learning of multiple tasks
+with a proper way of information sharing can make the learning effective.
+It has been extensively investigated from different perspectives~\cite{KangGS11, task_group_11, mtl_multi_obj, federated_mtl, mtl_review, mthypergrid, mtmodular, mtpareto}
+and been applied in many different fields, including computer vision~\citep{jdsrc, mtl_scene, mtl_attention, Sun_2021_ICCV}, natural language processing~\cite{mtl_comprehension, mtl_sentence} and robotics~\cite{MT_Opt, mtrl_for_control}.
+% \vspace{-0.1in}
+{\flushleft{\textbf{Multi-Task Reinforcement Learning.}}}
+The idea of multi-task learning has also been explored in MTRL, with a similar  objective of improving the performance of single-task RL by exploiting the similarities between different tasks.
+Many different approaches have been proposed in the literature~\cite{sparse_mtrl, mtl_data_mining, popart, modular_mtrl, metaworld, film, soft_module, care, mtrlknowledgetransfer, rlhypernetwork}.
+One of the most straight-forward approach to MTRL is to formulate the multi-task model as a task-conditional one~\cite{metaworld}, as commonly used in goal-conditional RL~\cite{multi_goal} and visual-language grounding~\cite{film}.
+Although simple and has shown some success in certain cases, one inherent limitation is that it is more vulnerable to the negative interferences among tasks, because
+of the complete sharing of network parameters.
+\cite{sparse_mtrl} proposes an approach by assuming the functional approximator for each task is linear combination of a set of shared feature vectors, and then exploited the similarities among different tasks by employing a structured sparse penalty over the combination matrix.
+\cite{modular_mtrl} utilizes a mix-and-match design of the model to facilitate
+transferring between tasks and robots.
+\cite{share_knowledge_mtrl} leverages the shared knowledge between multiple tasks
+by using a shared network followed by multiple task-specific heads.
+\cite{soft_module} further extends these approaches by softly sharing features  (activations) from a base network among tasks, by generating the combination weight with an additional modularization network taking both
+state and task-id as input. Since the base and modularization networks take state and task information as input, there is no clear separation between task-agnostic and task-specific parts.
+This limits its potential on tasks such as continual learning of a novel task.
+Differently, PaCo explores a compositional structure in the \emph{parameter space}~\cite{para_space_noise, para_space_meta} instead of in feature/activation space~\cite{sparse_mtrl, soft_module}, and does so in a way such that the task-agnostic and task-specific parts are decomposed.
+This not only enables learning of multiple tasks, but also leads to a natural schemes for stabilizing and improving MTRL training (\emph{c.f.} Sec.\ref{exp:stable_mtrl}).
+% but also facilitates the expansion on the applicability of the method beyond the standard MTRL setting (\emph{c.f.} Sec.\ref{exp:continual}).
+% \vspace{-0.1in}
+{\flushleft{\textbf{Resolving Conflicts in Multi-Task Learning.}}} Because of parameter sharing for multiple tasks (thus multiple task losses), the shared parameters are impacted by the gradients from all the task losses.
+Whenever the gradients is not consistent with each other, there will be conflicts in updating the shared parameter. This issue of conflicting gradients is a general problem that is present in general multi-task learning~\cite{pcgrad, mtgradvaccine}, and could lead to degraded performance and unstable training if not properly handled~\cite{care}.
+\cite{Distral} bypassed the conflicting gradient issue by discarding parameter sharing, but instead distilling each task policy into a centralized policy.
+\cite{care} alleviates the negative effects of interference by deciding which information should be shared across tasks, using a context-based attention over a mixture of state encoders.
+This demonstrates the benefits of a task-grouping mechanism but requires additional context information.
+There are also approaches on mitigating the interferences  by balancing of the multiple tasks from the perspective of loss~\cite{popart} or gradient~\cite{grad_norm}.
+\cite{pcgrad} proposes to address the conflicts by gradient projection, which could be less reliable in the case where gradients are noisy, as is the case in RL.
+Differently, PaCo enjoys improved stability in training by using schemes leveraging its decomposed structure of task-agnostic and task-specific parameters.
+
+
+
+
+
+\vspace{-0.1in}
+\section{Experiments}
+\vspace{-0.08in}
+We now empirically test the performance of our Parameter-Compositional Multi-Task RL framework on the Meta-World benchmark~\cite{metaworld}. Meta-World benchmark is a robotic environment consisting a number of distinct manipulation tasks, with some examples tasks shown in Figure~\ref{fig:example_tasks}. Each task itself is a goal-conditioned environment, and the state space of all the tasks has the same dimension. The action space of different task is exactly the same, but certain dimensions in the state space represent different semantic meaning in different tasks (\emph{e.g.} goal position or object position).
+
+
+
+\subsection{Benchmark Results on Meta-World}\label{exp:paco_quantitative}
+
+\textbf{Benchmarks.}
+Meta-World~\cite{metaworld}  has been used in benchmarking many recent MTRL algorithms~\cite{soft_module, care}.
+In the original Meta-World Multi-task benchmark~\cite{metaworld}, each manipulation task is configured with a fixed goal, therefore the learned policies are not goal-conditioned as it cannot generalize to a task of the same type by with different goals. This setting is
+easier, but more restrictive and less realistic in robotic learning~\cite{soft_module}.
+Following \cite{soft_module}, we extend all the  tasks to a random-goal setting and refer to the 10 task Meta-World with random goals as MT10-rand.
+
+
+\textbf{Baselines.}
+We compare against \emph{(i)} \textbf{Multi-task SAC}: extended SAC~\cite{sac} for MTRL with one-hot task encoding;  \emph{(ii)} \textbf{Multi-Head SAC}: SAC with shared a network apart from the output heads, which are independent for each task;
+\emph{(iii)}  \textbf{SAC+FiLM}: the task-conditional policy is implemented with the
+FiLM module~\cite{film} on top of SAC;
+\emph{(iv)} \textbf{PCGrad}~\cite{pcgrad}: a representative method for handling conflicting gradients during multi-task learning via gradient projection during optimization;
+\emph{(v)} \textbf{Soft-Module}~\cite{soft_module}: which learns a routing network that guides the soft combination of modules (activations) for each task;
+\emph{(vi)}
+\textbf{CARE} \cite{care}: a recent method that achieves the state-of-the-art performance on Meta-World benchmark by leveraging additional task-relevant metadata for  state representation.\footnote{Note that the experiments reported in the works mentioned above are implemented and evaluated on Meta-World-V1 and/or with the fixed-goal setting. We adapt these methods and experiment on Meta-World-V2.}
+
+\textbf{Training Settings.} The convergence performance is related  to both the number of parallel environments for training and the number of tasks in the environments. There is also a balance between the number of training iterations and the number of roll-out samples. For training on MT10-rand, we follow the settings introduced in \cite{care} and  use \textbf{\emph{i)}} 10 parallel environments, \textbf{\emph{ii)}} 20 million environment steps for  the 10 tasks together (2 million per task), \textbf{\emph{iii)}}  repeated training with 10 different random seeds for each method.
+The implementation of PaCo and the training scripts are available.~\footnote{\scriptsize\url{https://github.com/TToTMooN/paco-mtrl}}
+More resources are available on the project page.~\footnote{\scriptsize{\url{https://sites.google.com/site/hczhang1/projects/paco-mtrl}}}
+
+
+\begin{wrapfigure}[10]{r}[0.0\width]{0.46\textwidth}
+        \centering
+        \vspace{-0.3in}
+		\resizebox{6.cm}{!}{
+		\begin{tabular}{l|c}
+			\hline
+			\multicolumn{1}{c|}{\multirow{2}{*}{Methods}} & Success Rate ($\smallpercent$) \\
+			& (mean $\pm$ std) \\
+			\hline \hline
+			Multi-Task SAC~\cite{metaworld} & \multicolumn{1}{l}{\quad 62.9 $\pm$ 8.0} \\
+			Multi-Head SAC~\cite{metaworld} & \multicolumn{1}{l}{\quad 62.0 $\pm$ 8.2} \\
+			SAC + FiLM~\cite{film} & \multicolumn{1}{l}{\quad 58.3 $\pm$ 4.3} \\
+			PCGrad~\cite{pcgrad} & \multicolumn{1}{l}{\quad 61.7 $\pm$ 10.9} \\
+			Soft-Module~\cite{soft_module} &\multicolumn{1}{l}{\quad  63.0 $\pm$ 4.2} \\
+			CARE~\cite{care} & \multicolumn{1}{l}{\quad 76.0 $\pm$ 6.9}   \\
+			\hline
+			\multicolumn{1}{l|}{\textbf{PaCo} (Ours)} & \multicolumn{1}{l}{\quad \textbf{85.4 $\pm$ 4.5}}\\
+			\hline
+		\end{tabular}
+		}
+    \captionof{table}{Results on Meta-World~\cite{metaworld} MT10 with random goals (MT10-rand).}
+	\label{tab:mt10}
+\end{wrapfigure}
+\textbf{Evaluation Metrics and Results.} The evaluation metric for the learned universal policy for all tasks is based on the success rate of the policy for all the tasks. For Meta-World benchmarks, we evaluate each skill with 10 episodes of different sampled goals using the final policy. The success rate is then averaged across all the skills. The randomness in the MTRL training is unpredictable, some methods may converge to higher success rate right after 20M steps, and some may drop if the training continues. Instead of picking the maximum evaluation success rate across training, we use the policy at 20M total environment steps (2M per task) for fair evaluation.
+We report the mean performance together with standard derivations of the models trained with 10 different seeds, as summarized in Table~\ref{tab:mt10}.
+An improved success rate on MT10-rand benchmark can be observed compared to baseline methods.
+It is interesting to note that the previous state-of-the-art method CARE~\cite{care} leverages additional metadata such as language-based task-description for helping with learning.
+PaCo outperforms CARE without resorting to such meta information, highlighting the benefits
+brought by algorithmic innovation itself.
+Note that all the baseline results are obtained with the empirical trick of terminating and re-launching training in the presence of exploding loss~\cite{care}.
+More results on MT10 and MT50 are provided in Appendix~\ref{sec:appendix_mtfixed_and_mt50}.
+
+\textbf{Single-Task Performance.}
+The tasks in Meta-World are designed such that they can be trained with standard single-task RL algorithms (e.g. SAC). Given enough environmental steps (varies for different tasks), they can converge to close to a 1.0 success rate. The average success rate at convergence for the 10 tasks in MT10 is around 95.0\% (each SAC policy is trained with 5 Million environmental steps per task). In some previous works \cite{care}, performance under this setting is regarded as an ``upper bound''. As a reference, a 2M steps per task setting for Single-Task SAC training results in a 61.9\% average success rate. Single-Task SAC cannot reach its convergence performance for all tasks if limited to 2M per task for training.
+
+
+
+
+\vspace{-0.05in}
+\subsection{Stable MTRL Training} \label{exp:stable_mtrl}
+\vspace{-0.1in}
+In single task RL, training failure or gradient explosion may occur due to many random factors including initialization, bad exploration \emph{etc.}.
+This is even worse for MTRL, especially on those models with shared parameters, since the loss and gradient explosion on certain tasks would influence other tasks through the shared parameters.
+In PaCo, we use the loss maskout and $\w$-reset schemes introduced in Section \ref{sec:mask_reset} to avoid the influence of extreme losses of certain tasks.
+We perform an ablation study on them to analyze their roles in stabilizing the MTRL training.
+We compare PaCo with two variations:
+\textbf{\emph{i})} PaCo-\textit{Maskout}: the PaCo variant with only loss maskout, and
+\textbf{\emph{ii})} PaCo-\textit{Vanilla}: PaCo \emph{without} $\w$-reset and loss maskout.
+
+
+
+\begin{table}[h]
+        % \vspace{-0.43in}
+        \centering
+% 		\tabcolsep=0.12cm
+% 		\resizebox{8cm}{!}{
+            \begin{tabular}{l|c c| c}
+				\hline
+				\multirow{2}{*}{Variations} & \multicolumn{2}{c|}{{\footnotesize Stabilization Scheme}} & \multirow{2}{*}{Success Rate ($\smallpercent$)} \\
+				& {\footnotesize {loss maskout}}  & {\footnotesize {$\w$-reset}} & \\
+				\hline  \hline
+				PaCo &  \checkmark & \checkmark &\multicolumn{1}{l}{\quad 85.4 $\pm$ 4.5}\\
+				PaCo-\textit{Maskout} & \checkmark & \xmark & \multicolumn{1}{l}{\quad 76.0 $\pm$ 8.8} \\
+				PaCo-\textit{Vanilla} & \xmark & \xmark & \multicolumn{1}{l}{\quad 71.6 $\pm$ 25.7} \\
+				\hline
+			\end{tabular}
+% 		}
+% 	\vspace{0.1in}
+    \caption{Stable MTRL training results on MT10-rand tasks.}
+    \vspace{-0.2in}
+	\label{tab:stable}
+\end{table}
+
+In order to show the stability precisely, we don't early-stop the training process even if the loss of some task has already exploded.
+The final success rates are shown in Table~\ref{tab:stable} (training curves provided in Appendix~\ref{sec:appendix_stable}).
+It is observed that PaCo-\textit{Vanilla} has a larger variation and is less stable during training (\emph{c.f.}  training curves in Appendix~\ref{sec:appendix_stable}), resulting from exploding loss in some cases.
+PaCo-\textit{Maskout} variant can potentially mitigate the adverse effects of the exploding loss to some degree,
+but could also compromise the performance because of the reduced opportunity of learning on the masked-out tasks.
+The complete PaCo improves both the average success rate and the stability of MTRL training compared with both variants, demonstrating the effectiveness of the PaCo design.
+More details on stability comparison in the training process can be found in Appendix~\ref{sec:appendix_stable}.
+
+
+
+
+
+
+
+
+\vspace{-0.05in}
+\subsection{Ablation Study}
+\vspace{-0.05in}
+\textbf{Parameter Set Size.}
+One goal of MTRL is to find a good trade-off between model size and performance.
+The hyper-parameter in PaCo for controlling this trade-off is the size of parameter set $K$. For a group of similar skills, we may be able to reach high success rate with a small parameter set.
+\vspace{-0.05in}
+\begin{table}[h]
+	\begin{minipage}{0.45\linewidth}
+	    \centering
+		\tabcolsep=0.3cm
+		\resizebox{5.5cm}{!}{
+			\begin{tabular}{c| c}
+				\hline
+				Param Set Size & Success Rate ($\smallpercent$) \\
+				\hline  \hline
+				PaCo   (K=3) & \multicolumn{1}{l}{\quad 74.4 $\pm$ 5.1}\\
+				\textbf{PaCo} (K=5)  &  \multicolumn{1}{l}{\quad 85.4 $\pm$ 4.5} \\
+				PaCo   (K=8) & \multicolumn{1}{l}{\quad 81.0 $\pm$ 8.4} \\
+				\hline
+			\end{tabular}
+			}
+	\end{minipage}
+% 	\hspace{0.00in}
+	\begin{minipage}{0.55\linewidth}
+    	\centering
+		\tabcolsep=0.3cm
+		\centering
+		\resizebox{6.8cm}{!}{
+			\begin{tabular}{c | c}
+				\hline
+				Compositional Variations & Success Rate ($\smallpercent$)\\
+				\hline \hline
+				{Output-only} & 64.0 $\pm$ 5.5\\
+				 {Actor-only} & 73.3 $\pm$ 5.8\\
+				 {AC-shared} (\textbf{PaCo}) &  85.4 $\pm$ 4.5\\
+				\hline
+			\end{tabular}
+			}
+	\end{minipage}
+% 	\vspace{0.02in}
+	\caption{Impacts of (a) parameter set size and (b) compositional structure variations.}
+	\vspace{-0.2in}
+	\label{tab:table_ablation}
+\end{table}
+For skills with high variance, a larger parameter set might be required due to the increased diversity.
+
+
+
+
+We investigated the performance of PaCo under different values for the parameter set size $K$.
+More concretely, for the benchmark MT10-rand which contains 10 different manipulation skills, we set $K\!=\!3, 5, 8$, and the results are summarized in Table \ref{tab:table_ablation} (a).
+It is observed that with a small value for $K$, PaCo can already achieve performance competitive to many baseline methods (\emph{c.f.} Table~\ref{tab:mt10}).
+Naively increasing $K$ to a large number could compromise the performance, partially due to decreased sample efficiency because of the additional complexities  from over-parameterization.
+However, in a special case of $K\!=\!10$, by initializing $\mathbf{w}$ as one-hot vectors, PaCo can achieve $88.9\!\pm \!1.9$. We leave further improvements based on better initialization in the general case to future work.
+Empirically we find setting $K\!\!=\!\!5$ lead to good trade-off for PaCo.
+Overall, the increasing in parameter set size $K$ grows with the task number $n$ but essentially at a lower speed.
+
+
+
+\textbf{Compositional Structure Variations.}
+PaCo  employs the same compositional structure to all (actor and critic) networks (\emph{AC-shared}).
+There are several other possible variations on this design choice.
+One variant is to use the compositional structure only for the parameters of the actor-network (\emph{Actor-only}).
+Also, we can choose to apply the structure only to the output layer (\emph{Output-only}), which is architecturally  similar to  Multi-Head SAC.
+The results in Table~\ref{tab:table_ablation}(b) show that when applied to output layer only, the
+performance is comparable to Multi-Head SAC (\emph{c.f.} Table~\ref{tab:mt10}), although with less parameters ($K\!=\!5$) than Multi-Head SAC ($K\!=\!10$).
+This shows that the compositional structure is also effective in the output layer up to the performance limit imposed by the network architecture.
+Using the compositional structure for the full actor network (\emph{Actor-only}) improves over \emph{Output-only}.
+Applying the compositional structure to the full networks of both actor and critic can further unleash its potential and gives the best performance.
+
+
+
+
+
+\subsection{Qualitative Results on  Parameter Set and Compositional Vectors}\label{exp:qualitative}
+\textbf{Visualization of Samples from Policy Subspace.}
+We conduct experiments to inspect the policy subspace spanned by the learned parameter set $\vPhi$ via visualization.
+For ease of visualization, we train PaCo on a representative set of 3 tasks (\textit{reach}, \textit{push} and \textit{peg-insert-side} with random goals), using a parameter set size of $K\!=\!2$, \emph{i.e.},
+$\vPhi \!=\![\vphi_1, \vphi_2]$ and $\W\!=\![\w_1, \w_2, \w_3] \in \mathbb{R}^{2\times 3}$.
+The three tasks cover simple, medium, and hard tasks, using the number of environmental interactions required to solve the task as the criteria for the level of difficulty.
+To better visualize the subspace, we further add a \textit{normalize} activation to the compositional vectors, \emph{i.e.}, all the policies lie on the unit circle in the $W$ space (the space of all possible $\w$ vectors, \emph{c.f.} Figure~\ref{fig:3taskdemo} (a)).
+Although not the main focus of this experiment, as a side note, for this group of tasks, it is typically difficult to learn using one model like MT-SAC or Multi-Head SAC, with a low success rate for the most difficult task (\textit{peg-insert-side}). In contrast, PaCo reaches a success rate close to $100\%$ across all three tasks.
+
+
+\begin{figure*}[t]
+\centering
+\begin{overpic}[height=3.8cm]{imgs/fig3a.pdf}
+	\put(0, 1){\textcolor{black}{{\scalebox{0.8}{\textbf{(a)}}}}}
+\end{overpic}
+\;
+\begin{overpic}[height=3.8cm]{imgs/fig3b.pdf}
+	\put(-3, 1){\textcolor{black}{{\scalebox{0.8}{\textbf{(b)}}}}}
+	\put(8, 31){\textcolor{black}{{\scalebox{0.7}{move towards peg \Arrow{0.2in} pick up peg \Arrow{0.2in}  move towards box \Arrow{0.2in} insert peg}}}}
+	\put(14, 15){\textcolor{black}{{\scalebox{0.7}{move towards peg \Arrow{1.7in} pick up peg}}}}
+	\put(14, -1.1){\textcolor{black}{{\scalebox{0.7}{move towards box \Arrow{1.1in} reach insertion hole on box}}}}
+\end{overpic}
+	\caption{
+		\textbf{(a)} Compositional vectors in the space of a unit circle: \textit{learned} reach, push, peg-inset-side policies (denoted with {$\triangle$}) and {sampled} policies on the unit circle. \textbf{(b)}~Visualization (using the {peg-insert-side} task) of example policies: the {learned} peg-inset-side policy and two {sampled} ones. }
+	\vspace{-0.15in}
+	\label{fig:3taskdemo}
+\end{figure*}
+
+
+
+In Figure \ref{fig:3taskdemo} (a), we show the position of $\{\w_i\}$ for three task-specific policies on the unit circle.
+It can be observed that: \textbf{\emph{i)}} We are not learning all the tasks with a single column of $\vPhi$.
+Instead, all columns of $\vPhi$ are involved in solving the three tasks with different compositional weights.
+\textbf{\emph{ii)}} We are able to find policies for three completely different manipulation skills on this 1D low-dimensional manifold in the policy parameter space. This aligns well
+with the purpose of multi-task learning in sharing parameters.
+\textbf{\emph{iii)}} The learned two column of parameter set ($[\vphi_1, \vphi_2]$) can be viewed as  ``basis'' policies.
+Although individually, they may not necessarily correspond to a fully capable skill for a particular task, collectively, they can be used to
+instantiate various other policies through parameter space composition, including the policies for solving the three example tasks (\textit{reach}, \textit{push} and \textit{peg-insert-side}).
+Since $[\vphi_1, \vphi_2]$ are not random vectors but have already been trained on multiple tasks, the
+policies instantiated with a random $\tilde{\w}$ could lead to policies with different types of behaviors, possibly with some interactions with objects in the environment.
+As a test, we sampled some points on the unit circle (labeled as \emph{Sampled}). The resulting policies are visualized in Figure~\ref{fig:3taskdemo}~(b), showing various behaviors with some potential interactions with objects in the \textit{peg-insert-side} environment.
+
+
+
+{\flushleft\textbf{Visualization of Compositional Vectors.}}
+We visualize the learned compositional vectors for MT10-rand in a 2D space (referred to as $\w$-space) via Principal Component Analysis (PCA) in Figure~\ref{fig:mt10_rand_PCA}.
+\begin{wrapfigure}[15]{r}[0\width]{0.4\textwidth}
+    \vspace{-0.2in}
+  \begin{center}
+    \includegraphics[height=4.5cm]{imgs/img_pca_random.pdf}
+  \end{center}
+  \vspace{-0.2in}
+	\caption{2D PCA projection of the compositional vectors.}
+	\label{fig:mt10_rand_PCA}
+\end{wrapfigure}
+There are several interesting observations:
+\emph{\textbf{i)}} Some skills could lie in different part of the $\w$-space, \emph{e.g.} \emph{reach}  \emph{v.s.} others;
+\emph{\textbf{ii)}} Some skills are close in the $\w$-space, \emph{e.g.} \emph{window-open} \emph{v.s} \emph{door-open},  \emph{window-open} \emph{v.s.} \emph{window-close} in Figure~\ref{fig:mt10_rand_PCA};
+\emph{\textbf{iii)}} Another interesting observation is that some skills that are not literally related are also appear to be close in the $\w$-space learned by PaCo,
+\emph{e.g.} \emph{peg-insert} \emph{v.s.} \emph{window-open}/\emph{window-close}/\emph{door-open}/\emph{drawer-open}.
+Although literally distinct, \emph{peg-insert} and the other skills mentioned above are related from the perspective of behavior, \emph{i.e.}, first interacting with an object (\emph{e.g.}, \emph{peg}/\emph{window}/\emph{door}), and then taking a trajectory of motions to accomplish the subsequent operation,  (\emph{e.g.} \emph{insert}/\emph{window}/\emph{door}).
+Therefore, these literally unrelated skills appear to be semantically related at the behavior level.
+This is something that could be useful but is not able to be leveraged by CARE~\cite{care}, implying one possible reason why PaCo is more effective.
+The learned compositional vectors as well as more visualization results can be found in Appendix~\ref{sec:appendix_compositional_subspace}.
+
+
+
+
+
+
+
+
+\section{Conclusion, Limitation and Future Work}
+% \vspace{-0.1in}
+Based on a revisit to MTRL and its challenges,
+we present PaCo, a simple parameter compositional approach as a way to mitigates some of these challenges.
+The proposed approach has the benefits of clear separation between task-agnostic and task-specific
+components, which is not only flexible in learning but also useful for stabilizing and improving MTRL.
+%but also opens the door to transfer and continual learning in a natural way.
+Without resorting to more complicated design~\citep{soft_module} or additional metadata~\citep{care}, PaCo has demonstrated clear improvement over current state-of-the-art methods on standard benchmarks.
+
+% \vspace{-0.05in}
+One limitation of the proposed approach is that a simple linear compositional form is used globally, which may limit its representation power in some cases.
+How to extend the current method beyond simple global linear compositional form while retaining its key advantages is one interesting  direction to explore in the future.
+
+There are several other interesting directions that are worth of exploration as well (with some initial attempts in Appendix~\ref{sec:init_attempt}).
+For example, incorporating a higher-level mechanism for
+adjusting the task distributions based on task difficulties or progresses~\cite{meta_w_scheduler} to further improve the training of the more difficult tasks.
+The separation between task-agnostic and task-relevant parameters in PaCo also suggests a possibility for extending it to transfer learning.
+
+
+
+\section*{Acknowledgement}
+We would like to thank group members at Horizon Robotics and anonymous reviewers for discussions and feedback on the project and paper.
+We would also like to thank the Horizon AI platform team for infrastructure support.
+
+\newpage
+
+{
+	\bibliographystyle{abbrv}
+	\bibliography{mtrl.bib}
+}
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Checklist}
+
+\begin{enumerate}
+
+
+\item For all authors...
+\begin{enumerate}
+  \item Do the main claims made in the abstract and introduction accurately reflect the paper's contributions and scope?
+    \answerYes{}
+  \item Did you describe the limitations of your work?
+    \answerYes{}
+  \item Did you discuss any potential negative societal impacts of your work?
+    \answerNA{}
+  \item Have you read the ethics review guidelines and ensured that your paper conforms to them?
+    \answerYes{}
+\end{enumerate}
+
+
+\item If you are including theoretical results...
+\begin{enumerate}
+  \item Did you state the full set of assumptions of all theoretical results?
+    \answerNA{}
+        \item Did you include complete proofs of all theoretical results?
+    \answerNA{}
+\end{enumerate}
+
+
+\item If you ran experiments...
+\begin{enumerate}
+  \item Did you include the code, data, and instructions needed to reproduce the main experimental results (either in the supplemental material or as a URL)?
+    \answerNo{An anonymized placeholder URL is included in paper. Will replace it with a de-anonymized URL and release code at a future time point.}
+  \item Did you specify all the training details (e.g., data splits, hyperparameters, how they were chosen)?
+    \answerYes{And will also release the training scripts along with the code.}
+        \item Did you report error bars (e.g., with respect to the random seed after running experiments multiple times)?
+    \answerYes{}
+        \item Did you include the total amount of compute and the type of resources used (e.g., type of GPUs, internal cluster, or cloud provider)?
+    \answerYes{We provided details on computational resources in the supplementary file (Appendix Section 2.3), due to limited space in the main paper.}
+\end{enumerate}
+
+
+\item If you are using existing assets (e.g., code, data, models) or curating/releasing new assets...
+\begin{enumerate}
+  \item If your work uses existing assets, did you cite the creators?
+    \answerYes{}
+  \item Did you mention the license of the assets?
+    \answerYes{}
+  \item Did you include any new assets either in the supplemental material or as a URL?
+    \answerNA{}
+    \vspace{-0.15in}
+  \item Did you discuss whether and how consent was obtained from people whose data you're using/curating?
+    \answerNA{}
+  \item Did you discuss whether the data you are using/curating contains personally identifiable information or offensive content?
+    \answerNA{}
+\end{enumerate}
+
+
+\item If you used crowdsourcing or conducted research with human subjects...
+\begin{enumerate}
+  \item Did you include the full text of instructions given to participants and screenshots, if applicable?
+    \answerNA{}
+  \item Did you describe any potential participant risks, with links to Institutional Review Board (IRB) approvals, if applicable?
+    \answerNA{}
+  \item Did you include the estimated hourly wage paid to participants and the total amount spent on participant compensation?
+    \answerNA{}
+\end{enumerate}
+
+
+\end{enumerate}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\appendix
+
+
+\section{Appendix}
+
+In appendix, we provide some additional results in Section~\ref{sec:additional_results},
+more implementation details in Section~\ref{sec:implementation_details}
+and  some initial attempts on some possible future extensions of PaCo in Section~\ref{sec:init_attempt}.
+\subsection{Additional Results}
+\label{sec:additional_results}
+\subsubsection{Analyze Stability of PaCo on MT10-rand from Training Curve}
+\label{sec:appendix_stable}
+In Figure \ref{fig:mt10_curve_compare}, we show the evaluated average success rate of the three variations (PaCo, PaCo-\emph{Maskout}, PaCo-\emph{Vanilla}) in the MT10-rand experiments. To compare the stability of training, we didn't early-stop the training process even if the loss of some tasks already exploded.
+PaCo-\textit{Vanilla} has a larger variation and is less stable during training due to the exploding loss of some tasks. The variance is very large compared to other methods since it can reach high performance (0.90 at 20M steps) for some random seeds but can perform very poorly (0.28 at 20M steps) for some other seeds.
+PaCo-\textit{Maskout} variant is more stable compared to the vanilla version with masked-out extreme loss and can mitigate the adverse effects of the exploding loss of some tasks to other tasks. However, it can also compromise the performance because of the reduced opportunity of learning some tasks once they are masked out.
+The complete PaCo improves both the average success rate and the stability of MTRL training compared with both variants, demonstrating the effectiveness of the PaCo design. It reaches at least a 0.8 average success rate for all the random seeds used in experiments.
+
+\begin{figure}[h]
+\centering
+\begin{overpic}[width=9.cm]{imgs/mt10_compare_10_5_5.pdf}
+\end{overpic}
+\vspace{-0.15in}
+\caption{Average success rate curve of PaCo using ablated variations of stabilization schemes.}
+\label{fig:mt10_curve_compare}
+% \vspace{-0.15in}
+\end{figure}
+
+
+
+\subsubsection{Additional Details on Meta-World Benchmarks and Results}
+\label{sec:appendix_mtfixed_and_mt50}
+For baselines, we used the MTRL codebase~\cite{Sodhani2021MTRL}\footnote{{\small \url{https://github.com/facebookresearch/mtrl} \quad {\footnotesize MIT License}}} to produce the results on Meta-World-V2.
+We tuned the methods on Meta-World V2~\footnote{{\small\url{https://github.com/rlworkgroup/metaworld/}} \quad {\footnotesize MIT License}}. One major change we made is to remove the reward normalizer which was used in~\cite{Sodhani2021MTRL}, leading to better results.
+
+As discussed in the main paper, fixed-goal setting is not practical in real-world usage of robots, it is simpler compared to random-goal setting since we don't need to find the goal-conditioned policy for each skill.
+Nevertheless, PaCo is able to reach a success rate higher than baseline methods as shown in Table~\ref{tab:mt10-fixed}.
+
+
+\begin{table}[h]
+        \centering
+		\begin{tabular}{l|c}
+			\hline
+			Methods & Success Rate \\
+			\hline  \hline
+			Multi-Task SAC~\cite{metaworld}  & \multicolumn{1}{l}{\quad 84.5 $\pm$ 12.4}  \\
+			SAC + FiLM~\cite{film}  & \multicolumn{1}{l}{\quad  74.6 $\pm$ 5.3} \\
+			PCGrad~\cite{pcgrad}  &   \multicolumn{1}{l}{\quad 81.8 $\pm$ 5.2 } \\
+			CARE~\cite{care}  &   \multicolumn{1}{l}{\quad 86.6 $\pm$ 9.8} \\
+			\hline
+			\textbf{PaCo}  &\multicolumn{1}{l}{\quad  93.3 $\pm$ 5.8} \\
+			\hline
+
+			\hline
+		\end{tabular}
+\caption{Results on Meta-World-V2 MT10~\cite{metaworld} with fixed goals (MT10-fixed).}
+\label{tab:mt10-fixed}
+\end{table}
+
+
+MT50 is a more complex benchmark in Meta-World containing 50 different manipulation tasks (including the MT10 tasks). A more complex task combination brings more randomness to the training process and requires more samples and training steps, especially for the random-goal setting (MT50-rand). Therefore it's hard to determine if the policy has reached to the optimal. In Table~\ref{tab:mt50}, we show the performance of PaCo with 20 parameter groups and some baselines on MT50-rand in 100M environment steps (for all environments in total).
+\begin{table}[h]
+		\centering
+		\begin{tabular}{l|c}
+			\hline
+			Methods & Success Rate \\
+			\hline \hline
+			Multi-Task SAC~\cite{metaworld}  & \multicolumn{1}{l}{\quad 49.3 $\pm$ 1.5}  \\
+			SAC + FiLM~\cite{film}  &  \multicolumn{1}{l}{\quad 36.5 $\pm$ 12.0} \\
+			CARE~\cite{care}  &  \multicolumn{1}{l}{\quad 50.8 $\pm$ 1.0}  \\
+			\hline
+			\textbf{PaCo} (K=20) & \multicolumn{1}{l}{\quad 57.3 $\pm$ 1.3} \\
+			\hline
+
+			\hline
+		\end{tabular}
+\caption{Results on Meta-World-V2 MT50~\cite{metaworld} with random goals (MT50-rand).}
+\label{tab:mt50}
+\end{table}
+
+
+
+\subsubsection{Additional Results:  Performance Scores During Training}
+
+In the main paper, we report the final performance  on MT10-rand according to the  protocol of 20M  total environmental for training for 10 tasks (2M environmental steps-per-task).
+Here we provide the results of different methods at intermediate training steps up to 20M total environmental steps on MT-10-rand for reference.
+Empirically, we observed that 20M total environmental steps  are sufficient for training MTRL methods to convergence and there is no significant improvements with more environmental steps for training.
+
+\begin{table}[h]
+		\tabcolsep=0.12cm
+\resizebox{14cm}{!}{
+        \begin{tabular}{c|llllllll}
+				\hline
+    Total Env steps &	1M &	2M &	3M &	5M &	10M &	15M &	20M \\
+    \hline \hline
+    Single-Task SAC	& 10.0$\pm$8.2&	17.7$\pm$2.1&	18.7$\pm$1.1&	20.0$\pm$2.0&	48.0$\pm$9.5&	57.7$\pm$3.1&	61.9$\pm$3.3 \\
+    Multi-Task SAC & \textbf{34.9$\pm$12.9} &	49.3$\pm$9.0&	57.1$\pm$9.8&	60.2$\pm$9.6&	61.6$\pm$6.7&	65.6$\pm$10.4&	62.9$\pm$8.0 \\
+    SAC + FiLM &	32.7$\pm$6.5&	46.9$\pm$9.4&	52.9$\pm$6.4&	57.2$\pm$4.2&	59.7$\pm$4.6&	61.7$\pm$5.4&	58.3$\pm$4.3 \\
+    PCGrad	& 32.2$\pm$6.8 &	46.6$\pm$9.3 &	54.0$\pm$8.4 &	60.2$\pm$9.7 &	62.6$\pm$11.0 &	62.6$\pm$10.5&	61.7$\pm$10.9 \\
+    Soft-Module &	24.2$\pm$4.8 &	41.0$\pm$2.9 &	47.4$\pm$5.3 &	51.4$\pm$6.8&	53.6$\pm$4.9 &	56.6$\pm$4.8 &	63.0$\pm$4.2 \\
+    CARE &	26.0$\pm$9.1 &	\textbf{52.6$\pm$9.3}&	63.8$\pm$7.9 &	\textbf{66.5$\pm$8.3} &	69.8$\pm$5.1 &	72.2$\pm$7.1 &	76.0$\pm$6.9 \\
+    PaCo & 30.5$\pm$9.5 &	49.8$\pm$8.2&	\textbf{65.7$\pm$4.5} &	64.7$\pm$4.2 &	\textbf{71.0$\pm$5.5} &	\textbf{81.0$\pm$5.9} &	\textbf{85.4$\pm$4.5} \\
+    \hline
+    \end{tabular}
+}
+\caption{Results on Meta-World-V2 MT10~\cite{metaworld} with random goals (MT10-rand).}
+\end{table}
+
+
+\begin{figure*}[!htb]
+\centering
+\begin{overpic}[width=15cm]{imgs/W-random.pdf}
+\end{overpic}
+% \vspace{-0.1in}
+\caption{Compositional vector for each task in MT10-rand task. This is a policy reaching average of $90\%$ success rate for all rand-goal tasks (fail on pick-place skill).}
+\label{fig:W_random}
+
+\vspace{0.4in}
+
+\centering
+\begin{overpic}[width=15cm]{imgs/W-fixed.pdf}
+\end{overpic}
+\caption{Compositional vector for each task in MT10-fixed task. This is a policy reaching $100\%$ success rate for all fixed-goal tasks.}
+\label{fig:W_fixed}
+\vspace{0.15in}
+\end{figure*}
+
+
+
+\begin{figure*}[t]
+\centering
+\begin{overpic}[height=6.cm]{imgs/img_pca_random_appendix.pdf}
+	\put(41, -3){\textcolor{black}{{\scalebox{1}{\textbf{(a)} MT10-rand}}}}
+\end{overpic}
+\;
+\begin{overpic}[height=6.cm]{imgs/img_pca_fixed_appendix.pdf}
+	\put(41, -3){\textcolor{black}{{\scalebox{1}{\textbf{(b)} MT10-fixed}}}}
+\end{overpic}
+% 	\vspace{-0.15in}
+\caption{2D PCA projection of the ten 5D compositional vectors  \textbf{(a)} learned on MT10-rand (original full vector values are given in Figure~\ref{fig:W_random}) and \textbf{(b)} learned on MT10-fixed (original full vector values are given in Figure~\ref{fig:W_fixed}).}
+\label{fig:W_prjection}
+%\vspace{-0.15in}
+\end{figure*}
+
+
+\subsubsection{Compositional Vector Visualization}
+\label{sec:appendix_compositional_subspace}
+The final output of PaCo framework is a parameter set $\vPhi$ of $K$ groups of parameters and the compositional vectors $\W = [\w_1, \w_2, \cdots, \w_{T}]$ for each skill/task.
+
+
+In Figure \ref{fig:W_random} and Figure \ref{fig:W_fixed}, we show the full compositional matrix used to compose policies for the ten skills in MT10-rand and MT10-fixed experiments. The policies used here reach a success rate of $90\smallpercent$ and $100\smallpercent$ in the random and fixed goal setting respectively. The absolute value of compositional vectors shouldn't be compared directly since we didn't put any regularization or restriction on the parameter set. We can see not all the columns of the parameter set $\vPhi$ play an important rule for each skill, and some skills share very similar compositional vectors.
+
+To better understand the difference of the skills, we also plot the projection of the 5D compositional vector learned in MT10-rand and MT10-fixed in 2D space (referred to as $\w$-space) using Principal Component Analysis (PCA). The results are shown in Figure~\ref{fig:W_prjection}.
+There are several interesting observations from Figure~\ref{fig:W_prjection}:
+\begin{myitemize}
+\item Some skills could lie in different part of the $\w$-space, \emph{e.g.} \emph{reach}  \emph{v.s.} others  in  Figure~\ref{fig:W_prjection}(a);
+\item Some skills are close in the $\w$-space, \emph{e.g.} \emph{window-open} \emph{v.s} \emph{door-open},  \emph{window-open} \emph{v.s.} \emph{window-close} in Figure~\ref{fig:W_prjection}(a);
+\item Another interesting observation is that some skills that are not literally related are also appear to be close in the $\w$-space learned by PaCo, \emph{e.g.} \emph{peg-insert} \emph{v.s.} \emph{window-open/window-close/door-open/drawer-open}.
+	Although literally distinct, \emph{peg-insert} and the other skills mentioned above are related from the perspective of behavior, \emph{i.e.}, first interacting with an object (\emph{e.g.}, \emph{peg}/\emph{window}/\emph{door}), and then taking a trajectory of motions to accomplish the subsequent operation,  (\emph{e.g.} \emph{insert}/\emph{window}/\emph{door}).
+	Therefore, these literally unrelated skills are inherently semantically related at the behavior level.
+	This is something that could be useful but is not able to be leveraged by CARE~\cite{care}, explaining one possible reason why PaCo is more effective.
+    \item The compositional vectors are more scattered in the MT10-rand case (Figure~\ref{fig:W_prjection}(a)). For the MT10-fixed case (Figure~\ref{fig:W_prjection}(b)),  the skills approximately lie on a 1D low-dimensional space, suggesting that there is a possibility to solve all the tasks with a single model, \emph{e.g.} a model with fully shared parameters across tasks.
+    This is likely because of the very limited variations in the MT10-fixed setting and is indeed why we move beyond it with random goals.
+    Indeed, this observation is consistent with our empirical results on MT10-fixed, as shown in Table~\ref{tab:mt10-fixed}, where single model based methods (\emph{e.g.} Multi-Task SAC) can actually generate very compelling results.
+    Also for a similar reason, the gradient conflictions in the presence of this level of limited task variations are likely to be reconcilable, potentially explaining why gradient-projection-based approach like PCGrad~\cite{pcgrad} works well for MT10-fixed, but not as good when the level of variations is increased as in MT10-rand.
+\end{myitemize}
+
+
+
+
+
+\subsection{Implementation Details}
+\label{sec:implementation_details}
+\subsubsection{Practical Implementation of PaCo}\label{sec:appendix_paco_detail}
+\paragraph{Compositional Parameters}
+As introduced in the paper, PaCo keeps the parameter set $\vPhi$ and compose the task-specific parameters by $\vtheta_{\tau} \!=\!\vPhi \w_{\tau}$. In practical implementation, we achieve this compositional structure by replacing the \textit{Linear/Fully-Connect (FC)} layers in neural networks with a new \textit{compositional-FC} layer.
+
+A regular FC layer with input size $d_i$ and output size $d_o$ contains weight $V \in \mathbb{R}^{d_i\times d_o}$ and bias $b\in \mathbb{R}^{d_o}$. Given a batched input $x\in \mathbb{R}^{b \times d_i}$, the output $y$ is calculated by:
+\begin{equation}
+y \!=\! x \cdot V + b
+\end{equation}
+
+In a compositional layer, we add another dimension on the weight and bias, obtaining a parameter set of size $K$,
+with
+$\hat{V}\in \mathbb{R}^{K\times d_i\times d_o}, \hat{b}\in \mathbb{R}^{K\times d_o}$. Given a batched input $x\in \mathbb{R}^{b \times d_i}$ and compositional vector $w\in \mathbb{R}^K$, the output $y$ is calculated by:
+
+In this case, the forwarding calculation is
+\begin{equation}
+y \!=\! x \cdot \left( \sum_{i=1}^{K} w_i \cdot \hat{V}_i\right) + \sum_{i=1}^{K} w_i\cdot \hat{b}_i
+\end{equation}
+where $\hat{V}_i\triangleq V[i]$, $\hat{b}_i\triangleq b[i]$.
+
+By replacing all the FC layers to compositional-FC layers~\footnote{Although only MLP is used in this work, compositional conv layers can be implemented in a similar way.} in the selected networks, we can make the whole structure compositional and flexibly adjust the parameter set size in PaCo. In this way, we don't need to change the implementations and hyper-parameters used in other MTRL methods.
+
+\paragraph{Random Initialization of Parameters}
+For PaCo, we need to initial $K$ groups of parameters with identical structure. Instead of separately initializing all the parameters, we randomly initialize one of the $K$ layers, and copy the weights to the other $K-1$ groups. With the identical initialization on $\vPhi$, all task-specific parameters $\vtheta_{\tau}$ will be identical regardless the initialization of $w_{\tau}$. Experiments show that PaCo can find interpolated policies faster with identical initialization of parameter set.
+
+
+\subsubsection{MTRL Implementation Details and Hyper-parameters}
+% Network size and structure, loss threshold $\epsilon$ etc.
+In this section, we provide the hyper-parameter PaCo used in MT10-rand experiment in Table \ref{tab:paco_hyperparameter}, and some general hyper-parameters used across PaCo and the baselines in Table \ref{tab:general_hyperparameter}.
+
+
+\begin{table}[h]
+\centering
+\resizebox{7cm}{!}{
+	\begin{minipage}[]{0.5\textwidth}
+		\centering
+		\begin{tabular}{l| c}
+			\hline
+			Hyper-parameter & Value \\
+			\hline \hline
+			% 	number of goals per skill & 50 \\
+			extreme loss threshold $\epsilon$ &  3e3 \\
+			param-set size $K$ & 5\\
+			compositional vector learning rate & 3e-4 \\
+
+			\hline
+
+			\hline
+		\end{tabular}
+	\end{minipage}
+}
+% \vspace{-0.1in}
+\caption{PaCo specific hyper-parameters on MT10-rand}
+\label{tab:paco_hyperparameter}
+\end{table}
+
+\begin{table}[h]
+\centering
+\resizebox{7cm}{!}{
+	\begin{minipage}[]{0.5\textwidth}
+		\centering
+		\begin{tabular}{l| c}
+			\hline
+			Hyper-parameter & Value \\
+			\hline \hline
+			batch size &  1280 \\
+			number of parallel env & 10 \\
+			MLP hidden layer size & [400, 400, 400] \\
+			policy learning rate & 3e-4\\
+			Q learning rate & 3e-4\\
+			discount & 0.99\\
+			episode length & 150\\
+			exploration steps & 1500\\
+			replay buffer size & 1e6 \\
+			\hline
+
+			\hline
+		\end{tabular}
+	\end{minipage}
+}
+\caption{General MTRL hyper-parameters on MT10-rand}
+\vspace{-0.1in}
+\label{tab:general_hyperparameter}
+\end{table}
+
+
+\subsubsection{Details on Computational Resources}
+\label{appendix:computational_resource}
+For training, we used internal cluster with GeForce RTX 2080 Ti GPU.
+Training is repeated 10 times with different seeds.
+On MT10-rand for baseline methods, the time required for a single complete run varies from 10 (\emph{e.g.} Multi-Head SAC~\cite{metaworld}) to 31 hours (\emph{e.g.} PCGrad~\cite{pcgrad}).
+For PaCo, the time takes for each run ranges from 20 to 30+ hours, depends on the compositional structure used.
+One point to note is that for the baseline methods, there is a non-negligible possibility of failure in training, when the training loss explodes. In this case, a new training job has to be relaunched thus consuming additional computational resources. For more details on training stability, please refer to Section~\ref{sec:stability}.
+
+
+
+\subsubsection{Loss Explosion and Training Stability}\label{sec:stability}
+It has been observed empirically that the MTRL  may suffer from instability in training, sometimes with exploding loss.
+This is aligned with the know issue of gradient conflictions between different tasks~\cite{pcgrad}.
+To mitigate this issue, \cite{care} adopted an empirical trick to stop training
+once this issue is spotted.\footnote{\tiny{\url{https://github.com/facebookresearch/mtrl/blob/eea3c99cc116e0fadc41815d0e7823349fcc0bf4/mtrl/agent/sac.py\#L322}}}
+This whole run will be discarded and and new training run need to be launched instead.
+This scheme has been applied to \emph{all the baseline methods} in this work, following the setting in \cite{care}.
+Note that whenever this happens, although not taken into account by following the \emph{stop-relaunch} trick from~\cite{care} when reporting the performance,
+the actual effective number of environmental steps is increased.
+
+This scheme is unnecessary for PaCo, since it has an built-in scheme for stabilization, leveraging its unique decompositional structure.
+
+
+
+\subsection{Initial Attempts on Some Possible Future Extensions with PaCo}
+\label{sec:init_attempt}
+
+
+
+\subsubsection{PaCo-based Transfer Learning}
+\label{sec:appendix_transfer}
+Going beyond MTRL, another question we may ask in application is how we benefit from the policy trained by PaCo when we meet new tasks. The unique property of a well separated task-agnostic parameter set and task-specific compositional vector give us potential to use PaCo in a more challenging continual setting. The main reason for catastrophic forgetting in continual learning is that the training on new tasks modifies the policies of existing tasks. However, in our PaCo framework, if we can find the policies for new task $\Tilde{\tau}$ in the existing policy subspace defined by $\vPhi$ with a new compositional vector $\w_{\Tilde{\tau}}$, the forgetting problem can be avoided. With no change on $\vPhi$, we extend the existing parameters to a new task with no additional cost. In reality, there is no guarantee for the existence of such policy, the relation between skills are quite important. However, in experiments, we do find successful extensions from existing skill set to a new skill when the skills are similar. For instance, \textit{reach, door-open, drawer-open} \textbf{to} \textit{drawer-close}.
+
+In practice, we can design a more general training scheme to learn the policy for a series of tasks. Given a parameter set $\vPhi$ with $K$ parameter groups trained on $N$ tasks, if we find the policy for new tasks in the policy subspace, we save the compositional vector for the new task. If we cannot find the policy in subspace, we train the new tasks on a new parameter set $\Tilde{\vPhi}$ and merge them into subspace with higher dimension. Verifying this property on larger skill sets is an interesting future direction and requires more complex experiment designs.
+\end{document}

@@ -1,0 +1,409 @@
+\begin{thebibliography}{61}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Levine et~al.(2016)Levine, Finn, Darrell, and
+  Abbeel]{DBLP:journals/corr/LevineFDA15}
+S.~Levine, C.~Finn, T.~Darrell, and P.~Abbeel.
+\newblock End-to-end training of deep visuomotor policies.
+\newblock \emph{Journal of Machine Learning Research (JMLR)}, 2016.
+
+\bibitem[M{\"u}lling et~al.(2013)M{\"u}lling, Kober, Kroemer, and
+  Peters]{mulling2013learning}
+K.~M{\"u}lling, J.~Kober, O.~Kroemer, and J.~Peters.
+\newblock Learning to select and generalize striking movements in robot table
+  tennis.
+\newblock \emph{IJRR}, 2013.
+
+\bibitem[Andrychowicz et~al.(2018)Andrychowicz, Baker, Chociej, Jozefowicz,
+  McGrew, Pachocki, Petron, Plappert, Powell, Ray,
+  et~al.]{andrychowicz2018learning}
+M.~Andrychowicz, B.~Baker, M.~Chociej, R.~Jozefowicz, B.~McGrew, J.~Pachocki,
+  A.~Petron, M.~Plappert, G.~Powell, A.~Ray, et~al.
+\newblock Learning dexterous in-hand manipulation.
+\newblock \emph{arXiv:1808.00177}, 2018.
+
+\bibitem[Chebotar et~al.(2017)Chebotar, Hausman, Zhang, Sukhatme, Schaal, and
+  Levine]{chebotar2017combining}
+Y.~Chebotar, K.~Hausman, M.~Zhang, G.~Sukhatme, S.~Schaal, and S.~Levine.
+\newblock Combining model-based and model-free updates for trajectory-centric
+  reinforcement learning.
+\newblock In \emph{ICML}, 2017.
+
+\bibitem[Manuelli et~al.(2019)Manuelli, Gao, Florence, and
+  Tedrake]{DBLP:journals/corr/abs-1903-06684}
+L.~Manuelli, W.~Gao, P.~R. Florence, and R.~Tedrake.
+\newblock kpam: Keypoint affordances for category-level robotic manipulation.
+\newblock \emph{CoRR}, abs/1903.06684, 2019.
+
+\bibitem[Krizhevsky et~al.(2012)Krizhevsky, Sutskever, and
+  Hinton]{Krizhevsky:2017:ICD:3098997.3065386}
+A.~Krizhevsky, I.~Sutskever, and G.~E. Hinton.
+\newblock Imagenet classification with deep convolutional neural networks.
+\newblock In \emph{Advances in neural information processing systems}, 2012.
+
+\bibitem[Devlin et~al.(2018)Devlin, Chang, Lee, and
+  Toutanova]{DBLP:journals/corr/abs-1810-04805}
+J.~Devlin, M.~Chang, K.~Lee, and K.~Toutanova.
+\newblock {BERT:} pre-training of deep bidirectional transformers for language
+  understanding.
+\newblock \emph{CoRR}, abs/1810.04805, 2018.
+
+\bibitem[Hessel et~al.(2018)Hessel, Soyer, Espeholt, Czarnecki, Schmitt, and
+  van Hasselt]{DBLP:journals/corr/abs-1809-04474}
+M.~Hessel, H.~Soyer, L.~Espeholt, W.~Czarnecki, S.~Schmitt, and H.~van Hasselt.
+\newblock Multi-task deep reinforcement learning with popart.
+\newblock \emph{CoRR}, abs/1809.04474, 2018.
+
+\bibitem[Parisotto et~al.(2015)Parisotto, Ba, and
+  Salakhutdinov]{parisotto2015actor}
+E.~Parisotto, J.~L. Ba, and R.~Salakhutdinov.
+\newblock Actor-mimic: Deep multitask and transfer reinforcement learning.
+\newblock \emph{arXiv:1511.06342}, 2015.
+
+\bibitem[Finn et~al.(2017)Finn, Abbeel, and Levine]{finn2017model}
+C.~Finn, P.~Abbeel, and S.~Levine.
+\newblock Model-agnostic meta-learning for fast adaptation of deep networks.
+\newblock In \emph{International Conference on Machine Learning}, 2017.
+
+\bibitem[Brockman et~al.(2016)Brockman, Cheung, Pettersson, Schneider,
+  Schulman, Tang, and Zaremba]{brockman2016openai}
+G.~Brockman, V.~Cheung, L.~Pettersson, J.~Schneider, J.~Schulman, J.~Tang, and
+  W.~Zaremba.
+\newblock Openai gym.
+\newblock \emph{arXiv:1606.01540}, 2016.
+
+\bibitem[Cobbe et~al.(2018)Cobbe, Klimov, Hesse, Kim, and
+  Schulman]{cobbe2018quantifying}
+K.~Cobbe, O.~Klimov, C.~Hesse, T.~Kim, and J.~Schulman.
+\newblock Quantifying generalization in reinforcement learning.
+\newblock \emph{arXiv:1812.02341}, 2018.
+
+\bibitem[Tassa et~al.(2018)Tassa, Doron, Muldal, Erez, Li, Casas, Budden,
+  Abdolmaleki, Merel, Lefrancq, et~al.]{tassa2018deepmind}
+Y.~Tassa, Y.~Doron, A.~Muldal, T.~Erez, Y.~Li, D.~d.~L. Casas, D.~Budden,
+  A.~Abdolmaleki, J.~Merel, A.~Lefrancq, et~al.
+\newblock Deepmind control suite.
+\newblock \emph{arXiv:1801.00690}, 2018.
+
+\bibitem[Machado et~al.(2017)Machado, Bellemare, Talvitie, Veness, Hausknecht,
+  and Bowling]{DBLP:journals/corr/abs-1709-06009}
+M.~C. Machado, M.~G. Bellemare, E.~Talvitie, J.~Veness, M.~J. Hausknecht, and
+  M.~Bowling.
+\newblock Revisiting the arcade learning environment: Evaluation protocols and
+  open problems for general agents.
+\newblock \emph{CoRR}, abs/1709.06009, 2017.
+
+\bibitem[Rusu et~al.(2015)Rusu, Colmenarejo, Gulcehre, Desjardins, Kirkpatrick,
+  Pascanu, Mnih, Kavukcuoglu, and Hadsell]{rusu2015policy}
+A.~A. Rusu, S.~G. Colmenarejo, C.~Gulcehre, G.~Desjardins, J.~Kirkpatrick,
+  R.~Pascanu, V.~Mnih, K.~Kavukcuoglu, and R.~Hadsell.
+\newblock Policy distillation.
+\newblock \emph{arXiv:1511.06295}, 2015.
+
+\bibitem[Espeholt et~al.(2018)Espeholt, Soyer, Munos, Simonyan, Mnih, Ward,
+  Doron, Firoiu, Harley, Dunning, et~al.]{espeholt2018impala}
+L.~Espeholt, H.~Soyer, R.~Munos, K.~Simonyan, V.~Mnih, T.~Ward, Y.~Doron,
+  V.~Firoiu, T.~Harley, I.~Dunning, et~al.
+\newblock Impala: Scalable distributed deep-rl with importance weighted
+  actor-learner architectures.
+\newblock \emph{arXiv:1802.01561}, 2018.
+
+\bibitem[Sharma and Ravindran(2017)]{sharma2017online}
+S.~Sharma and B.~Ravindran.
+\newblock Online multi-task learning using active sampling.
+\newblock 2017.
+
+\bibitem[Duan et~al.(2016)Duan, Schulman, Chen, Bartlett, Sutskever, and
+  Abbeel]{DBLP:journals/corr/DuanSCBSA16}
+Y.~Duan, J.~Schulman, X.~Chen, P.~L. Bartlett, I.~Sutskever, and P.~Abbeel.
+\newblock Rl{\textdollar}{\^{}}2{\textdollar}: Fast reinforcement learning via
+  slow reinforcement learning.
+\newblock \emph{CoRR}, abs/1611.02779, 2016.
+
+\bibitem[Wang et~al.()Wang, Kurth-Nelson, Tirumala, Soyer, Leibo, Munos,
+  Blundell, Kumaran, and Botvinick]{wang1611learning}
+J.~X. Wang, Z.~Kurth-Nelson, D.~Tirumala, H.~Soyer, J.~Z. Leibo, R.~Munos,
+  C.~Blundell, D.~Kumaran, and M.~Botvinick.
+\newblock Learning to reinforcement learn, 2016.
+\newblock \emph{arXiv:1611.05763}.
+
+\bibitem[Mishra et~al.(2017)Mishra, Rohaninejad, Chen, and
+  Abbeel]{mishra2017simple}
+N.~Mishra, M.~Rohaninejad, X.~Chen, and P.~Abbeel.
+\newblock A simple neural attentive meta-learner.
+\newblock \emph{arXiv:1707.03141}, 2017.
+
+\bibitem[Rothfuss et~al.(2018)Rothfuss, Lee, Clavera, Asfour, and
+  Abbeel]{rothfuss2018promp}
+J.~Rothfuss, D.~Lee, I.~Clavera, T.~Asfour, and P.~Abbeel.
+\newblock Promp: Proximal meta-policy search.
+\newblock \emph{arXiv:1810.06784}, 2018.
+
+\bibitem[Rakelly et~al.(2019)Rakelly, Zhou, Quillen, Finn, and
+  Levine]{rakelly2019efficient}
+K.~Rakelly, A.~Zhou, D.~Quillen, C.~Finn, and S.~Levine.
+\newblock Efficient off-policy meta-reinforcement learning via probabilistic
+  context variables.
+\newblock \emph{arXiv:1903.08254}, 2019.
+
+\bibitem[Fernando et~al.(2018)Fernando, Sygnowski, Osindero, Wang, Schaul,
+  Teplyashin, Sprechmann, Pritzel, and Rusu]{fernando2018meta}
+C.~Fernando, J.~Sygnowski, S.~Osindero, J.~Wang, T.~Schaul, D.~Teplyashin,
+  P.~Sprechmann, A.~Pritzel, and A.~Rusu.
+\newblock Meta-learning by the baldwin effect.
+\newblock In \emph{Proceedings of the Genetic and Evolutionary Computation
+  Conference Companion}, pages 1313--1320. ACM, 2018.
+
+\bibitem[Ritter et~al.(2018)Ritter, Wang, Kurth-Nelson, Jayakumar, Blundell,
+  Pascanu, and Botvinick]{ritter2018been}
+S.~Ritter, J.~X. Wang, Z.~Kurth-Nelson, S.~M. Jayakumar, C.~Blundell,
+  R.~Pascanu, and M.~Botvinick.
+\newblock Been there, done that: Meta-learning with episodic recall.
+\newblock \emph{arXiv preprint arXiv:1805.09692}, 2018.
+
+\bibitem[Nichol et~al.(2018)Nichol, Pfau, Hesse, Klimov, and
+  Schulman]{nichol2018gotta}
+A.~Nichol, V.~Pfau, C.~Hesse, O.~Klimov, and J.~Schulman.
+\newblock Gotta learn fast: A new benchmark for generalization in rl.
+\newblock \emph{arXiv:1804.03720}, 2018.
+
+\bibitem[Nagabandi et~al.(2018)Nagabandi, Clavera, Liu, Fearing, Abbeel,
+  Levine, and Finn]{nagabandi2018learning}
+A.~Nagabandi, I.~Clavera, S.~Liu, R.~S. Fearing, P.~Abbeel, S.~Levine, and
+  C.~Finn.
+\newblock Learning to adapt in dynamic, real-world environments through
+  meta-reinforcement learning.
+\newblock \emph{arXiv:1803.11347}, 2018.
+
+\bibitem[S{\ae}mundsson et~al.(2018)S{\ae}mundsson, Hofmann, and
+  Deisenroth]{saemundsson2018meta}
+S.~S{\ae}mundsson, K.~Hofmann, and M.~P. Deisenroth.
+\newblock Meta reinforcement learning with latent variable gaussian processes.
+\newblock \emph{arXiv:1803.07551}, 2018.
+
+\bibitem[Calli et~al.(2015)Calli, Walsman, Singh, Srinivasa, Abbeel, and
+  Dollar]{calli2015benchmarking}
+B.~Calli, A.~Walsman, A.~Singh, S.~Srinivasa, P.~Abbeel, and A.~M. Dollar.
+\newblock Benchmarking in manipulation research: The ycb object and model set
+  and benchmarking protocols.
+\newblock \emph{arXiv:1502.03143}, 2015.
+
+\bibitem[Lee et~al.(2019)Lee, Hu, Yang, Yin, and
+  Lim]{DBLP:journals/corr/abs-1911-07246}
+Y.~Lee, E.~S. Hu, Z.~Yang, A.~Yin, and J.~J. Lim.
+\newblock {IKEA} furniture assembly environment for long-horizon complex
+  manipulation tasks.
+\newblock \emph{CoRR}, abs/1911.07246, 2019.
+\newblock URL \url{http://arxiv.org/abs/1911.07246}.
+
+\bibitem[James et~al.(2019)James, Ma, Arrojo, and Davison]{james2019rlbench}
+S.~James, Z.~Ma, D.~R. Arrojo, and A.~J. Davison.
+\newblock Rlbench: The robot learning benchmark and learning environment, 2019.
+
+\bibitem[Lenz et~al.(2015)Lenz, Lee, and Saxena]{lenz2015deep}
+I.~Lenz, H.~Lee, and A.~Saxena.
+\newblock Deep learning for detecting robotic grasps.
+\newblock \emph{IJRR}, 2015.
+
+\bibitem[Finn et~al.(2016)Finn, Goodfellow, and Levine]{finn2016unsupervised}
+C.~Finn, I.~Goodfellow, and S.~Levine.
+\newblock Unsupervised learning for physical interaction through video
+  prediction.
+\newblock In \emph{Advances in neural information processing systems}, pages
+  64--72, 2016.
+
+\bibitem[Yu et~al.(2016)Yu, Bauza, Fazeli, and Rodriguez]{yu2016more}
+K.-T. Yu, M.~Bauza, N.~Fazeli, and A.~Rodriguez.
+\newblock More than a million ways to be pushed. a high-fidelity experimental
+  dataset of planar pushing.
+\newblock In \emph{IROS}, 2016.
+
+\bibitem[Chebotar et~al.(2016)Chebotar, Hausman, Su, Molchanov, Kroemer,
+  Sukhatme, and Schaal]{chebotar2016bigs}
+Y.~Chebotar, K.~Hausman, Z.~Su, A.~Molchanov, O.~Kroemer, G.~Sukhatme, and
+  S.~Schaal.
+\newblock Bigs: Biotac grasp stability dataset.
+\newblock In \emph{ICRA 2016 Workshop on Grasping and Manipulation Datasets},
+  2016.
+
+\bibitem[Gupta et~al.(2018)Gupta, Murali, Gandhi, and Pinto]{gupta2018robot}
+A.~Gupta, A.~Murali, D.~P. Gandhi, and L.~Pinto.
+\newblock Robot learning in homes: Improving generalization and reducing
+  dataset bias.
+\newblock In \emph{Advances in Neural Information Processing Systems}, pages
+  9112--9122, 2018.
+
+\bibitem[Mandlekar et~al.(2018)Mandlekar, Zhu, Garg, Booher, Spero, Tung, Gao,
+  Emmons, Gupta, Orbay, et~al.]{mandlekar2018roboturk}
+A.~Mandlekar, Y.~Zhu, A.~Garg, J.~Booher, M.~Spero, A.~Tung, J.~Gao, J.~Emmons,
+  A.~Gupta, E.~Orbay, et~al.
+\newblock Roboturk: A crowdsourcing platform for robotic skill learning through
+  imitation.
+\newblock \emph{arXiv:1811.02790}, 2018.
+
+\bibitem[Sharma et~al.(2018)Sharma, Mohan, Pinto, and
+  Gupta]{sharma2018multiple}
+P.~Sharma, L.~Mohan, L.~Pinto, and A.~Gupta.
+\newblock Multiple interactions made easy (mime): Large scale demonstrations
+  data for imitation.
+\newblock \emph{arXiv preprint arXiv:1810.07121}, 2018.
+
+\bibitem[Correll et~al.(2016)Correll, Bekris, Berenson, Brock, Causo, Hauser,
+  Okada, Rodriguez, Romano, and Wurman]{correll2016analysis}
+N.~Correll, K.~E. Bekris, D.~Berenson, O.~Brock, A.~Causo, K.~Hauser, K.~Okada,
+  A.~Rodriguez, J.~M. Romano, and P.~R. Wurman.
+\newblock Analysis and observations from the first amazon picking challenge.
+\newblock \emph{IEEE Transactions on Automation Science and Engineering},
+  15\penalty0 (1):\penalty0 172--188, 2016.
+
+\bibitem[Calli et~al.(2015)Calli, Singh, Walsman, Srinivasa, Abbeel, and
+  Dollar]{calli2015ycb}
+B.~Calli, A.~Singh, A.~Walsman, S.~Srinivasa, P.~Abbeel, and A.~M. Dollar.
+\newblock The ycb object and model set: Towards common benchmarks for
+  manipulation research.
+\newblock In \emph{International Conference on Advanced Robotics (ICAR)}, 2015.
+
+\bibitem[Choi et~al.(2009)Choi, Deyle, Chen, Glass, and Kemp]{choi2009list}
+Y.~S. Choi, T.~Deyle, T.~Chen, J.~D. Glass, and C.~C. Kemp.
+\newblock A list of household objects for robotic retrieval prioritized by
+  people with als.
+\newblock In \emph{International Conference on Rehabilitation Robotics}, 2009.
+
+\bibitem[Savva et~al.(2019)Savva, Kadian, Maksymets, Zhao, Wijmans, Jain,
+  Straub, Liu, Koltun, Malik, et~al.]{savva2019habitat}
+M.~Savva, A.~Kadian, O.~Maksymets, Y.~Zhao, E.~Wijmans, B.~Jain, J.~Straub,
+  J.~Liu, V.~Koltun, J.~Malik, et~al.
+\newblock Habitat: A platform for embodied ai research.
+\newblock \emph{arXiv:1904.01201}, 2019.
+
+\bibitem[Kolve et~al.(2017)Kolve, Mottaghi, Gordon, Zhu, Gupta, and
+  Farhadi]{kolve2017ai2}
+E.~Kolve, R.~Mottaghi, D.~Gordon, Y.~Zhu, A.~Gupta, and A.~Farhadi.
+\newblock Ai2-thor: An interactive 3d environment for visual ai.
+\newblock \emph{arXiv:1712.05474}, 2017.
+
+\bibitem[Brodeur et~al.(2017)Brodeur, Perez, Anand, Golemo, Celotti, Strub,
+  Rouat, Larochelle, and Courville]{brodeur2017home}
+S.~Brodeur, E.~Perez, A.~Anand, F.~Golemo, L.~Celotti, F.~Strub, J.~Rouat,
+  H.~Larochelle, and A.~Courville.
+\newblock Home: A household multimodal environment.
+\newblock \emph{arXiv:1711.11017}, 2017.
+
+\bibitem[Savva et~al.(2017)Savva, Chang, Dosovitskiy, Funkhouser, and
+  Koltun]{savva2017minos}
+M.~Savva, A.~X. Chang, A.~Dosovitskiy, T.~Funkhouser, and V.~Koltun.
+\newblock Minos: Multimodal indoor simulator for navigation in complex
+  environments.
+\newblock \emph{arXiv:1712.03931}, 2017.
+
+\bibitem[Xia et~al.(2018)Xia, Zamir, He, Sax, Malik, and
+  Savarese]{xia2018gibson}
+F.~Xia, A.~R. Zamir, Z.~He, A.~Sax, J.~Malik, and S.~Savarese.
+\newblock Gibson env: Real-world perception for embodied agents.
+\newblock In \emph{Computer Vision and Pattern Recognition}, 2018.
+
+\bibitem[Dosovitskiy et~al.(2017)Dosovitskiy, Ros, Codevilla, Lopez, and
+  Koltun]{dosovitskiy2017carla}
+A.~Dosovitskiy, G.~Ros, F.~Codevilla, A.~Lopez, and V.~Koltun.
+\newblock Carla: An open urban driving simulator.
+\newblock \emph{arXiv:1711.03938}, 2017.
+
+\bibitem[Wymann et~al.(2000)Wymann, Espi{\'e}, Guionneau, Dimitrakakis, Coulom,
+  and Sumner]{wymann2000torcs}
+B.~Wymann, E.~Espi{\'e}, C.~Guionneau, C.~Dimitrakakis, R.~Coulom, and
+  A.~Sumner.
+\newblock Torcs, the open racing car simulator.
+\newblock \emph{Software available at http://torcs. sourceforge. net},
+  4\penalty0 (6), 2000.
+
+\bibitem[Richter et~al.(2017)Richter, Hayder, and Koltun]{richter2017playing}
+S.~R. Richter, Z.~Hayder, and V.~Koltun.
+\newblock Playing for benchmarks.
+\newblock In \emph{Proceedings of the IEEE International Conference on Computer
+  Vision}, pages 2213--2222, 2017.
+
+\bibitem[Kappler et~al.(2015)Kappler, Bohg, and Schaal]{kappler2015leveraging}
+D.~Kappler, J.~Bohg, and S.~Schaal.
+\newblock Leveraging big data for grasp planning.
+\newblock In \emph{2015 IEEE International Conference on Robotics and
+  Automation (ICRA)}, pages 4304--4311. IEEE, 2015.
+
+\bibitem[Kasper et~al.(2012)Kasper, Xue, and Dillmann]{kasper2012kit}
+A.~Kasper, Z.~Xue, and R.~Dillmann.
+\newblock The kit object models database: An object model database for object
+  recognition, localization and manipulation in service robotics.
+\newblock \emph{IJRR}, 2012.
+
+\bibitem[Goldfeder et~al.(2008)Goldfeder, Ciocarlie, Dang, and
+  Allen]{goldfeder2008columbia}
+C.~Goldfeder, M.~Ciocarlie, H.~Dang, and P.~K. Allen.
+\newblock The columbia grasp database.
+\newblock 2008.
+
+\bibitem[Fan et~al.(2018)Fan, Zhu, Zhu, Liu, Zeng, Gupta, Creus-Costa,
+  Savarese, and Fei-Fei]{corl2018surreal}
+L.~Fan, Y.~Zhu, J.~Zhu, Z.~Liu, O.~Zeng, A.~Gupta, J.~Creus-Costa, S.~Savarese,
+  and L.~Fei-Fei.
+\newblock Surreal: Open-source reinforcement learning framework and robot
+  manipulation benchmark.
+\newblock In \emph{Conference on Robot Learning}, 2018.
+
+\bibitem[Todorov et~al.(2012)Todorov, Erez, and Tassa]{todorov2012mujoco}
+E.~Todorov, T.~Erez, and Y.~Tassa.
+\newblock Mujoco: A physics engine for model-based control.
+\newblock In \emph{International Conference on Intelligent Robots and Systems},
+  2012.
+
+\bibitem[Nair et~al.(2018)Nair, Pong, Dalal, Bahl, Lin, and
+  Levine]{nair2018visual}
+A.~V. Nair, V.~Pong, M.~Dalal, S.~Bahl, S.~Lin, and S.~Levine.
+\newblock Visual reinforcement learning with imagined goals.
+\newblock In \emph{Advances in Neural Information Processing Systems}, 2018.
+
+\bibitem[Schulman et~al.(2017)Schulman, Wolski, Dhariwal, Radford, and
+  Klimov]{schulman2017proximal}
+J.~Schulman, F.~Wolski, P.~Dhariwal, A.~Radford, and O.~Klimov.
+\newblock Proximal policy optimization algorithms.
+\newblock \emph{arXiv preprint arXiv:1707.06347}, 2017.
+
+\bibitem[Schulman et~al.(2015)Schulman, Levine, Abbeel, Jordan, and
+  Moritz]{schulman2015trust}
+J.~Schulman, S.~Levine, P.~Abbeel, M.~Jordan, and P.~Moritz.
+\newblock Trust region policy optimization.
+\newblock In \emph{International conference on machine learning}, pages
+  1889--1897, 2015.
+
+\bibitem[Haarnoja et~al.(2018)Haarnoja, Zhou, Abbeel, and
+  Levine]{haarnoja2018soft}
+T.~Haarnoja, A.~Zhou, P.~Abbeel, and S.~Levine.
+\newblock Soft actor-critic: Off-policy maximum entropy deep reinforcement
+  learning with a stochastic actor.
+\newblock \emph{arXiv preprint arXiv:1801.01290}, 2018.
+
+\bibitem[Hausman et~al.(2018)Hausman, Springenberg, Wang, Heess, and
+  Riedmiller]{hausman2018learning}
+K.~Hausman, J.~T. Springenberg, Z.~Wang, N.~Heess, and M.~Riedmiller.
+\newblock Learning an embedding space for transferable robot skills.
+\newblock \emph{International Conference on Learning Representations}, 2018.
+
+\bibitem[garage contributors(2021)]{garage}
+T.~garage contributors.
+\newblock Garage: A toolkit for reproducible reinforcement learning research.
+\newblock \url{https://github.com/rlworkgroup/garage}, 2021.
+
+\bibitem[Schaul et~al.(2019)Schaul, Borsa, Modayil, and Pascanu]{schaul2019ray}
+T.~Schaul, D.~Borsa, J.~Modayil, and R.~Pascanu.
+\newblock Ray interference: a source of plateaus in deep reinforcement
+  learning.
+\newblock \emph{arXiv preprint arXiv:1904.11455}, 2019.
+
+\bibitem[Finn et~al.(2019)Finn, Rajeswaran, Kakade, and Levine]{finn2019online}
+C.~Finn, A.~Rajeswaran, S.~Kakade, and S.~Levine.
+\newblock Online meta-learning.
+\newblock \emph{ICML}, 2019.
+
+\end{thebibliography}

@@ -1,0 +1,416 @@
+\begin{thebibliography}{63}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Badrinarayanan et~al.(2017)Badrinarayanan, Kendall, and
+  Cipolla]{badrinarayanan2017segnet}
+Vijay Badrinarayanan, Alex Kendall, and Roberto Cipolla.
+\newblock Segnet: A deep convolutional encoder-decoder architecture for image
+  segmentation.
+\newblock \emph{IEEE transactions on pattern analysis and machine
+  intelligence}, 39\penalty0 (12), 2017.
+
+\bibitem[Bakker and Heskes(2003)]{bakker2003clustering}
+Bart Bakker and Tom Heskes.
+\newblock Task clustering and gating for bayesian multitask learning.
+\newblock \emph{J. Mach. Learn. Res.}, 2003.
+
+\bibitem[Bilen and Vedaldi(2016)]{bilen2016integrated}
+Hakan Bilen and Andrea Vedaldi.
+\newblock Integrated perception with recurrent multi-task neural networks.
+\newblock In \emph{Advances in Neural Information Processing Systems}, 2016.
+
+\bibitem[Boyd and Vandenberghe(2004)]{boyd2004convex}
+Stephen Boyd and Lieven Vandenberghe.
+\newblock \emph{Convex optimization}.
+\newblock Cambridge university press, 2004.
+
+\bibitem[Calamai and Mor{\'e}(1987)]{gradient_projection}
+Paul~H Calamai and Jorge~J Mor{\'e}.
+\newblock Projected gradient methods for linearly constrained problems.
+\newblock \emph{Mathematical programming}, 39\penalty0 (1), 1987.
+
+\bibitem[Caruana(1997)]{caruana97multitask}
+Rich Caruana.
+\newblock Multitask learning.
+\newblock \emph{Machine Learning}, 1997.
+
+\bibitem[Chaudhry et~al.(2018)Chaudhry, Ranzato, Rohrbach, and Elhoseiny]{agem}
+Arslan Chaudhry, Marc'Aurelio Ranzato, Marcus Rohrbach, and Mohamed Elhoseiny.
+\newblock Efficient lifelong learning with a-gem.
+\newblock \emph{arXiv:1812.00420}, 2018.
+
+\bibitem[Chen et~al.(2017)Chen, Badrinarayanan, Lee, and
+  Rabinovich]{chen2017gradnorm}
+Zhao Chen, Vijay Badrinarayanan, Chen-Yu Lee, and Andrew Rabinovich.
+\newblock Gradnorm: Gradient normalization for adaptive loss balancing in deep
+  multitask networks.
+\newblock \emph{arXiv:1711.02257}, 2017.
+
+\bibitem[Chen et~al.(2018)Chen, Badrinarayanan, Lee, and
+  Rabinovich]{chen2018gradnorm}
+Zhao Chen, Vijay Badrinarayanan, Chen{-}Yu Lee, and Andrew Rabinovich.
+\newblock Gradnorm: Gradient normalization for adaptive loss balancing in deep
+  multitask networks.
+\newblock In \emph{International Conference on Machine Learning}, 2018.
+
+\bibitem[Codevilla et~al.(2018)Codevilla, Miiller, L{\'o}pez, Koltun, and
+  Dosovitskiy]{codevilla2018end}
+Felipe Codevilla, Matthias Miiller, Antonio L{\'o}pez, Vladlen Koltun, and
+  Alexey Dosovitskiy.
+\newblock End-to-end driving via conditional imitation learning.
+\newblock In \emph{International Conference on Robotics and Automation (ICRA)},
+  2018.
+
+\bibitem[Collobert and Weston(2008)]{collobert2008unified}
+Ronan Collobert and Jason Weston.
+\newblock A unified architecture for natural language processing: Deep neural
+  networks with multitask learning.
+\newblock In \emph{International Conference on Machine Learning}, 2008.
+
+\bibitem[Cordts et~al.(2016)Cordts, Omran, Ramos, Rehfeld, Enzweiler, Benenson,
+  Franke, Roth, and Schiele]{cordts2016cityscapes}
+Marius Cordts, Mohamed Omran, Sebastian Ramos, Timo Rehfeld, Markus Enzweiler,
+  Rodrigo Benenson, Uwe Franke, Stefan Roth, and Bernt Schiele.
+\newblock The cityscapes dataset for semantic urban scene understanding.
+\newblock In \emph{Proceedings of the IEEE conference on computer vision and
+  pattern recognition}, pages 3213--3223, 2016.
+
+\bibitem[Czarnecki et~al.(2019)Czarnecki, Pascanu, Osindero, Jayakumar,
+  Swirszcz, and Jaderberg]{czarneki2019distilling}
+Wojciech~M. Czarnecki, Razvan Pascanu, Simon Osindero, Siddhant~M. Jayakumar,
+  Grzegorz Swirszcz, and Max Jaderberg.
+\newblock Distilling policy distillation.
+\newblock In \emph{International Conference on Artificial Intelligence and
+  Statistics, {AISTATS}}, 2019.
+
+\bibitem[Devin et~al.(2016)Devin, Gupta, Darrell, Abbeel, and
+  Levine]{devin2016modularnet}
+Coline Devin, Abhishek Gupta, Trevor Darrell, Pieter Abbeel, and Sergey Levine.
+\newblock Learning modular neural network policies for multi-task and
+  multi-robot transfer.
+\newblock \emph{CoRR}, abs/1609.07088, 2016.
+
+\bibitem[Dong et~al.(2015)Dong, Wu, He, Yu, and Wang]{dong2015multi}
+Daxiang Dong, Hua Wu, Wei He, Dianhai Yu, and Haifeng Wang.
+\newblock Multi-task learning for multiple language translation.
+\newblock In \emph{Annual Meeting of the Association for Computational
+  Linguistics and the 7th International Joint Conference on Natural Language
+  Processing (Volume 1: Long Papers)}, 2015.
+
+\bibitem[Du et~al.(2018)Du, Czarnecki, Jayakumar, Pascanu, and
+  Lakshminarayanan]{du2018aux}
+Yunshu Du, Wojciech~M. Czarnecki, Siddhant~M. Jayakumar, Razvan Pascanu, and
+  Balaji Lakshminarayanan.
+\newblock Adapting auxiliary losses using gradient similarity.
+\newblock \emph{CoRR}, abs/1812.02224, 2018.
+
+\bibitem[Espeholt et~al.(2018)Espeholt, Soyer, Munos, Simonyan, Mnih, Ward,
+  Doron, Firoiu, Harley, Dunning, Legg, and Kavukcuoglu]{espeholt2018impala}
+Lasse Espeholt, Hubert Soyer, R{\'{e}}mi Munos, Karen Simonyan, Volodymyr Mnih,
+  Tom Ward, Yotam Doron, Vlad Firoiu, Tim Harley, Iain Dunning, Shane Legg, and
+  Koray Kavukcuoglu.
+\newblock {IMPALA:} scalable distributed deep-rl with importance weighted
+  actor-learner architectures.
+\newblock In \emph{International Conference on Machine Learning}, 2018.
+
+\bibitem[Farajtabar et~al.(2019)Farajtabar, Azizan, Mott, and
+  Li]{farajtabar2019orthogonal}
+Mehrdad Farajtabar, Navid Azizan, Alex Mott, and Ang Li.
+\newblock Orthogonal gradient descent for continual learning.
+\newblock \emph{arXiv preprint arXiv:1910.07104}, 2019.
+
+\bibitem[Fernando et~al.(2017)Fernando, Banarse, Blundell, Zwols, Ha, Rusu,
+  Pritzel, and Wierstra]{fernando2017pathnet}
+Chrisantha Fernando, Dylan Banarse, Charles Blundell, Yori Zwols, David Ha,
+  Andrei~A. Rusu, Alexander Pritzel, and Daan Wierstra.
+\newblock Pathnet: Evolution channels gradient descent in super neural
+  networks.
+\newblock \emph{CoRR}, abs/1701.08734, 2017.
+\newblock URL \url{http://arxiv.org/abs/1701.08734}.
+
+\bibitem[Fulton(2000)]{fulton2000eigenvalues}
+William Fulton.
+\newblock Eigenvalues, invariant factors, highest weights, and schubert
+  calculus.
+\newblock \emph{Bulletin of the American Mathematical Society}, 37\penalty0
+  (3):\penalty0 209--249, 2000.
+
+\bibitem[Ghosh et~al.(2017)Ghosh, Singh, Rajeswaran, Kumar, and
+  Levine]{ghosh2017dnc}
+Dibya Ghosh, Avi Singh, Aravind Rajeswaran, Vikash Kumar, and Sergey Levine.
+\newblock Divide-and-conquer reinforcement learning.
+\newblock \emph{CoRR}, abs/1711.09874, 2017.
+
+\bibitem[Goodfellow et~al.(2014)Goodfellow, Vinyals, and
+  Saxe]{goodfellow2014qualitatively}
+Ian~J Goodfellow, Oriol Vinyals, and Andrew~M Saxe.
+\newblock Qualitatively characterizing neural network optimization problems.
+\newblock \emph{arXiv:1412.6544}, 2014.
+
+\bibitem[Guo et~al.(2020)Guo, Liu, Yang, and Rosing]{guo2020improved}
+Yunhui Guo, Mingrui Liu, Tianbao Yang, and Tajana Rosing.
+\newblock Improved schemes for episodic memory-based lifelong learning, 2020.
+
+\bibitem[Haarnoja et~al.(2018)Haarnoja, Zhou, Abbeel, and
+  Levine]{haarnoja2018sac}
+Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine.
+\newblock Soft actor-critic: Off-policy maximum entropy deep reinforcement
+  learning with a stochastic actor.
+\newblock \emph{International Conference on Machine Learning}, 2018.
+
+\bibitem[Hausman et~al.(2018)Hausman, Springenberg, Wang, Heess, and
+  Riedmiller]{hausman2018learning}
+Karol Hausman, Jost~Tobias Springenberg, Ziyu Wang, Nicolas Heess, and Martin
+  Riedmiller.
+\newblock Learning an embedding space for transferable robot skills.
+\newblock 2018.
+
+\bibitem[Hessel et~al.(2019)Hessel, Soyer, Espeholt, Czarnecki, Schmitt, and
+  van Hasselt]{hessel2019popart}
+Matteo Hessel, Hubert Soyer, Lasse Espeholt, Wojciech Czarnecki, Simon Schmitt,
+  and Hado van Hasselt.
+\newblock Multi-task deep reinforcement learning with popart.
+\newblock In \emph{Proceedings of the AAAI Conference on Artificial
+  Intelligence}, volume~33, 2019.
+
+\bibitem[Hinton et~al.(2015)Hinton, Vinyals, and Dean]{hinton2015distilling}
+Geoffrey Hinton, Oriol Vinyals, and Jeff Dean.
+\newblock Distilling the knowledge in a neural network.
+\newblock \emph{arXiv:1503.02531}, 2015.
+
+\bibitem[Kendall et~al.(2018{\natexlab{a}})Kendall, Gal, and
+  Cipolla]{kendall2017multi}
+Alex Kendall, Yarin Gal, and Roberto Cipolla.
+\newblock Multi-task learning using uncertainty to weigh losses for scene
+  geometry and semantics.
+\newblock In \emph{Computer Vision and Pattern Recognition},
+  2018{\natexlab{a}}.
+
+\bibitem[Kendall et~al.(2018{\natexlab{b}})Kendall, Gal, and
+  Cipolla]{kendall2018multitask}
+Alex Kendall, Yarin Gal, and Roberto Cipolla.
+\newblock Multi-task learning using uncertainty to weigh losses for scene
+  geometry and semantics.
+\newblock In \emph{CVPR}, 2018{\natexlab{b}}.
+
+\bibitem[Kingma and Ba(2014)]{kingma2014adam}
+Diederik~P Kingma and Jimmy Ba.
+\newblock Adam: A method for stochastic optimization.
+\newblock \emph{arXiv:1412.6980}, 2014.
+
+\bibitem[Kokkinos(2017)]{kokkinos2017ubernet}
+Iasonas Kokkinos.
+\newblock Ubernet: Training a universal convolutional neural network for low-,
+  mid-, and high-level vision using diverse datasets and limited memory.
+\newblock In \emph{Computer Vision and Pattern Recognition}, 2017.
+
+\bibitem[Levine et~al.(2016)Levine, Finn, Darrell, and Abbeel]{levine2016end}
+Sergey Levine, Chelsea Finn, Trevor Darrell, and Pieter Abbeel.
+\newblock End-to-end training of deep visuomotor policies.
+\newblock \emph{The Journal of Machine Learning Research}, 17\penalty0 (1),
+  2016.
+
+\bibitem[Liu et~al.(2018)Liu, Johns, and Davison]{liu2018attention}
+Shikun Liu, Edward Johns, and Andrew~J. Davison.
+\newblock End-to-end multi-task learning with attention.
+\newblock \emph{CoRR}, abs/1803.10704, 2018.
+
+\bibitem[Liu et~al.(2015)Liu, Luo, Wang, and Tang]{liu2015deep}
+Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang.
+\newblock Deep learning face attributes in the wild.
+\newblock In \emph{Proceedings of the IEEE international conference on computer
+  vision}, pages 3730--3738, 2015.
+
+\bibitem[Long and Wang(2015)]{long2015learning}
+Mingsheng Long and Jianmin Wang.
+\newblock Learning multiple tasks with deep relationship networks.
+\newblock \emph{arXiv:1506.02117}, 2, 2015.
+
+\bibitem[Lopez-Paz and Ranzato(2017)]{lopez2017gradient}
+David Lopez-Paz and Marc'Aurelio Ranzato.
+\newblock Gradient episodic memory for continual learning.
+\newblock In \emph{Advances in Neural Information Processing Systems}, 2017.
+
+\bibitem[Maninis et~al.(2019)Maninis, Radosavovic, and
+  Kokkinos]{maninis2019attention}
+Kevis{-}Kokitsi Maninis, Ilija Radosavovic, and Iasonas Kokkinos.
+\newblock Attentive single-tasking of multiple tasks.
+\newblock \emph{CoRR}, abs/1904.08918, 2019.
+
+\bibitem[McCann et~al.(2018)McCann, Keskar, Xiong, and
+  Socher]{mccann2018natural}
+Bryan McCann, Nitish~Shirish Keskar, Caiming Xiong, and Richard Socher.
+\newblock The natural language decathlon: Multitask learning as question
+  answering.
+\newblock \emph{arXiv:1806.08730}, 2018.
+
+\bibitem[Misra et~al.(2016{\natexlab{a}})Misra, Shrivastava, Gupta, and
+  Hebert]{misra2016cross}
+Ishan Misra, Abhinav Shrivastava, Abhinav Gupta, and Martial Hebert.
+\newblock Cross-stitch networks for multi-task learning.
+\newblock In \emph{Computer Vision and Pattern Recognition},
+  2016{\natexlab{a}}.
+
+\bibitem[Misra et~al.(2016{\natexlab{b}})Misra, Shrivastava, Gupta, and
+  Hebert]{misra2016crossstitch}
+Ishan Misra, Abhinav Shrivastava, Abhinav Gupta, and Martial Hebert.
+\newblock Cross-stitch networks for multi-task learning.
+\newblock In \emph{Conference on Computer Vision and Pattern Recognition,
+  {CVPR}}, 2016{\natexlab{b}}.
+
+\bibitem[Nedic and Ozdaglar(2009)]{nedic2009distributed}
+Angelia Nedic and Asuman Ozdaglar.
+\newblock Distributed subgradient methods for multi-agent optimization.
+\newblock \emph{IEEE Transactions on Automatic Control}, 54\penalty0 (1), 2009.
+
+\bibitem[Parisotto et~al.(2015)Parisotto, Ba, and
+  Salakhutdinov]{parisotto2015actor}
+Emilio Parisotto, Jimmy~Lei Ba, and Ruslan Salakhutdinov.
+\newblock Actor-mimic: Deep multitask and transfer reinforcement learning.
+\newblock \emph{arXiv:1511.06342}, 2015.
+
+\bibitem[Polyak(1964)]{polyak1964some}
+Boris~T Polyak.
+\newblock Some methods of speeding up the convergence of iteration methods.
+\newblock \emph{USSR Computational Mathematics and Mathematical Physics},
+  4\penalty0 (5):\penalty0 1--17, 1964.
+
+\bibitem[Radford et~al.(2019)Radford, Wu, Child, Luan, Amodei, and
+  Sutskever]{radford2019language}
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, and Ilya
+  Sutskever.
+\newblock Language models are unsupervised multitask learners.
+\newblock \emph{OpenAI Blog}, 1\penalty0 (8), 2019.
+
+\bibitem[Riedmiller et~al.(2018)Riedmiller, Hafner, Lampe, Neunert, Degrave,
+  Van~de Wiele, Mnih, Heess, and Springenberg]{riedmiller2018learning}
+Martin Riedmiller, Roland Hafner, Thomas Lampe, Michael Neunert, Jonas Degrave,
+  Tom Van~de Wiele, Volodymyr Mnih, Nicolas Heess, and Jost~Tobias
+  Springenberg.
+\newblock Learning by playing-solving sparse reward tasks from scratch.
+\newblock \emph{arXiv:1802.10567}, 2018.
+
+\bibitem[Rosenbaum et~al.(2018)Rosenbaum, Klinger, and
+  Riemer]{rosenbaum2017routing}
+Clemens Rosenbaum, Tim Klinger, and Matthew Riemer.
+\newblock Routing networks: Adaptive selection of non-linear functions for
+  multi-task learning.
+\newblock \emph{International Conference on Learning Representations (ICLR)},
+  2018.
+
+\bibitem[Rosenbaum et~al.(2019)Rosenbaum, Cases, Riemer, and
+  Klinger]{rosenbaum2019routing}
+Clemens Rosenbaum, Ignacio Cases, Matthew Riemer, and Tim Klinger.
+\newblock Routing networks and the challenges of modular and compositional
+  computation.
+\newblock \emph{arXiv:1904.12774}, 2019.
+
+\bibitem[Roth et~al.(2017)Roth, Lucchi, Nowozin, and
+  Hofmann]{roth2017stabilizing}
+Kevin Roth, Aurelien Lucchi, Sebastian Nowozin, and Thomas Hofmann.
+\newblock Stabilizing training of generative adversarial networks through
+  regularization.
+\newblock In \emph{Advances in Neural Information Processing Systems}, 2017.
+
+\bibitem[Ruder(2017)]{ruder2017overview}
+Sebastian Ruder.
+\newblock An overview of multi-task learning in deep neural networks.
+\newblock \emph{arXiv:1706.05098}, 2017.
+
+\bibitem[Rusu et~al.(2016{\natexlab{a}})Rusu, Colmenarejo,
+  G{\"{u}}l{\c{c}}ehre, Desjardins, Kirkpatrick, Pascanu, Mnih, Kavukcuoglu,
+  and Hadsell]{rusu2015policydistillation}
+Andrei~A. Rusu, Sergio~Gomez Colmenarejo, {\c{C}}aglar G{\"{u}}l{\c{c}}ehre,
+  Guillaume Desjardins, James Kirkpatrick, Razvan Pascanu, Volodymyr Mnih,
+  Koray Kavukcuoglu, and Raia Hadsell.
+\newblock Policy distillation.
+\newblock In \emph{International Conference on Learning Representations,
+  {ICLR}}, 2016{\natexlab{a}}.
+
+\bibitem[Rusu et~al.(2016{\natexlab{b}})Rusu, Rabinowitz, Desjardins, Soyer,
+  Kirkpatrick, Kavukcuoglu, Pascanu, and Hadsell]{rusu2016progressive}
+Andrei~A Rusu, Neil~C Rabinowitz, Guillaume Desjardins, Hubert Soyer, James
+  Kirkpatrick, Koray Kavukcuoglu, Razvan Pascanu, and Raia Hadsell.
+\newblock Progressive neural networks.
+\newblock \emph{arXiv:1606.04671}, 2016{\natexlab{b}}.
+
+\bibitem[Schaul et~al.(2019)Schaul, Borsa, Modayil, and Pascanu]{schaul2019ray}
+Tom Schaul, Diana Borsa, Joseph Modayil, and Razvan Pascanu.
+\newblock Ray interference: a source of plateaus in deep reinforcement
+  learning.
+\newblock \emph{arXiv:1904.11455}, 2019.
+
+\bibitem[Sener and Koltun(2018)]{sener2018multi}
+Ozan Sener and Vladlen Koltun.
+\newblock Multi-task learning as multi-objective optimization.
+\newblock In \emph{Advances in Neural Information Processing Systems}, 2018.
+
+\bibitem[Sun(2015)]{notes}
+Yuekai Sun.
+\newblock Notes on first-order methods for minimizing smooth functions, 2015.
+\newblock
+  \url{https://web.stanford.edu/class/msande318/notes/notes-first-order-smooth.pdf}.
+
+\bibitem[Suteu and Guo(2019)]{suteu2019regularizing}
+Mihai Suteu and Yike Guo.
+\newblock Regularizing deep multi-task networks using orthogonal gradients.
+\newblock \emph{arXiv preprint arXiv:1912.06844}, 2019.
+
+\bibitem[Teh et~al.(2017)Teh, Bapst, Czarnecki, Quan, Kirkpatrick, Hadsell,
+  Heess, and Pascanu]{teh2017distral}
+Yee Teh, Victor Bapst, Wojciech~M Czarnecki, John Quan, James Kirkpatrick, Raia
+  Hadsell, Nicolas Heess, and Razvan Pascanu.
+\newblock Distral: Robust multitask reinforcement learning.
+\newblock In \emph{Advances in Neural Information Processing Systems}, 2017.
+
+\bibitem[Vandenhende et~al.(2019)Vandenhende, Brabandere, and
+  Gool]{vandenhende2019branched}
+Simon Vandenhende, Bert~De Brabandere, and Luc~Van Gool.
+\newblock Branched multi-task networks: Deciding what layers to share.
+\newblock \emph{CoRR}, abs/1904.02920, 2019.
+
+\bibitem[Wilson et~al.(2007)Wilson, Fern, Ray, and Tadepalli]{wilson2007multi}
+Aaron Wilson, Alan Fern, Soumya Ray, and Prasad Tadepalli.
+\newblock Multi-task reinforcement learning: a hierarchical bayesian approach.
+\newblock In \emph{International Conference on Machine Learning}, 2007.
+
+\bibitem[Wulfmeier et~al.(2019)Wulfmeier, Abdolmaleki, Hafner, Springenberg,
+  Neunert, Hertweck, Lampe, Siegel, Heess, and
+  Riedmiller]{wulfmeier2019regularized}
+Markus Wulfmeier, Abbas Abdolmaleki, Roland Hafner, Jost~Tobias Springenberg,
+  Michael Neunert, Tim Hertweck, Thomas Lampe, Noah Siegel, Nicolas Heess, and
+  Martin Riedmiller.
+\newblock Regularized hierarchical policies for compositional transfer in
+  robotics.
+\newblock \emph{arXiv:1906.11228}, 2019.
+
+\bibitem[Yang and Hospedales(2016)]{yang2016trace}
+Yongxin Yang and Timothy~M Hospedales.
+\newblock Trace norm regularised deep multi-task learning.
+\newblock \emph{arXiv:1606.04038}, 2016.
+
+\bibitem[Yu et~al.(2019)Yu, Quillen, He, Julian, Hausman, Finn, and
+  Levine]{metaworld}
+Tianhe Yu, Deirdre Quillen, Zhanpeng He, Ryan Julian, Karol Hausman, Chelsea
+  Finn, and Sergey Levine.
+\newblock Meta-world: A benchmark and evaluation for multi-task and
+  meta-reinforcement learning.
+\newblock \emph{arXiv:1910.10897}, 2019.
+
+\bibitem[Zamir et~al.(2018)Zamir, Sax, Shen, Guibas, Malik, and
+  Savarese]{zamir2018taskonomy}
+Amir~R Zamir, Alexander Sax, William Shen, Leonidas~J Guibas, Jitendra Malik,
+  and Silvio Savarese.
+\newblock Taskonomy: Disentangling task transfer learning.
+\newblock In \emph{Computer Vision and Pattern Recognition}, 2018.
+
+\bibitem[Zhang et~al.(2014)Zhang, Luo, Loy, and Tang]{zhang2014facial}
+Zhanpeng Zhang, Ping Luo, Chen~Change Loy, and Xiaoou Tang.
+\newblock Facial landmark detection by deep multi-task learning.
+\newblock In \emph{European conference on computer vision}. Springer, 2014.
+
+\end{thebibliography}

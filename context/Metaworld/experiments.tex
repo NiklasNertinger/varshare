@@ -1,0 +1,140 @@
+\section{Experimental Results and Analysis}
+\vspace{-0.2cm}
+\label{sec:result}
+
+The first, most basic goal of our experiments is to verify that each of the $50$ presented tasks are indeed solveable by existing single-task reinforcement learning algorithms. We provide this verification in Appendix~\ref{app:singletask}. Beyond verifying the individual tasks, the goals of our experiments are to study the following questions: (1) can existing state-of-the-art meta-learning algorithms quickly learn qualitatively new tasks when meta-trained on a sufficiently broad, yet structured task distribution, and (2) how do different multi-task and meta-learning algorithms compare in this setting? %, and (3) what are the primary challenges that existing algorithms face when presented with the broader task distributions in Meta-World?
+%\subsection{Comparative Evaluation}
+To answer these questions, we evaluate various multi-task and meta-learning algorithms on the Meta-World benchmark. We include the training curves of all evaluations in Figure~\ref{fig:learningcurves} in the Appendix~\ref{app:curves}. Videos of the tasks and evaluations, along with all source code, are on the project webpage\footnote{Videos are on the project webpage,  at \url{meta-world.github.io}
+%%SL: the period is omitted at the end of the URL intentionally (so that when someone copy & pastes it, they won't have to wonder why it's not working)
+}.
+
+In the multi-task evaluation, we evaluate the following RL algorithms:
+\textbf{multi-task proximal policy optimization (PPO)} \cite{schulman2017proximal}: a policy gradient algorithm adapted to the multi-task setting by providing the one-hot task ID as input, \textbf{multi-task trust region policy optimization (TRPO)} \cite{schulman2015trust}: an on-policy policy gradient algorithm adapted to the multi-task setting using the one-hot task ID as input, \textbf{multi-task soft actor-critic (SAC)}~\cite{haarnoja2018soft}: an off-policy actor-critic algorithm adapted to the multi-task setting using the one-hot task ID as input, and an on-policy version of \textbf{task embeddings (TE)}~\cite{hausman2018learning}: a multi-task reinforcement learning algorithm that parameterizes the learned policies via shared skill embedding space.
+For the meta-RL evaluation, we study three algorithms:
+\textbf{RL$^2$} \cite{DBLP:journals/corr/DuanSCBSA16,wang1611learning}: an on-policy meta-RL algorithm that corresponds to training a GRU network with hidden states maintained across episodes within a task and trained with PPO, \textbf{model-agnostic meta-learning (MAML)} \cite{finn2017model, rothfuss2018promp}: an on-policy gradient-based meta-RL algorithm that embeds policy gradient steps into the meta-optimization, and is trained with PPO, and \textbf{probabilistic embeddings for actor-critic RL (PEARL)} \cite{rakelly2019efficient}: an off-policy actor-critic meta-RL algorithm, which learns to encode experience into a probabilistic embedding of the task that is fed to the actor and the critic. We use the baselines in the Garage \cite{garage} reinforcement learning library, which we developed for benchmarking Meta-World.
+
+% \begin{wrapfigure}{4}{0.35\linewidth}
+%     \centering
+%     \vspace{-0.1cm}
+%     \includegraphics[width=0.35\columnwidth]{figures_v2/per_env_success_ml1.pdf}
+%     \vspace{-0.7cm}
+%     \caption{\footnotesize{Comparison on our simplest meta-RL evaluation, ML1.}
+%     }
+%     \vspace{-0.4cm}
+%     \label{fig:ml1}
+% \end{wrapfigure}
+We show results of the simplest meta-learning evaluation mode, ML1, in Figure~\ref{fig:ml1}. We find that there is room for improvement even in this very simple setting. Next, we look at results of multi-task learning across distinct tasks, starting with MT10 in Figure~\ref{fig:mt10} and in Table~\ref{tab:final_results}.
+\\
+We find that multi-task SAC is able to the learn the MT10 task suite well, achieving around 68\% success rate averaged across tasks, while multi-task PPO and TRPO are only able to achieve around a 30\% success rate. However, as we scale to 50 distict tasks with MT50, we find that MT-SAC and MT-PPO only achieve around a 35-38\% success rate, indicating that there is significant room for improvement in these methods
+%%SL.10.11: I'm bothered by this evaluation because we have multi-head SAC, but presumably single-head TRPO and PPO, which is quite unfair.
+%We run only multi-task soft actor-critic on MT50 due to computational constraints, but will include multi-task PPO and task embeddings in the final version of the paper.
+%\todo{it would be really nice to say something about efficiency of these methods compared to individual single-task training.}
+
+Finally, we study the ML10 and ML45 meta-learning benchmarks, which require learning the meta-training tasks and generalizing to new meta-test tasks with small amounts of experience. From Figure~\ref{fig:ml45} and Table~\ref{tab:final_results}, we find that the prior meta-RL methods, MAML and RL$^2$ reach 35\% and 31\% success on ML10 test tasks, while PEARL achieves only 13\% on ML10.
+%%SL.10.11: When writing experimental results sections like this, it's a good idea to either explain the results or just say what they are without theatrics, this "unable to generalize" business doesn't strike me as good form. Could rephrase like this: On ML10, MAML can generalize to some degree, achieving an average success rate of 40\%. This may be due to the consistent gradient-based adaptation of the MAML method~\cite{}. In contrast, RL$^2$ and PEARL generalize poorly to the meta-test set on ML10.
+On ML45, MAML and RL$^2$ solve around 39.9\% and 33.3\% of the meta-test tasks. Note that, on both ML10 and ML45, the meta-training performance of all methods also has considerable room for improvement, suggesting that optimization challenges are generally more severe in the meta-learning setting. The fact that some methods nonetheless exhibit meaningful generalization suggests that the ML10 and ML45 benchmarks are solvable, but challenging for current methods, leaving considerable room for improvement in future work.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{figures_v2/per_env_success_ml1.pdf}
+    \vspace{-0.5cm}
+    \caption{\footnotesize{Comparison on our simplest meta-RL evaluation, ML1 on 10 seeds. RL$^2$ shows the strongest performance in generalization. Pearl shows the weakest performance, though this could be attributed to difficulty in training its task encoder}
+    }
+    \label{fig:ml1}
+    % \vspace{-3cm}
+\end{figure}
+\begin{figure}[H]
+    
+    \includegraphics[width=\columnwidth]{figures_v2/per_task_success_mt10.pdf}
+    \vspace{-1cm}
+    \caption{Performance of the tested MTRL algorithms on 10 seeds. MT-SAC performs the best on MT-10, exhibiting the greatest sample efficiency and performance. For detailed plots of these algorithm's learning curves, see appendix \ref{app:curves}.}
+    %Multi-task SAC performs the best on MT10 and MT50. MAML is the best on ML10. However, on ML45, PEARL is able to achieve more than 65\% success rate on test tasks in stark contrast to 0\% success rate on the test tasks in ML10, suggesting that larger number of meta-training tasks is beneficial for meta-RL algorithms.}
+    \label{fig:mt10}
+\end{figure}
+\vspace{3cm}
+\clearpage
+\begin{figure}[H]  % {figure}[htb!]
+    \includegraphics[width=\columnwidth]{figures_v2/per_task_success_ml10.pdf}
+    \caption{Performance of the tested meta-RL algorithms on 10 seeds. RL$^2$ shows the highest performance on the training tasks (86.9\%), however its ability to generalize is not that much greater than MAML (35.8\% for RL$^2$ and 31.6\% for MAML).}
+    \label{fig:ml10}
+\end{figure}
+\begin{figure}[H]
+    \vspace{-1cm}
+    \includegraphics[width=\columnwidth]{figures_v2/per_task_success_mt50.pdf}
+    \vspace{-0.75cm}
+    \caption{Performance of the tested MTRL algorithms on 10 seeds. In MT-10, MT-SAC showed the highest performance, however its performance does not scale to MT-50, the more difficult benchmark. MT-PPO exhibits the better performance in this benchmark.}
+    \label{fig:mt50}
+\end{figure}
+
+\begin{figure}[H]
+    \includegraphics[width=\columnwidth]{figures_v2/per_task_success_ml45.pdf}
+    \caption{\footnotesize Average of maximum success rate for ML-45. Note that, even on the challenging ML-45 benchmark, current methods already exhibit some degree of generalization, but meta-training performance leaves considerable room for improvement, suggesting that future work could attain better performance on these benchmarks. Though PEARL has week training performance, it has comparable performance on test tasks. RL$^2$ has the highest  We also show the max average success rates for all benchmarks in Table \ref{tab:final_results}.}
+    \label{fig:ml45}
+\end{figure}
+
+\begin{table*}[h]
+  \centering
+  \scriptsize
+  \def\arraystretch{0.9}
+%   \def\arraystretch{0.85}
+%   \setlength{\tabcolsep}{0.3em}
+  \setlength{\tabcolsep}{1em}
+  \begin{tabularx}{0.43\linewidth}{ccll*{9}{c}}
+  \toprule
+ \multicolumn{1}{c}{Methods} & \multicolumn{1}{c}{MT10} & \multicolumn{1}{c}{MT50}\\
+  % &\multicolumn{1}{c}{}  &\multicolumn{1}{c}{}\\
+\midrule
+  Multi-task PPO&   30.5\% & \textbf{35.4}\%\\
+  Multi-task TRPO&   31.3\% & 21.0\%\\
+  Task embeddings&   20.9\% & 11.8\%\\
+ Multi-task SAC&   \textbf{68.3}\% & \textbf{38.5}\%\\
+    \bottomrule
+    \end{tabularx}
+    \begin{tabularx}{0.5\linewidth}{ccll*{9}{c}}
+  \toprule
+ \multicolumn{1}{c}{\multirow{2}[4]{*}{Methods}} & \multicolumn{2}{c}{ML10} & \multicolumn{2}{c}{ML45}\\
+    \cmidrule(lr){2-3} \cmidrule(lr){4-5} %\cmidrule(lr){6-10}
+  % &\multicolumn{2}{c}{} & \multicolumn{2}{c}{}\\
+     & \multicolumn{1}{c}{meta-train}  & \multicolumn{1}{c}{meta-test}  & \multicolumn{1}{c}{meta-train} & \multicolumn{1}{c}{meta-test}\\
+  \midrule
+  MAML&   44.4\%  &31.6\% & 40.7\%  &\textbf{39.9\%}\\
+  RL$^2$&   \textbf{86.9\%}  & \textbf{35.8}\% & \textbf{70\%}  &33.3\%\\
+  PEARL&   23.2\%  & 13\% & 14.5\%  & 22\%\\
+    \bottomrule
+    \end{tabularx}
+     \caption{\footnotesize The average maximum success rate over all tasks for MT10, MT50, ML10, and ML45 on 10 seeds. The best performance in each benchmark is bolden. For MT10 and MT50, we show the average training success rate of multi-task SAC and multi-task PPO respectively outperform other methods. For ML10 and ML45, we show the meta-train and meta-test success rates. RL$^2$ achieves best meta-train performance in ML10 and ML45, while MAML and RL$2$ get the best generalization performance in ML10 and ML45 meta-test tasks respectively.
+     }
+    \label{tab:final_results}
+\end{table*}
+
+% \begin{table*}[ht!]
+%   \centering
+%   \scriptsize
+%   \def\arraystretch{0.9}
+% %   \def\arraystretch{0.85}
+% %   \setlength{\tabcolsep}{0.3em}
+%   \setlength{\tabcolsep}{1.5em}
+%   \begin{tabularx}{0.97\linewidth}{ccll*{9}{c}}
+%   \toprule
+%  \multicolumn{1}{c}{\multirow{2}[4]{*}{Methods}} & \multicolumn{2}{c}{ML10} & \multicolumn{2}{c}{ML45}\\
+%     \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-10}
+%   &\multicolumn{2}{c}{} & \multicolumn{2}{c}{}\\
+%      & \multicolumn{1}{c}{meta-train}  & \multicolumn{1}{c}{meta-test}  & \multicolumn{1}{c}{meta-train} & \multicolumn{1}{c}{meta-test}\\
+%   \midrule
+%   MAML&   25\%  & \mybox{\textbf{36\%}} & 21.14\%  &23.93\%\\
+%   RL$^2$&   \mybox{\textbf{50\%}}  & 10\% & \mybox{\textbf{43.18\%}}  &20\%\\
+%   PEARL&   42.78\%  & 0\% & 11.36\%  &\mybox{\textbf{30\%}}\\
+%     \bottomrule
+%     \end{tabularx}
+%      \caption{\footnotesize Average success rates over all tasks for MT10, MT50, ML10, and ML50. The best performance in each benchmark is boxed and bolden. For MT10 and MT50, we show the average training success rate and Multi-task Multi-headed SAC outperforms other methods. For ML10 and ML45, we show the meta-train and meta-test success rates. RL$^2$ achieves best meta-train performance in ML10 and ML45, while MAML and PEARL get the best generalization performance in ML10 and ML45 meta-test tasks respectively.
+%      }
+%     \label{tab:final_results}
+% \end{table*}
+
+
+\iffalse
+\subsection{Analysis of Current Methods}
+
+* cite ray interference, potentially a reason that meta-RL methods struggle is that the gradients between tasks are interfering, multitask SAC with multiple heads partially address this issue.
+
+Gradient interference in current meta-RL methods -- study why they fail.
+\fi

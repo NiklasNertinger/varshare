@@ -1,0 +1,223 @@
+\begin{thebibliography}{10}
+
+\bibitem{mtmodular}
+J.~Andreas, D.~Klein, and S.~Levine.
+\newblock Modular multitask reinforcement learning with policy sketches.
+\newblock In {\em Proceedings of the 34th International Conference on Machine
+  Learning}, 2017.
+
+\bibitem{mtrl_for_control}
+H.~Arora, R.~Kumar, J.~Krone, and C.~Li.
+\newblock Multi-task learning for continuous control.
+\newblock {\em CoRR}, abs/1802.01034, 2018.
+
+\bibitem{sparse_mtrl}
+D.~Calandriello, A.~Lazaric, and M.~Restelli.
+\newblock Sparse multi-task reinforcement learning.
+\newblock In {\em Advances in Neural Information Processing Systems}, 2014.
+
+\bibitem{MTL}
+R.~Caruana.
+\newblock Multitask learning.
+\newblock {\em Mach. Learn.}, 28(1):41--75, Jul 1997.
+
+\bibitem{mtl_data_mining}
+J.~Chen, J.~Zhou, and J.~Ye.
+\newblock Integrating low-rank and group-sparse structures for robust
+  multi-task learning.
+\newblock In {\em International Conference on Knowledge Discovery and Data
+  Mining}, 2011.
+
+\bibitem{grad_norm}
+Z.~Chen, V.~Badrinarayanan, C.-Y. Lee, and A.~Rabinovich.
+\newblock {G}rad{N}orm: Gradient normalization for adaptive loss balancing in
+  deep multitask networks.
+\newblock In {\em International Conference on Machine Learning}, 2018.
+
+\bibitem{share_knowledge_mtrl}
+C.~D'Eramo, D.~Tateo, A.~Bonarini, M.~Restelli, and J.~Peters.
+\newblock Sharing knowledge in multi-task deep reinforcement learning.
+\newblock In {\em International Conference on Learning Representations}, 2020.
+
+\bibitem{modular_mtrl}
+C.~Devin, A.~Gupta, T.~Darrell, P.~Abbeel, and S.~Levine.
+\newblock Learning modular neural network policies for multi-task and
+  multi-robot transfer.
+\newblock In {\em International Conference on Robotics and Automation}, 2017.
+
+\bibitem{sac}
+T.~Haarnoja, A.~Zhou, P.~Abbeel, and S.~Levine.
+\newblock Soft actor-critic: Off-policy maximum entropy deep reinforcement
+  learning with a stochastic actor.
+\newblock In {\em International Conference on Machine Learning}, 2018.
+
+\bibitem{popart}
+M.~Hessel, H.~Soyer, L.~Espeholt, W.~Czarnecki, S.~Schmitt, and H.~van Hasselt.
+\newblock Multi-task deep reinforcement learning with popart.
+\newblock {\em CoRR}, abs/1809.04474, 2018.
+
+\bibitem{MT_Opt}
+D.~Kalashnikov, J.~Varley, Y.~Chebotar, B.~Swanson, R.~Jonschkowski, C.~Finn,
+  S.~Levine, and K.~Hausman.
+\newblock Mt-opt: Continuous multi-task robotic reinforcement learning at
+  scale.
+\newblock {\em CoRR}, abs/2104.08212, 2021.
+
+\bibitem{KangGS11}
+Z.~Kang, K.~Grauman, and F.~Sha.
+\newblock Learning with whom to share in multi-task feature learning.
+\newblock In {\em International Conference on Machine Learning}, 2011.
+
+\bibitem{mtl_scene}
+A.~Kendall, Y.~Gal, and R.~Cipolla.
+\newblock Multi-task learning using uncertainty to weigh losses for scene
+  geometry and semantics.
+\newblock In {\em IEEE Conference on Computer Vision and Pattern Recognition},
+  2018.
+
+\bibitem{task_group_11}
+A.~Kumar and H.~Daum\'{e}.
+\newblock Learning task grouping and overlap in multi-task learning.
+\newblock In {\em International Conference on International Conference on
+  Machine Learning}, 2012.
+
+\bibitem{mtpareto}
+X.~Lin, H.-L. Zhen, Z.~Li, Q.~Zhang, and S.~Kwong.
+\newblock Pareto multi-task learning.
+\newblock In {\em Thirty-third Conference on Neural Information Processing
+  Systems (NeurIPS)}, 2019.
+
+\bibitem{mtl_attention}
+S.~Liu, E.~Johns, and A.~J. Davison.
+\newblock End-to-end multi-task learning with attention.
+\newblock In {\em IEEE Conference on Computer Vision and Pattern Recognition},
+  2019.
+
+\bibitem{film}
+E.~Perez, F.~Strub, H.~de~Vries, V.~Dumoulin, and A.~C. Courville.
+\newblock {FiLM}: Visual reasoning with a general conditioning layer.
+\newblock {\em CoRR}, abs/1709.07871, 2017.
+
+\bibitem{multi_goal}
+M.~Plappert, M.~Andrychowicz, A.~Ray, B.~McGrew, B.~Baker, G.~Powell,
+  J.~Schneider, J.~Tobin, M.~Chociej, P.~Welinder, V.~Kumar, and W.~Zaremba.
+\newblock Multi-goal reinforcement learning: Challenging robotics environments
+  and request for research.
+\newblock {\em CoRR}, abs/1802.09464, 2018.
+
+\bibitem{para_space_noise}
+M.~Plappert, R.~Houthooft, P.~Dhariwal, S.~Sidor, R.~Y. Chen, X.~Chen,
+  T.~Asfour, P.~Abbeel, and M.~Andrychowicz.
+\newblock Parameter space noise for exploration.
+\newblock {\em CoRR}, abs/1706.01905, 2017.
+
+\bibitem{rlhypernetwork}
+E.~Sarafian, S.~Keynan, and S.~Kraus.
+\newblock Recomposing the reinforcement learning building blocks with
+  hypernetworks.
+\newblock In {\em Proceedings of the 38th International Conference on Machine
+  Learning}, 2021.
+
+\bibitem{mtl_multi_obj}
+O.~Sener and V.~Koltun.
+\newblock Multi-task learning as multi-objective optimization.
+\newblock In {\em Advances in Neural Information Processing Systems}, 2018.
+
+\bibitem{federated_mtl}
+V.~Smith, C.-K. Chiang, M.~Sanjabi, and A.~S. Talwalkar.
+\newblock Federated multi-task learning.
+\newblock In {\em Advances in Neural Information Processing Systems},
+  volume~30, 2017.
+
+\bibitem{Sodhani2021MTRL}
+S.~Sodhani and A.~Zhang.
+\newblock {MTRL} - multi task rl algorithms.
+\newblock Github, 2021.
+
+\bibitem{care}
+S.~Sodhani, A.~Zhang, and J.~Pineau.
+\newblock Multi-task reinforcement learning with context-based representations.
+\newblock In {\em International Conference on Machine Learning}, 2021.
+
+\bibitem{mtl_sentence}
+S.~Subramanian, A.~Trischler, Y.~Bengio, and C.~J. Pal.
+\newblock Learning general purpose distributed sentence representations via
+  large scale multi-task learning.
+\newblock In {\em International Conference on Learning Representations}, 2018.
+
+\bibitem{Sun_2021_ICCV}
+G.~Sun, T.~Probst, D.~P. Paudel, N.~Popovi\'c, M.~Kanakis, J.~Patel, D.~Dai,
+  and L.~Van~Gool.
+\newblock Task switching network for multi-task learning.
+\newblock In {\em IEEE International Conference on Computer Vision}, 2021.
+
+\bibitem{mthypergrid}
+Y.~Tay, Z.~Zhao, D.~Bahri, D.~Metzler, and D.-C. Juan.
+\newblock Hypergrid transformers: Towards a single model for multiple tasks.
+\newblock In {\em International Conference on Learning Representations}, 2021.
+
+\bibitem{Distral}
+Y.~Teh, V.~Bapst, W.~M. Czarnecki, J.~Quan, J.~Kirkpatrick, R.~Hadsell,
+  N.~Heess, and R.~Pascanu.
+\newblock Distral: Robust multitask reinforcement learning.
+\newblock In {\em Advances in Neural Information Processing Systems}, 2017.
+
+\bibitem{mtgradvaccine}
+Z.~Wang, Y.~Tsvetkov, O.~Firat, and Y.~Cao.
+\newblock Gradient vaccine: Investigating and improving multi-task optimization
+  in massively multilingual models.
+\newblock In {\em International Conference on Learning Representations}, 2021.
+
+\bibitem{para_space_meta}
+H.~Xu, C.~Zhang, J.~Wang, D.~Ouyang, Y.~Zheng, and J.~Shao.
+\newblock Exploring parameter space with structured noise for
+  meta-reinforcement learning.
+\newblock In {\em International Joint Conference on Artificial Intelligence},
+  2020.
+
+\bibitem{mtl_comprehension}
+Y.~Xu, X.~Liu, Y.~Shen, J.~Liu, and J.~Gao.
+\newblock Multi-task learning with sample re-weighting for machine reading
+  comprehension.
+\newblock In {\em Conference of the North {A}merican Chapter of the Association
+  for Computational Linguistics}, 2019.
+
+\bibitem{mtrlknowledgetransfer}
+Z.~Xu, K.~Wu, Z.~Che, J.~Tang, and J.~Ye.
+\newblock Knowledge transfer in multi-task deep reinforcement learning for
+  continuous control.
+\newblock In {\em Advances in Neural Information Processing Systems}, 2020.
+
+\bibitem{soft_module}
+R.~Yang, H.~Xu, Y.~WU, and X.~Wang.
+\newblock Multi-task reinforcement learning with soft modularization.
+\newblock In {\em Advances in Neural Information Processing Systems}, 2020.
+
+\bibitem{meta_w_scheduler}
+H.~Yao, Y.~Wang, Y.~Wei, P.~Zhao, M.~Mahdavi, D.~Lian, and C.~Finn.
+\newblock Meta-learning with an adaptive task scheduler.
+\newblock In {\em Advances in Neural Information Processing Systems}, 2021.
+
+\bibitem{pcgrad}
+T.~Yu, S.~Kumar, A.~Gupta, S.~Levine, K.~Hausman, and C.~Finn.
+\newblock Gradient surgery for multi-task learning.
+\newblock In {\em Advances in Neural Information Processing Systems}, 2020.
+
+\bibitem{metaworld}
+T.~Yu, D.~Quillen, Z.~He, R.~Julian, K.~Hausman, C.~Finn, and S.~Levine.
+\newblock Meta-world: A benchmark and evaluation for multi-task and meta
+  reinforcement learning.
+\newblock In {\em Conference on Robot Learning}, 2019.
+
+\bibitem{jdsrc}
+H.~Zhang, N.~M. Nasrabadi, Y.~Zhang, and T.~S. Huang.
+\newblock Multi-observation visual recognition via joint dynamic sparse
+  representation.
+\newblock In {\em {IEEE International Conference on Computer Vision}}, 2011.
+
+\bibitem{mtl_review}
+Y.~Zhang and Q.~Yang.
+\newblock A survey on multi-task learning.
+\newblock {\em CoRR}, abs/1707.08114, 2017.
+
+\end{thebibliography}

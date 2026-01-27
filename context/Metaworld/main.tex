@@ -1,0 +1,175 @@
+\documentclass{article}
+%remove later
+\usepackage{xcolor}
+
+\usepackage[final]{corl_2019} % initial submission
+\usepackage{graphicx}
+\usepackage{fullpage,enumitem,amsmath,amssymb, mathtools, amsthm,wrapfig}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{makecell}
+\usepackage{multirow}
+\setlength{\bibsep}{0pt plus 0.3ex}
+\usepackage{lscape}
+\usepackage{rotating}
+
+
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{multicol}
+\usepackage{letltxmacro}
+\usepackage{siunitx}
+\usepackage{placeins}
+\usepackage{hyperref}
+\usepackage{float}
+
+% \usepackage{showframe}  % remove me to remove margin boxes
+
+\newcommand{\RLsq}{\texorpdfstring{RL${}^2$}{RL2}}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+\LetLtxMacro\oldttfamily\ttfamily
+\DeclareRobustCommand{\ttfamily}{\oldttfamily\csname ttsize\endcsname}
+\newcommand{\setttsize}[1]{\def\ttsize{#1}}%
+
+\usepackage{titlesec}
+\titlespacing\section{0pt}{3pt plus 4pt minus 2pt}{0pt plus 2pt minus 2pt}
+\titlespacing\subsection{0pt}{3pt plus 4pt minus 2pt}{0pt plus 2pt minus 2pt}
+\titlespacing\subsubsection{0pt}{3pt plus 4pt minus 2pt}{0pt plus 2pt minus 2pt}
+
+\usepackage{fleqn, tabularx}
+\usepackage{multirow}
+\usepackage[export]{adjustbox}
+
+\makeatletter
+\newcommand{\mybox}{%
+    \collectbox{%
+        \setlength{\fboxsep}{1pt}%
+        \fbox{\BOXCONTENT}%
+    }%
+}
+
+
+%\usepackage[final]{corl_2019} % Uncomment for the camera-ready ``final'' version
+\providecommand{\todo}[1]{{\color{red} [TODO: #1]}}
+\providecommand{\cf}[1]{{\color{magenta} [Chelsea: #1]}}
+
+
+\newcommand\blfootnote[1]{%
+  \begingroup
+  \renewcommand\thefootnote{}\footnote{#1}%
+  \addtocounter{footnote}{-1}%
+  \endgroup
+}
+
+\title{ Meta-World:  A Benchmark and Evaluation for \\ Multi-Task and Meta Reinforcement Learning
+}
+
+% The \author macro works with any number of authors. There are two
+% commands used to separate the names and addresses of multiple
+% authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to
+% break the lines. Using \AND forces a line break at that point. So,
+% if LaTeX puts 3 of 4 authors names on the first line, and the last
+% on the second line, try using \AND instead of \And before the third
+% author name.
+
+% NOTE: authors will be visible only in the camera-ready (ie, when using the option 'final'). 
+% 	For the initial submission the authors will be anonymized.
+
+\author{
+  Tianhe Yu$^{*1}$, Deirdre Quillen$^{*2}$, Zhanpeng He$^{*3}$, Ryan Julian$^{*4}$, Avnish Narayan$^{*4}$, \\ \textbf{Hayden Shively}$^{4}$, \textbf{Adithya Bellathur}$^{4}$, \\\textbf{Karol Hausman}$^5$, \textbf{Chelsea Finn}$^1$, \textbf{Sergey Levine}$^2$\\
+  Stanford University$^1$, UC Berkeley$^2$, Columbia University$^3$,\\ University of Southern California$^4$, Robotics at Google$^5$  \\  
+  %\texttt{hippo@berkeley.edu} \\
+  %% examples of more authors
+  %% \And
+  %% Coauthor \\
+  %% Affiliation \\
+  %% Address \\
+  %% \texttt{email} \\
+  %% \AND
+  %% Coauthor \\
+  %% Affiliation \\
+  %% Address \\
+  %% \texttt{email} \\
+  %% \And
+  %% Coauthor \\
+  %% Affiliation \\
+  %% Address \\
+  %% \texttt{email} \\
+  %% \And
+  %% Coauthor \\
+  %% Affiliation \\
+  %% Address \\
+  %% \texttt{email} \\
+}
+
+
+\begin{document}
+\maketitle
+
+%===============================================================================
+
+\begin{abstract}
+\blfootnote{$*$ denotes equal contribution}
+%%SL.7.4: I rewrote the abstract to focus mostly on meta-reinforcement learning, for two reasons: (1) it is much harder to explain why multi-task learning requires broader distributions (2) multi-task methods *have* been tested on broader distributions. I added a shorter remark about multi-task at the end. I think this makes for a much stronger narrative overall.
+Meta-reinforcement learning algorithms can enable robots to acquire new skills much more quickly, by leveraging prior experience to learn how to learn. However, much of the current research on meta-reinforcement learning focuses on task distributions that are very narrow. For example, a commonly used meta-reinforcement learning benchmark uses different running velocities for a simulated robot as different tasks. When policies are meta-trained on such narrow task distributions, they cannot possibly generalize to more quickly acquire entirely new tasks. Therefore, if the aim of these methods is enable faster acquisition of entirely new behaviors, we must evaluate them on task distributions that are sufficiently broad to enable generalization to new behaviors. In this paper, we propose an open-source simulated benchmark for meta-reinforcement learning and multi-task learning consisting of 50 distinct robotic manipulation tasks. Our aim is to make it possible to develop algorithms that generalize to accelerate the acquisition of entirely new, held-out tasks. We evaluate 7 state-of-the-art meta-reinforcement learning and multi-task learning algorithms on these tasks. 
+Surprisingly, while each task and its variations (e.g., with different object positions) can be learned with reasonable success, these algorithms struggle to learn with multiple tasks at the same time, even with as few as ten distinct training tasks. Our analysis and open-source environments pave the way for future research in multi-task learning and meta-learning that can enable meaningful generalization, thereby unlocking the full potential of these methods.\footnote{Videos of the benchmark tasks are on the anonymous project page: \url{meta-world.github.io}.} 
+
+\blfootnote{Our open-sourced code for the benchmark is available at: \url{https://github.com/rlworkgroup/metaworld}.} 
+\blfootnote{All of the open-sourced baselines and launchers for
+our experiments can be found at \url{https://github.com/rlworkgroup/garage}.}
+
+\blfootnote{This manuscript is an update on a manuscript that appeared at the 3rd Conference on Robot Learning (CoRL 2019), Osaka, Japan.}
+\end{abstract}
+
+% Two or three meaningful keywords should be added here
+\keywords{meta-learning, multi-task reinforcement learning, benchmarks} 
+
+%===============================================================================
+
+\section{Introduction}
+\vspace{-0.2cm}
+\input{intro}
+
+%===============================================================================
+
+\section{Related Work}
+\vspace{-0.2cm}
+\input{related_work.tex}
+
+%===============================================================================
+
+\section{The Multi-Task and Meta-RL Problem Statements}
+\label{sec:problem}
+\vspace{-0.2cm}
+
+\input{task_design.tex}	
+%===============================================================================
+
+\input{method.tex}
+
+%===============================================================================
+
+\input{experiments.tex}
+
+%===============================================================================
+
+\input{conclusion.tex}
+
+%===============================================================================
+
+% no \bibliographystyle is required, since the corl style is automatically used.
+
+\bibliography{references}  % .bib
+
+
+\clearpage
+
+\appendix
+\input{appendix.tex}
+
+\end{document}

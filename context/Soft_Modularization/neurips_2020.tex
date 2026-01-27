@@ -1,0 +1,146 @@
+\documentclass{article}
+
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2020
+
+% ready for submission
+% \usepackage{neurips_2020}
+
+% to compile a preprint version, e.g., for submission to arXiv, add add the
+% [preprint] option:
+%     \usepackage[preprint]{neurips_2020}
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+%     \usepackage[final]{neurips_2020}
+
+% to avoid loading the natbib package, add option nonatbib:
+
+% \usepackage[nonatbib]{neurips_2020}
+\usepackage[final]{neurips_2020}
+% \final
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+% \usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+
+
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+
+\usepackage{amsmath, amsthm, amssymb}
+\usepackage{bm}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{wrapfig}
+\usepackage{xcolor}
+\usepackage{subfig}
+\usepackage{wrapfig}
+\usepackage[font=small]{caption}
+
+\definecolor{citecolor}{HTML}{0071bc}
+% \definecolor{citecolor}{RGB}{34,139,34}
+\usepackage[pagebackref=true,breaklinks=true,letterpaper=true,colorlinks,citecolor=citecolor,linkcolor=blue,bookmarks=false]{hyperref}
+
+
+
+\newcommand{\theHalgorithm}{\arabic{algorithm}}
+
+\newcommand{\task}{\mathcal{T}}
+
+
+\newcolumntype{x}[1]{>{\centering\arraybackslash}p{#1pt}}
+
+\newcommand{\bd}[1]{\textbf{#1}}
+\newcommand{\app}{\raise.17ex\hbox{$\scriptstyle\sim$}}
+\newcommand{\ncdot}{{\mkern 0mu\cdot\mkern 0mu}}
+\def\x{$\times$}
+%\newcolumntype{x}[1]{>{\centering\arraybackslash}p{#1pt}}
+\newcommand{\dt}[1]{\fontsize{8pt}{.1em}\selectfont \emph{#1}}
+\newlength\savewidth\newcommand\shline{\noalign{\global\savewidth\arrayrulewidth
+  \global\arrayrulewidth 1pt}\hline\noalign{\global\arrayrulewidth\savewidth}}
+\newcommand{\tablestyle}[2]{\setlength{\tabcolsep}{#1}\renewcommand{\arraystretch}{#2}\centering\footnotesize}
+\newcommand{\myparagraph}[1]{{\vspace{0.5em} \noindent \bf #1}}
+
+\makeatletter\renewcommand\paragraph{\@startsection{paragraph}{4}{\z@}
+  {.5em \@plus1ex \@minus.2ex}{-.5em}{\normalfont\normalsize\bfseries}}\makeatother
+
+\newcommand{\pol}[0]{\pmb{\pi}}
+\newcommand{\cpol}[0]{\pmb{\mu}}
+\newcommand{\dd}{\frac{\partial}{\partial \theta_i}}
+
+
+\newcommand{\yw}[1]{\textcolor{red}{(YW: #1)}} 
+
+\usepackage{graphicx}
+\input{math_commands.tex}
+
+
+\title{Multi-Task Reinforcement Learning with \\ Soft Modularization}
+
+\author{
+    Ruihan Yang$^{1}$
+    \quad Huazhe Xu$^{2}$
+    \quad Yi Wu$^{3}$
+    \quad Xiaolong Wang$^{1}$ \\
+    {${ }^{1}$UC San Diego 
+    \qquad ${ }^{2}$ UC Berkeley 
+    \qquad ${ }^{3}$ IIIS, Tsinghua }\\
+}
+
+\begin{document}
+
+\maketitle
+
+
+\input{abstract}
+
+\vspace{-0.1in}
+\section{Introduction}\label{sec:intro}
+\vspace{-0.1in}
+\input{10intro}
+
+\vspace{-0.1in}
+\section{Related Work}\label{sec:related}
+\vspace{-0.1in}
+\input{20related}
+
+\vspace{-0.1in}
+\section{Background}\label{sec:background}
+\vspace{-0.1in}
+\input{30background}
+
+\vspace{-0.1in}
+\section{Method}\label{sec:method}
+\vspace{-0.1in}
+\input{40method}
+
+\vspace{-0.1in}
+\section{Experiments}\label{sec:expr}
+\vspace{-0.1in}
+\input{50experiments}
+
+\vspace{-0.1in}
+\section{Conclusion}
+\vspace{-0.1in}
+\input{60conclude}
+
+\vspace{-0.1in}
+\section{Potential Broader Impact}
+\vspace{-0.1in}
+\input{70impact}
+
+
+\bibliography{reference}
+
+\bibliographystyle{plain}
+\setcitestyle{numbers}
+
+\end{document}

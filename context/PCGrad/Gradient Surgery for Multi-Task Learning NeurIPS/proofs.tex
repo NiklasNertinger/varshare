@@ -1,0 +1,320 @@
+\def\rvgone{{\mathbf{g_1}}}
+\def\rvgtwo{{\mathbf{g_2}}}
+
+
+
+\section{Proofs}
+\subsection{Proof of Theorem 1}
+\label{app:proof}
+\theoremconvergence*
+
+\begin{proof}
+
+We will use the shorthand $|| \cdot ||$ to denote the $L_2$-norm and $\nabla \loss = \nabla_\theta \loss$, where $\theta$ is the parameter vector. Following Definition~\ref{def:angle} and \ref{def:setup}, let $\rvgone = \nabla \loss_1$, $\rvgtwo = \nabla \loss_2$, $\rvg = \nabla\loss = \rvgone + \rvgtwo$, and $\phi_{12}$ be the angle between $\rvgone$ and $\rvgtwo$.
+
+At each PCGrad update, we have two cases: $cos(\phi_{12}) \geq 0$ or $\cos(\phi_{12} ) < 0$.
+
+If $\cos(\phi_{12}) \geq 0$, then we apply the standard gradient descent update using $t \leq \frac{1}{L}$, which leads to a strict decrease in the objective function value $\loss(\theta)$ (since it is also convex) unless $\nabla \loss(\theta) = 0$, which occurs only when $\theta = \theta^*$~\citep{boyd2004convex}. 
+
+In the case that $\cos(\phi_{12}) < 0$, we proceed as follows:
+
+Our assumption that $\nabla \loss$ is Lipschitz continuous with constant $L$ implies that $\nabla^2 \loss(\theta) - LI$ is a negative semi-definite matrix. Using this fact, we can perform a quadratic expansion of $\loss$ around $\loss(\theta)$ and obtain the following inequality:
+\begin{align*}
+\loss(\theta^+) &\leq \loss(\theta) + \nabla \loss(\theta)^T (\theta^+ - \theta) + \frac{1}{2} \nabla^2 \loss(\theta) ||\theta^+ - \theta||^2 \\
+&\leq \loss(\theta) + \nabla \loss(\theta)^T (\theta^+ - \theta) + \frac{1}{2} L ||\theta^+ - \theta||^2
+\end{align*}
+Now, we can plug in the PCGrad update by letting $\theta^+ = \theta - t\cdot(\rvg - \frac{\rvgone \cdot \rvgtwo}{||\rvgone||^2}\rvgone - \frac{\rvgone \cdot \rvgtwo}{||\rvgtwo||^2}\rvgtwo)$. We then get:
+\begin{align}
+    \loss(\theta^+) &\leq \loss(\theta) + t\cdot\rvg^T (-\rvg + \frac{\rvgone \cdot \rvgtwo}{||\rvgone||^2}\rvgone + \frac{\rvgone \cdot \rvgtwo}{||\rvgtwo||^2}\rvgtwo) 
+    + \frac{1}{2}Lt^2||\rvg - \frac{\rvgone \cdot \rvgtwo}{||\rvgone||^2}\rvgone - \frac{\rvgone \cdot \rvgtwo}{||\rvgtwo||^2}\rvgtwo||^2\nonumber \\ \nonumber\\
+    &\text{(Expanding, using the identity $\rvg = \rvgone + \rvgtwo$)}\nonumber
+    \\ \nonumber\\
+    &= \loss(\theta) + t\left(-||\rvgone||^2 - ||\rvgtwo||^2 + \frac{(\rvgone \cdot \rvgtwo)^2}{||\rvgone||^2} + \frac{(\rvgone \cdot \rvgtwo)^2}{||\rvgtwo||^2}\right)
+    + \frac{1}{2}Lt^2||\rvgone + \rvgtwo \nonumber\\ 
+    &- \frac{\rvgone \cdot \rvgtwo}{||\rvgone||^2}\rvgone - \frac{\rvgone \cdot \rvgtwo}{||\rvgtwo||^2}\rvgtwo||^2\nonumber
+    \\ \nonumber\\
+    &\text{(Expanding further and re-arranging terms)}\nonumber
+    \\ \nonumber\\
+    &= \loss(\theta) - (t - \frac{1}{2}Lt^2)(||\rvgone||^2 + ||\rvgtwo||^2 - \frac{(\rvgone \cdot \rvgtwo)^2}{||\rvgone||^2} - \frac{(\rvgone \cdot \rvgtwo)^2}{||\rvgtwo||^2})\nonumber\\
+    &- Lt^2(\rvgone \cdot \rvgtwo - \frac{(\rvgone \cdot \rvgtwo)^2}{||\rvgone||^2 ||\rvgtwo||^2}\rvgone \cdot \rvgtwo) \nonumber
+    \\ \nonumber\\
+    &\text{(Using the identity $\cos(\phi_{12}) = \frac{\rvgone \cdot \rvgtwo}{||\rvgone|| ||\rvgtwo||}$)}\nonumber
+    \\ \nonumber\\
+    &= \loss(\theta) - (t  - \frac{1}{2}Lt^2) [(1 - \cos^2(\phi_{12})) ||\rvgone||^2 + (1 - \cos^2(\phi_{12})) ||\rvgtwo||^2 ]\nonumber \\
+    &- Lt^2 (1 - \cos^2(\phi_{12})) ||\rvgone|| ||\rvgtwo|| \cos(\phi_{12}) \label{eq:pcgrad_bound}\\
+    &\text{(Note that $\cos(\phi_{12}) < 0$ so the final term is non-negative)}\nonumber
+\end{align}
+Using $t \leq \frac{1}{L}$, we know that $-(1 - \frac{1}{2} Lt) = \frac{1}{2}Lt - 1 \leq \frac{1}{2}L(1/L) - 1 = \frac{-1}{2}$ and $Lt^2 \leq t$. 
+
+Plugging this into the last expression above, we can conclude the following:
+\begin{align*}
+    \loss(\theta^+) &\leq \loss(\theta) - \frac{1}{2}t [(1 - \cos^2(\phi_{12})) ||\rvgone||^2 + (1 - \cos^2(\phi_{12})) ||\rvgtwo||^2 ]\\
+    &- t (1 - \cos^2(\phi_{12})) ||\rvgone|| ||\rvgtwo|| \cos(\phi_{12}) \\
+    &= \loss(\theta) - \frac{1}{2}t (1 - \cos^2(\phi_{12})) [ ||\rvgone||^2 + 
+    2 ||\rvgone|| ||\rvgtwo|| \cos(\phi_{12}) +
+    ||\rvgtwo||^2 ] \\
+    &= \loss(\theta) - \frac{1}{2}t (1 - \cos^2(\phi_{12})) [ ||\rvgone||^2 + 
+    2 \rvgone \cdot \rvgtwo +
+    ||\rvgtwo||^2 ] \\
+    &= \loss(\theta) - \frac{1}{2}t (1 - \cos^2(\phi_{12})) ||\rvgone + \rvgtwo||^2 \\
+    &= \loss(\theta) - \frac{1}{2}t (1 - \cos^2(\phi_{12})) \|\rvg\|^2
+\end{align*}
+
+If $\cos(\phi_{12}) > -1$, then $\frac{1}{2}t (1 - \cos^2(\phi_{12})) \|\rvg\|^2$ will always be positive unless $\rvg = 0$. This inequality implies that the objective function
+value strictly decreases with each iteration where $\cos(\phi_{12}) > -1$.
+
+Hence repeatedly applying PCGrad process can either reach the optimal value $\loss(\theta) = \loss(\theta^*)$ or $\cos(\phi_{12}) = -1$, in which case $\frac{1}{2}t (1 - \cos^2(\phi_{12})) \|\rvg\|^2 = 0$. Note that this result only holds when we choose $t$ to be small enough, i.e. $t \leq \frac{1}{L}$.
+
+\end{proof}
+
+\begin{corollary}
+\label{cor:moretasks}
+Assume the $n$ objectives $\loss_1, \loss_2, ..., \loss_n$ are convex and differentiable. Suppose the gradient of $\loss$ is Lipschitz continuous with constant $L > 0$. Assume that $\cos(\rvg, \rvg^\text{PC}) \geq \frac{1}{2}$. 
+Then, the PCGrad update rule with step size $t \leq \frac{1}{L}$ will converge to either (1) a location in the optimization landscape where $\cos(\rvg_i, \rvg_j) = -1 \forall i, j$ or (2) the optimal value $\loss(\theta^*)$. 
+\end{corollary}
+\begin{proof}
+Our assumption that $\nabla \loss$ is Lipschitz continuous with constant $L$ implies that $\nabla^2 \loss(\theta) - LI$ is a negative semi-definite matrix. Using this fact, we can perform a quadratic expansion of $\loss$ around $\loss(\theta)$ and obtain the following inequality:
+\begin{align*}
+\loss(\theta^+) &\leq \loss(\theta) + \nabla \loss(\theta)^T (\theta^+ - \theta) + \frac{1}{2} \nabla^2 \loss(\theta) ||\theta^+ - \theta||^2 \\
+&\leq \loss(\theta) + \nabla \loss(\theta)^T (\theta^+ - \theta) + \frac{1}{2} L ||\theta^+ - \theta||^2
+\end{align*}
+Now, we can plug in the PCGrad update by letting $\theta^+ = \theta - t\cdot \rvg^\text{PC}$. We then get:
+\begin{align*}
+    \loss(\theta^+) &\leq \loss(\theta) - t\cdot\rvg^T \rvg^\text{PC}
+    + \frac{1}{2}Lt^2||\rvg^\text{PC}||^2\nonumber \\
+    &\text{(Using the assumption that $\cos(\rvg, \rvg^\text{PC}) \geq \frac{1}{2}$.)} \\
+    &\leq \loss(\theta) - \frac{1}{2} t||\rvg||\cdot||\rvg^\text{PC}||
+    + \frac{1}{2}Lt^2||\rvg^\text{PC}||^2\nonumber \\
+    &\leq \loss(\theta) - \frac{1}{2} t||\rvg||\cdot||\rvg^\text{PC}||
+    + \frac{1}{2}Lt^2||\rvg^\text{PC}|| \cdot ||\rvg|| \nonumber \nonumber \\
+\end{align*}
+Note that $-\frac{1}{2} t ||\rvg||\cdot||\rvg^\text{PC}||
+    + \frac{1}{2}Lt^2||\rvg^\text{PC}|| \cdot ||\rvg|| \leq 0$ when $t \leq \frac{1}{L}$. Further, when $t < \frac{1}{L}$, $-\frac{1}{2} t ||\rvg||\cdot||\rvg^\text{PC}||
+    + \frac{1}{2}Lt^2||\rvg^\text{PC}|| \cdot ||\rvg|| = 0$ if and only if $||\rvg|| = 0$ or $||\rvg^\text{PC}||=0$. 
+    
+Hence repeatedly applying PCGrad process can either reach the optimal value $\loss(\theta) = \loss(\theta^*)$ or a location in the optimization landscape where $\cos(\rvg_i, \rvg_j) = -1$ for all pairs of tasks $i, j$. Note that this result only holds when we choose $t$ to be small enough, i.e. $t \leq \frac{1}{L}$.
+\end{proof}
+
+\begin{proposition}
+\label{prop:nonconvex}
+Assume $\loss_1$ and $\loss_2$ are differentiable but possibly non-convex. Suppose the gradient of $\loss$ is Lipschitz continuous with constant $L > 0$.
+Then, the PCGrad update rule with step size $t \leq \frac{1}{L}$ will converge to either (1) a location in the optimization landscape where $\cos(\phi_{12}) = -1$ or (2) find a $\theta_k$ that is almost a stationary point.
+\end{proposition}
+\begin{proof}
+Following Definition~\ref{def:angle} and \ref{def:setup}, let $\rvgone_k = \nabla \loss_1$ at iteration $k$, $\rvgtwo_k = \nabla \loss_2$ at iteration $k$, and $\rvg_k = \nabla\loss = \rvgone_k + \rvgtwo_k$ at iteration $k$, and $\phi_{12, k}$ be the angle between $\rvgone_k$ and $\rvgtwo_k$.
+
+
+From the proof of Theorem 1, when $\cos(\phi_{12},k) < 0$ we have:
+$$
+||\rvg_k||^2 \leq \frac{2}{t} \frac{\loss(\theta_{k-1}) - \loss(\theta_{k})}{(1 - \cos^2(\phi_{12, k}))}.
+$$
+
+Thus, we have:
+\begin{align*}
+\min_{0 \leq k \leq K} || \rvg_k ||^2 &\leq \frac{1}{K} \sum_{i = 0}^{K-1} ||\rvg_i||^2 \\
+&\leq \frac{2}{Kt} \sum_{i = 0}^{K-1} \frac{\loss(\theta_{i-1}) - \loss(\theta_{i})}{(1 - \cos^2(\phi_{12, i}))}
+\end{align*}
+
+If at any iteration, $\cos(\phi_{12, k}) = -1$, then the optimization will stop at that point. If $\forall k \in [0, K]$, $\cos(\phi_{12, k}) \geq \alpha > -1$, then, we have:
+
+\begin{align*}
+\min_{0 \leq k \leq K} || \rvg_k ||^2 &\leq \frac{2}{K (1 - \alpha^2) t} \sum_{i = 0}^{K-1} (\loss(\theta_{i-1}) - \loss(\theta_{i})) \\
+&= \frac{2}{K (1 - \alpha^2) t} (\loss(\theta_{0}) - \loss(\theta_{K})) \\
+&\leq \frac{2}{K (1 - \alpha^2) t} (\loss(\theta_{0}) - \loss^*).
+\end{align*}
+where $\loss^*$ is the minimal function value.
+\end{proof}
+
+Note that the convergence rate of PCGrad in the non-convex setting largely depends on the value of $\alpha$ and generally how small $\cos(\phi_{12, k})$ is on average.
+
+\subsection{Proof of Theorem 2}
+\label{app:proof2}
+
+\theoremlocal*
+
+\begin{proof}
+
+Note that $\theta^{\text{MT}} = \theta - t\cdot\rvg$ and $\theta^{\text{PCGrad}} = \theta - t(\rvg - \frac{\rvgone \cdot \rvgtwo}{||\rvgone||^2}\rvgone - \frac{\rvgone \cdot \rvgtwo}{||\rvgtwo||^2}\rvgtwo)$. Based on the condition that $\mathbf{H}(\loss; \theta, \theta^{\text{MT}}) \geq \ell\|\rvg\|_2^2$, we first apply Taylor's Theorem to $\loss(\theta^{\text{MT}})$ and obtain the following result:
+\begin{align}
+    \loss(\theta^{\text{MT}}) &= \loss(\theta) + \rvg^T(-t\rvg) + \int_0^1 (-t\rvg)^T\frac{\nabla^2\loss(\theta+a\cdot(-t\rvg))}{2}(-t\rvg)da \nonumber\\
+    &\geq \loss(\theta) + \rvg^T(-t\rvg) + t^2\cdot \frac{1}{2}\ell\cdot\|\rvg\|_2^2 \nonumber\\
+    &= \loss(\theta) - t\|\rvg\|_2^2 + \frac{1}{2}\ell t^2\|\rvg\|_2^2 \nonumber\\
+    &= \loss(\theta) + (\frac{1}{2}\ell t^2 - t)\|\rvg\|_2^2 \label{eq:mt_bound}
+\end{align}
+where the first inequality follows from Definition~\ref{def:curvature} and the assumption $\mathbf{H}(\loss; \theta, \theta^{\text{MT}}) \geq \ell\|\rvg\|_2^2$. From equation~\ref{eq:pcgrad_bound}, we have the simplified upper bound for $\loss(\theta^{\text{PCGrad}})$:
+\begin{align}
+    \loss(\theta^{\text{PCGrad}}) &\leq \loss(\theta) - (1-\cos^2\phi_{12})[(t-\frac{1}{2}Lt^2)\cdot(\|\rvgone\|_2^2+\|\rvgone\|_2^2) + Lt^2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}]\label{eq:pcgrad_bound_simplified}
+\end{align}
+Apply Equation~\ref{eq:mt_bound} and Equation~\ref{eq:pcgrad_bound_simplified} and we have the following inequality:
+\begin{align}
+    &\loss(\theta^{\text{MT}}) - \loss(\theta^{\text{PCGrad}}) \geq \loss(\theta) + (\frac{1}{2}\ell t^2 - t)\|\rvg\|_2^2 - \loss(\theta)\nonumber\\
+    & + (1-\cos^2\phi_{12})[(t-\frac{1}{2}Lt^2)(\|\rvgone\|_2^2+\|\rvgtwo\|_2^2) + Lt^2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}] \nonumber\\
+    &= (\frac{1}{2}\ell t^2 - t)\|\rvgone + \rvgtwo\|_2^2\!\!+\!\! (1-\cos^2\phi_{12})\!\!\left[(t-\frac{1}{2}Lt^2)\!\cdot\!(\|\rvgone\|_2^2\!+\!\|\rvgtwo\|_2^2)\!+\! Lt^2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}\right]\nonumber\\
+    &= \left(\frac{1}{2}\|\rvgone+\rvgtwo\|_2^2\ell - \frac{1-\cos^2\phi_{12}}{2}(\|\rvgone\|_2^2+\|\rvgtwo\|_2^2 - 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12})L\right)t^2\nonumber\\
+    &- \left((\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}\right)t\nonumber\\
+    &= \left(\frac{1}{2}\|\rvgone+\rvgtwo\|_2^2\ell - \frac{1-\cos^2\phi_{12}}{2}\|\rvgone-\rvgtwo\|_2^2L\right)t^2\nonumber\\
+    &- \left((\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}\right)t\nonumber\\
+    &= t\cdot\left[\left(\frac{1}{2}\|\rvgone+\rvgtwo\|_2^2\ell - \frac{1-\cos^2\phi_{12}}{2}(\|\rvgone-\rvgtwo\|_2^2)L\right)t\right.\nonumber\\
+    &\left.- \left((\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}\right)\right]\label{eq:difference}
+\end{align}
+Since $\cos\phi_{12} \leq -\Phi(\rvgone, \rvgtwo) =  -\frac{2\|\rvgone\|_2\|\rvgtwo\|_2}{\|\rvgone\|_2^2 + \|\rvgtwo\|_2^2}$ and $\ell \geq \xi(\rvgone, \rvgtwo) = \frac{(1 - \cos^2\phi_{12})(\|\rvgone-\rvgtwo\|_2^2)}{\|\rvgone + \rvgtwo\|_2^2}L$, we have $$\frac{1}{2}\|\rvgone+\rvgtwo\|_2^2\ell - \frac{1-\cos^2\phi_{12}}{2}\|\rvgone-\rvgtwo\|_2^2L \geq 0$$ and $$(\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12} \geq 0.$$ By the condition that $t \geq \frac{2}{\ell - \xi(\rvgone, \rvgtwo)L} = \frac{2}{\ell - \frac{(1 - \cos^2\phi_{12})\|\rvgone-\rvgtwo\|_2^2}{\|\rvgone + \rvgtwo\|_2^2}L}$ and monotonicity of linear functions, we have the following:
+\begin{align}
+    &\loss(\theta^{\text{MT}})\!-\!\loss(\theta^{\text{PCGrad}}) \geq [\left(\frac{1}{2}\|\rvgone\!+\!\rvgtwo\|_2^2\ell-\frac{1\!-\!\cos^2\phi_{12}}{2}\!\cdot\!\|\rvgone\!-\!\rvgtwo\|_2^2L\right)\cdot\frac{2}{\ell\!-\! \frac{(1-\cos^2\phi_{12})\|\rvgone-\rvgtwo\|_2^2}{\|\rvgone + \rvgtwo\|_2^2}L}\nonumber\\
+    &- \left((\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}\right)]\cdot t\nonumber\\
+    &=[\|\rvgone+\rvgtwo\|_2^2\cdot\left(\ell-\frac{(1-\cos^2\phi_{12})\cdot\|\rvgone-\rvgtwo\|_2^2}{\|\rvgone+\rvgtwo\|_2^2})L\right)\cdot\frac{1}{\ell - \frac{(1 - \cos^2\phi_{12})\|\rvgone-\rvgtwo\|_2^2}{\|\rvgone + \rvgtwo\|_2^2}L}\nonumber\\
+    &- \left((\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}\right)]\cdot t\nonumber\\
+    &= \left[\|\rvgone+\rvgtwo\|_2^2 - \left((\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12}+ 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}\right)\right]\cdot t\nonumber\\
+    &=\left[\|\rvgone\|_2^2\!+\!\|\rvgtwo\|_2^2\!+\!2\|\rvgone\|_2\|\rvgtwo\|_2\!\cos\phi_{12}\!-\! \left((\|\rvgone\|_2^2\!+\!\|\rvgtwo\|_2^2)\cos^2\!\phi_{12}\! +\! 2\|\rvgone\|_2\|\rvgtwo\|_2\!\cos\phi_{12}\right)\right]\cdot t\nonumber\\
+    &= (1-\cos^2\phi_{12})(\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cdot t\nonumber\\
+    &\geq 0\nonumber
+\end{align}
+\end{proof}
+
+\subsection{PCGrad: Sufficient and Necessary Conditions for Loss Improvement}
+\label{app:theorem3}
+
+Beyond the sufficient conditions shown in Theorem~\ref{thm:local}, we also present the sufficient and necessary conditions under which PCGrad achieves lower loss after one gradient update in Theorem~\ref{thm:necessary} in the two-task setting.
+
+\begin{restatable}{theorem}{theoremnecessary}
+\label{thm:necessary}
+Suppose $\loss$ is differentiable and the gradient of $\loss$ is Lipschitz continuous with constant $L > 0$. 
+Let $\theta^{\text{MT}}$ and $\theta^{\text{PCGrad}}$ be the parameters after applying one update to $\theta$ with $\rvg$ and PCGrad-modified gradient $\rvg^{\text{PC}}$ respectively, with step size $t > 0$. 
+Moreover, assume $\mathbf{H}(\loss; \theta, \theta^{\text{MT}}) \geq \ell\|\rvg\|_2^2$ for some constant $\ell \leq L$, i.e. the multi-task curvature is lower-bounded. Then $\loss(\theta^{\text{PCGrad}}) \leq \loss(\theta^{\text{MT}})$ if and only if 
+\begin{itemize}
+    \setlength\itemsep{1em}
+    \item $-\Phi(\rvgone, \rvgtwo) \leq \cos\phi_{12} < 0$
+    \item $\ell \leq \xi(\rvgone, \rvgtwo)L$
+    \item $0 < t \leq \frac{(\|\rvgone\|^2_2 + \|\rvgtwo\|^2_2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}}{\frac{1}{2}\|\rvgone + \rvgtwo\|_2^2\ell - \frac{1 - \cos^2\phi_{12}}{2}(\|\rvgone-\rvgtwo\|_2^2)L}$
+\end{itemize} or
+\begin{itemize}
+    \setlength\itemsep{1em}
+    \item $\cos\phi_{12} \leq -\Phi(\rvgone, \rvgtwo)$
+    \item $\ell \geq \xi(\rvgone, \rvgtwo)L$
+    \item $t \geq \frac{(\|\rvgone\|^2_2 + \|\rvgtwo\|^2_2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}}{\frac{1}{2}\|\rvgone + \rvgtwo\|_2^2\ell - \frac{1 - \cos^2\phi_{12}}{2}(\|\rvgone-\rvgtwo\|_2^2)L}.$
+\end{itemize}
+\end{restatable}
+
+\vspace{-0.3cm}
+\begin{proof}
+To show the necessary conditions, from Equation~\ref{eq:difference}, all we need is
+\begin{align}
+    &t\cdot[(\frac{1}{2}\|\rvgone+\rvgtwo\|_2^2\ell - \frac{1-\cos^2\phi_{12}}{2}(\|\rvgone-\rvgtwo\|_2^2)L)t\nonumber\\
+    &- \left((\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}\right)] \geq 0
+\end{align}
+Since $t \geq 0$, it reduces to show
+\begin{align}
+    &(\frac{1}{2}\|\rvgone+\rvgtwo\|_2^2\ell - \frac{1-\cos^2\phi_{12}}{2}(\|\rvgone-\rvgtwo\|_2^2)L)t\nonumber\\
+    &- \left((\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}\right) \geq 0\label{eq:necessary_cond}
+\end{align}
+For Equation~\ref{eq:necessary_cond} to hold while ensuring that $t \geq 0$, there are two cases:
+\begin{itemize}
+    \item $\frac{1}{2}\|\rvgone+\rvgtwo\|_2^2\ell - (1-\cos^2\phi_{12})(\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)L \geq 0$,\\
+    $(\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12} \geq 0$,\\
+    $t \geq \frac{(\|\rvgone\|^2_2 + \|\rvgtwo\|^2_2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}}{\frac{1}{2}\|\rvgone + \rvgtwo\|_2^2\ell - \frac{1 - \cos^2\phi_{12}}{2}(\|\rvgone-\rvgtwo\|_2^2)L}$
+    \item $\frac{1}{2}\|\rvgone+\rvgtwo\|_2^2\ell - (1-\cos^2\phi_{12})(\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)L \leq 0$,\\
+    $(\|\rvgone\|_2^2+\|\rvgtwo\|_2^2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12} \leq 0$,\\
+    $t \geq \frac{(\|\rvgone\|^2_2 + \|\rvgtwo\|^2_2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}}{\frac{1}{2}\|\rvgone + \rvgtwo\|_2^2\ell - \frac{1 - \cos^2\phi_{12}}{2}(\|\rvgone-\rvgtwo\|_2^2)L}$
+\end{itemize}
+, which can be simplified to
+\begin{itemize}
+    \item $\cos\phi_{12} \leq -\frac{2\|\rvgone\|_2\|\rvgtwo\|_2}{\|\rvgone\|_2^2 + \|\rvgtwo\|_2^2} = -\Phi(\rvgone, \rvgtwo)$,\\
+    $\ell \geq \frac{(1 - \cos^2\phi_{12})(\|\rvgone\|_2^2 + \|\rvgtwo\|_2^2)}{\|\rvgone + \rvgtwo\|_2^2}L = \xi(\rvgone, \rvgtwo)$,\\
+    $t \geq \frac{(\|\rvgone\|^2_2 + \|\rvgtwo\|^2_2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}}{\frac{1}{2}\|\rvgone + \rvgtwo\|_2^2\ell - \frac{1 - \cos^2\phi_{12}}{2}(\|\rvgone-\rvgtwo\|_2^2)L}$
+    \item $-\frac{2\|\rvgone\|_2\|\rvgtwo\|_2}{\|\rvgone\|_2^2 + \|\rvgtwo\|_2^2} = -\Phi(\rvgone, \rvgtwo) \leq \cos\phi_{12} < 0$,\\
+    $\ell \leq \frac{(1 - \cos^2\phi_{12})(\|\rvgone\|_2^2 + \|\rvgtwo\|_2^2)}{\|\rvgone + \rvgtwo\|_2^2}L = \xi(\rvgone, \rvgtwo)$,\\
+    $0 < t \leq \frac{(\|\rvgone\|^2_2 + \|\rvgtwo\|^2_2)\cos^2\phi_{12} + 2\|\rvgone\|_2\|\rvgtwo\|_2\cos\phi_{12}}{\frac{1}{2}\|\rvgone + \rvgtwo\|_2^2\ell - \frac{1 - \cos^2\phi_{12}}{2}(\|\rvgone-\rvgtwo\|_2^2)L}$.
+\end{itemize}
+
+The sufficient conditions hold as we can plug the conditions to RHS of Equation~\ref{eq:necessary_cond} and achieve non-negative result.
+\end{proof}
+\vspace{-0.3cm}
+
+\subsection{Convergence of PCGrad with Momentum-Based Gradient Descent}
+\label{app:momentum}
+
+In this subsection, we show convergence of PCGrad with momentum-based methods, which is more aligned with our practical implementation. In our analysis, we consider the heavy ball method~\cite{polyak1964some} as follows: $$\theta_{k+1} \leftarrow \theta_k - \alpha_k \nabla\loss(\theta_k) + \beta_k (\theta_k - \theta_{k-1})$$ where $k$ denotes the $k$-th step and $\alpha_k$ and $\beta_k$ are step sizes for the gradient and momentum at step $k$ respectively. We now present our theorem.
+
+\begin{restatable}{theorem}{momentum}
+\label{thm:momentum}
+Assume $\loss_1$ and $\loss_2$ are $\mu_1$- and $\mu_2$-strongly convex and also $L_1$- and $L_2$-smooth respectively where $\mu_1, \mu_2, L_1, L_2 > 0$. Define $\phi^k_{12}$ as the angle between two task gradients $\rvgone{(\theta_k)}$ and $\rvgtwo{(\theta_k)}$ and define $R_k = \frac{\|\rvgone(\theta_k)\|}{\|\rvgtwo(\theta_k)\|}$. Denote $\mu_k = (1 - \cos\phi^k_{12}/R_k)\mu_1 + (1 - \cos\phi^k_{12}\cdot R_k)\mu_2$ and $L_k = (1 - \cos\phi^k_{12}/R_k)L_1 + (1 - \cos\phi^k_{12}\cdot R_k)L_2$
+Then, the PCGrad update rule of the heavy ball method with step sizes $\alpha_k = \frac{4}{\sqrt{L_k} + \sqrt{\mu_k}}$ and $\beta_k = \max\{|1 - \sqrt{\alpha_k\mu_k}|,|1 - \sqrt{\alpha_kL_k}|\}^2$ will converge linearly to either (1) a location in the optimization landscape where $\cos(\phi^k_{12}) = -1$ or (2) the optimal value $\loss(\theta^*)$.
+\end{restatable}
+
+\begin{proof}
+We first observe that the PCGrad-modified gradient $\rvg^{\text{PC}}$ has the following identity:
+\begin{align}
+    \rvg^\text{PC} &= \rvg - \frac{\rvgone \cdot \rvgtwo}{||\rvgone||^2}\rvgone - \frac{\rvgone \cdot \rvgtwo}{||\rvgtwo||^2}\rvgtwo\nonumber\\
+    &= (1 - \frac{\rvgone \cdot \rvgtwo}{||\rvgone||^2})\rvgone + (1 - \frac{\rvgone \cdot \rvgtwo}{||\rvgtwo||^2})\rvgtwo\nonumber\\
+    &= (1 - \frac{\rvgone \cdot \rvgtwo}{\|\rvgone\|\|\rvgtwo\|}\frac{\|\rvgtwo\|}{\|\rvgone\|})\rvgone + (1 - \frac{\rvgone \cdot \rvgtwo}{\|\rvgone\|\|\rvgtwo\|}\frac{\|\rvgone\|}{\|\rvgtwo\|})\rvgtwo\nonumber\\
+    &= (1 - \cos\phi_{12} / R)\rvgone + (1 - \cos\phi_{12}\cdot R)\rvgtwo\label{eq:split}.
+\end{align}
+Applying Equation~\ref{eq:split}, we can write the PCGrad update rule of the heavy ball method in matrix form as follows:
+\begin{align*}
+    \left\|\begin{bmatrix}
+    \theta_{k+1} - \theta^*\\
+    \theta_k - \theta^*
+    \end{bmatrix}\right\|_2 &= \left\|\begin{bmatrix}
+    \theta_{k} + \beta_k(\theta_k - \theta_{k-1}) -  \theta^* \\
+    \theta_k - \theta^*
+    \end{bmatrix} -  \alpha_k\begin{bmatrix}
+    \rvg^{\text{PC}}(\theta_k) \\
+    0
+    \end{bmatrix}\right\|_2\\
+    &= \left\|\begin{bmatrix}
+    \theta_{k} + \beta_k(\theta_k - \theta_{k-1}) -  \theta^* \\
+    \theta_k - \theta^*
+    \end{bmatrix}\right.\\
+    &\left.-  \alpha_k\begin{bmatrix}
+    (1 - \cos\phi^k_{12}/R_k)\rvgone(\theta_k) + (1 - \cos\phi^k_{12}\cdot R_k)\rvgtwo(\theta_k) \\
+    0
+    \end{bmatrix}\right\|_2\\
+    &= \left\|\begin{bmatrix}
+    \theta_{k} + \beta_k(\theta_k - \theta_{k-1}) -  \theta^* \\
+    \theta_k - \theta^*
+    \end{bmatrix}\right.\\
+    &\left.- \alpha_k\begin{bmatrix}
+    \left[(1 - \cos\phi^k_{12}/R_k)\nabla^2\mathcal{L}_1(z_k) + (1 - \cos\phi^k_{12}\cdot R_k)\nabla^2\mathcal{L}_2(z'_k)\right](\theta_k -  \theta^*) \\
+    0
+    \end{bmatrix}\right\|_2\\
+    &\text{for some }z_k,  z'_k\text{ on the line segment between }\theta_k\text{ and }\theta^*\\
+    &=\left\|\begin{bmatrix}
+    (1+\beta_k)I-\alpha_kH_k & -\beta_k I\\
+    I & 0
+    \end{bmatrix}\begin{bmatrix}
+    \theta_k -  \theta^*\\
+    \theta_{k-1} - \theta^*
+    \end{bmatrix}\right\|_2\\
+    &\leq \left\|\begin{bmatrix}
+    (1+\beta_k)I-\alpha_kH_k & -\beta_k I\\
+    I & 0
+    \end{bmatrix}\right\|_2\left\|\begin{bmatrix}
+    \theta_k-\theta^*\\
+    \theta_{k-1}-\theta^*
+    \end{bmatrix}\right\|_2
+\end{align*}
+where $H_k = (1 - \cos\phi^k_{12}/R_k)\nabla^2\mathcal{L}_1(z_k) + (1 - \cos\phi^k_{12} \cdot R_k)\nabla^2\mathcal{L}_2(z'_k)$.
+
+By strong convexity and smoothness of $\loss_1$ and $\loss_2$, we have the eigenvalues of $\nabla^2\mathcal{L}_1(z_k)$ are between $\mu_1$ and $L_1$. Similarly, the eigenvalues of $\nabla^2\mathcal{L}_2(z'_k)$ are between $\mu_2$ and $L_2$. Thus the eigenvalues of $H_k$ are between $\mu_k = (1 - \cos\phi^k_{12}/R_k)\mu_1 + (1 - \cos\phi^k_{12}\cdot R_k)\mu_2$ and $L_k = (1 - \cos\phi^k_{12}/R_k)L_1 + (1 - \cos\phi^k_{12}\cdot R_k)L_2$~\cite{fulton2000eigenvalues}. Hence following Lemma 3.1 in ~\cite{notes}, we have $$\left\|\begin{bmatrix}
+    (1+\beta_k)I-\alpha_kH_k & -\beta_k I\\
+    I & 0
+    \end{bmatrix}\right\|_2 \leq \max\{|1 - \sqrt{\alpha_k\mu_k}|,|1 - \sqrt{\alpha_kL_k}|\}.$$
+Thus we have
+\begin{align}
+    \left\|\begin{bmatrix}
+    \theta_{k+1} - \theta^*\\
+    \theta_k - \theta^*
+    \end{bmatrix}\right\|_2 &\leq \max\{|1 - \sqrt{\alpha_k\mu_k}|,|1 - \sqrt{\alpha_kL_k}|\}\left\|\begin{bmatrix}
+    \theta_k-\theta^*\\
+    \theta_{k-1}-\theta^*
+    \end{bmatrix}\right\|_2\nonumber\\
+    &= \frac{\sqrt{\kappa_k}-1}{\sqrt{\kappa_k}+1}\left\|\begin{bmatrix}
+    \theta_k-\theta^*\\
+    \theta_{k-1}-\theta^*
+    \end{bmatrix}\right\|_2\label{eq:sub}\\
+    &\leq \left\|\begin{bmatrix}
+    \theta_k-\theta^*\\
+    \theta_{k-1}-\theta^*
+    \end{bmatrix}\right\|_2\nonumber
+\end{align}
+where $\kappa_k = \frac{L_k}{\mu_k}$ and Equation~\ref{eq:sub} follows from substitution $\alpha_k = \frac{4}{\sqrt{L_k} + \sqrt{\mu_k}}$. Hence PCGrad with heavy ball method converges linearly if $\cos\phi^k_{12} \neq -1$.
+\end{proof}

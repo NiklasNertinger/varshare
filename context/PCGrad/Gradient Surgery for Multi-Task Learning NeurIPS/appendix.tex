@@ -1,0 +1,431 @@
+\appendix
+\input{proofs.tex}
+
+%
+%
+
+%
+%
+%
+%
+%
+%
+%
+%
+
+%
+%
+%
+%
+%
+%
+%
+%
+%
+
+\section{Empirical Objective-Wise Evaluations of PCGrad}
+\label{app:objective-wise}
+
+In this section, we visualize the per-task training loss and validation loss curves respectively on NYUv2. 
+%
+The goal of measuring objective-wise performance is to study the convergence of PCGrad in practice, particularly amidst the possibility of slow convergence due to cosine similarities near -1, as discussed in Section~\ref{sec:theory}.
+%
+
+We show the objective-wise evaluation results 
+%
+on NYUv2 in Figure~\ref{fig:nyuv2_curve}. 
+%
+%
+For evaluations on NYUv2, PCGrad + MTAN attains similar training convergence rate compared to MTAN in three tasks in NYUv2 while converging faster and achieving lower validation loss in 2 out of 3 tasks. Note that in task 0 of the NYUv2 dataset, both methods seem to overfit, suggesting a better regularization scheme for this domain.
+
+In general, these results suggest that PCGrad has a regularization effect on supervised multi-task learning, rather than an improvement on optimization speed or convergence. We hypothesize that this regularization is caused by PCGrad leading to greater sharing of representations across tasks, such that the supervision for one task better regularizes the training of another. 
+This regularization effect seems notably different from the effect of PCGrad on reinforcement learning problems, where PCGrad dramatically improves training performance. This suggests that multi-task supervised learning and multi-task reinforcement learning problems may have distinct challenges.
+
+\begin{figure*}[ht]
+    \centering
+    \includegraphics[width=0.325\columnwidth]{figures/nyuv2_train_task0.png}
+    \includegraphics[width=0.325\columnwidth]{figures/nyuv2_train_task1.png}
+    \includegraphics[width=0.325\columnwidth]{figures/nyuv2_train_task2.png}
+    \includegraphics[width=0.325\columnwidth]{figures/nyuv2_val_task0.png}
+    \includegraphics[width=0.325\columnwidth]{figures/nyuv2_val_task1.png}
+    \includegraphics[width=0.325\columnwidth]{figures/nyuv2_val_task2.png}
+    \vspace{-0.2cm}
+    \caption{\footnotesize Empirical objective-wise evaluations on NYUv2. On the top row, we show the objective-wise training learning curves and on the bottom row, we show the objective-wise validation learning curves. PCGrad+MTAN converges with a similar rate compared to MTAN in training and for validation losses, PCGrad+MTAN converges faster and obtains a lower final validation loss in two out of three tasks. This result corroborate that in practice, PCGrad does not exhibit the potential slow convergence problem shown in Theorem~\ref{thm:converge}.}
+    \vspace{-0.1cm}
+    \label{fig:nyuv2_curve}
+\end{figure*}
+
+
+\section{Practical Details of PCGrad on Multi-Task and Goal-Conditioned Reinforcement Learning}
+\label{app:practical_rl}
+
+\neurips{In our experiments, we apply PCGrad to the soft actor-critic (SAC) algorithm~\citep{haarnoja2018sac}, an off-policy RL method.} In SAC, we employ a Q-learning style gradient to compute the gradient of the Q-function network, $Q_{\phi}(s,a, z_i)$, often known as the critic, and a reparameterization-style gradient to compute the gradient of the policy network $\pi_{\theta}(a|s, z_i)$, often known as the actor. For sampling, we instantiate a set of replay buffers $\{\data_{i}\}_{\task_i \sim p(\task)}$. Training and data collection are alternated throughout training. During a data collection step, we run the policy $\pi_\theta$ on all the tasks $\task_i \sim p(\task)$ to collect an equal number of paths for each task and store the paths of each task $\task_i$ into the corresponding replay buffer $\data_i$. At each training step, we sample an equal amount of data from each replay buffer $\data_i$ to form a stratified batch. For each task $\task_i \sim p(\task)$, the parameters of the critic $\theta$ are optimized to minimize the soft Bellman residual:
+\begin{align}
+    J^{(i)}_Q(\phi) &= \mathbb{E}_{(s_t, a_t, z_i) \sim \mathcal{D}_{i}}\left[Q_\phi(s_t, a_t, z_i) - (r(s_t, a_t, z_i)+ \gamma V_{\bar{\phi}}(s_{t+1}, z_i))\right]\text{,}
+\end{align}
+\begin{align}
+V_{\bar{\phi}}(s_{t+1}, z_i) &= \mathbb{E}_{a_{t+1}\sim\pi_\theta}\left[Q_{\bar{\phi}}(s_{t+1}, a_{t+1}, z_i)- \alpha\log\pi_\theta(a_{t+1}|s_{t+1}, z_i)\right]\text{,}
+\end{align}
+where $\gamma$ is the discount factor, $\bar{\phi}$ are the delayed parameters, and $\alpha$ is a learnable temperature that automatically adjusts the weight of the entropy term. For each task $\task_i \sim p(\task)$, the parameters of the policy $\pi_\theta$ are trained to minimize the following objective
+\begin{align}
+    J^{(i)}_\pi(\theta) &= \mathbb{E}_{s_t \sim \mathcal{D}_{i}}\left[\mathbb{E}_{a_t \sim \pi_\theta(a_t|s_t, z_i))} \left[\alpha\log\pi_\theta(a_{t}|s_{t}, z_i)- Q_\phi(s_t, a_t, z_i)\right]\right]\text{.}
+\end{align}
+%
+We compute $\nabla_\phi J^{(i)}_Q(\phi)$ and $\nabla_\theta J^{(i)}_\pi(\theta)$ for all $\task_i \sim p(\task)$ and apply PCGrad to both following Algorithm~\ref{alg:dgrad-o}.
+
+In the context of SAC specifically, we also propose to learn the temperature $\alpha$ for adjusting entropy of the policy on a per-task basis. This allows the method to control the entropy of the multi-task policy per-task. The motivation is that if we use a single learnable temperature for adjusting entropy of the multi-task policy $\pi_\theta(a|s, z_i)$, SAC may stop exploring once all easier tasks are solved, leading to poor performance on tasks that are harder or require more exploration. To address this issue, we propose to learn the temperature on a per-task basis as mentioned in Section~\ref{sec:pcgrad_practical}, i.e. using a parametrized model to represent $\alpha_\psi(z_i)$. This allows the method to control the entropy of $\pi_\theta(a|s, z_i)$ per-task.
+%
+We optimize the parameters of $\alpha_\psi(z_i)$ using the same constrained optimization framework as in~\cite{haarnoja2018sac}.
+
+When applying PCGrad to goal-conditioned RL, we represent $p(\task)$ as a distribution of goals and let $z_i$ be the encoding of a goal.
+Similar to the multi-task supervised learning setting discussed in Section~\ref{sec:pcgrad_practical}, PCGrad may be combined with various architectures designed for multi-task and goal-conditioned RL~\citep{fernando2017pathnet, devin2016modularnet}, where PCGrad operates on the gradients of shared parameters, leaving task-specific parameters untouched.
+
+
+
+\section{2D Optimization Landscape Details}
+To produce the 2D optimization visualizations in Figure \ref{fig:optlandscape}, we used a parameter vector $\theta = [ \theta_1, \theta_2 ] \in \mathbbm{R}^2$ and the following task loss functions:
+\begin{align*}
+&\loss_1(\theta) = 20 \log(\max(|.5\theta_1 + \tanh(\theta_2)|, 0.000005)) \\
+&\loss_2(\theta) = 25 \log(\max(|.5\theta_1  - \tanh(\theta_2) + 2| , 0.000005))
+\end{align*}
+The multi-task objective is $\loss(\theta) = \loss_1(\theta) + \loss_2(\theta)$. We initialized $\theta = [0.5, -3]$ and performed 500,000 gradient updates to minimize $\loss$ using the Adam optimizer with learning rate $0.001$. We compared using Adam for each update to using Adam in conjunction with the PCGrad method presented in Section \ref{sec:pcgrad}.
+\label{app:optimization_landscape_details}
+
+\section{Additional Multi-Task Supervised Learning Results}
+\label{app:additional_mt_sup_results}
+
+We present our multi-task supervised learning results on MultiMNIST and CityScapes here.
+\paragraph{MultiMNIST.} \arxiv{Following the same set-up of~\citet{sener2018multi}, for each image, we sample a different one uniformly at random. Then we put one of the image on the top left and the other one on the bottom right. The two tasks in the multi-task learning problem are to classify the digits on the top left (task-L) and bottom right (task-R) respectively. We construct such $60$K examples. We combine PCGrad with the same backbone architecture used in~\citep{sener2018multi} and compare its performance to~\citet{sener2018multi} by running the open-sourced code provided in~\citep{sener2018multi}. As shown in Table~\ref{tbl:multimnist}, PCGrad results 0.13\% and 0.55\% improvement over~\cite{sener2018multi} in left and right digit accuracy respectively.}
+
+\begin{table}[h]
+    \begin{center}
+    %
+    %
+    \begin{small}
+    \begin{tabular}{l|c|c}
+    \toprule
+        & left digit &right digit  \\
+      \midrule
+      \citet{sener2018multi} & 96.45 & 94.95\\
+      \midrule
+      PCGrad (ours) & \bf 96.58 & \bf 95.50 \\
+      \bottomrule
+    \end{tabular}
+    \end{small}
+    \end{center}
+    \caption{\footnotesize \arxiv{MultiMNIST results. PCGrad achieves improvements over the approach by~\citet{sener2018multi} in both left and right digit classfication accuracy.}}
+    \vspace{-0.4cm}
+    \label{tbl:multimnist}
+\end{table}
+
+\paragraph{CityScapes.}
+
+The CityScapes dataset~\cite{cordts2016cityscapes} contains 19 classes of street-view images resized to $128 \times 256$. There are two tasks in this dataset: semantic segmentation and depth estimation. Following the setup in \citet{liu2018attention}, we pair the depth estimation task with semantic segmentation using the coarser 7 categories instead of the finer 19 classes in the original CityScapes dataset. Similar to NYUv2 evaluations described in Section~\ref{sec:experiments}, we also combine PCGrad with MTAN~\cite{liu2018attention} and compare it to a range of methods discussed in Appendix~\ref{app:sl_details}. For the combination of PCGrad and MTAN, we only use equal weighting as discussed in~\cite{liu2018attention} as we find it working well in practice. We present the results in Table~\ref{tbl:cityscapes_partial}. As shown in Table~\ref{tbl:cityscapes_partial}, PCGrad + MTAN outperforms MTAN in three out of four scores while obtaining the top scores in both mIoU abd pixel accuracy for the semantic segmentation task, suggesting the effectiveness of PCGrad on realistic image datasets. We also provide the full results including three different weighting schemes in Table~\ref{tbl:cityscapes} in Appendix~\ref{app:full_nyuv2_results}.
+
+\begin{table}[h]
+  \centering
+  \small
+  \def\arraystretch{0.9}
+  \setlength{\tabcolsep}{0.35em}
+  \begin{tabularx}{0.6\linewidth}{cll*{4}{c}}
+  \toprule
+ \multicolumn{1}{c}{\multirow{2.5}[4]{*}{\#P.}} & \multicolumn{1}{c}{\multirow{2.5}[4]{*}{Architecture}} & \multicolumn{2}{c}{Segmentation} & \multicolumn{2}{c}{Depth}  \\
+  \cmidrule(lr){3-4} \cmidrule(lr){5-6}
+   &\multicolumn{1}{c}{} & \multicolumn{2}{c}{(Higher Better)} & \multicolumn{2}{c}{(Lower Better)} \\
+     \multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{1}{c}{mIoU}  & \multicolumn{1}{c}{Pix Acc}  & \multicolumn{1}{c}{Abs Err} & \multicolumn{1}{c}{Rel Err}  \\
+\midrule
+   2 &   One Task & 51.09 & 90.69 & 0.0158 & 34.17   \\
+   3.04 & STAN   &  51.90&90.87 & 0.0145 & \mybox{\bf 27.46} \\
+  \midrule
+    1.75 & Split, Wide  & 50.17 & 90.63  & 0.0167  & 44.73  \\
+   \cmidrule(lr){1-6}
+    2& Split, Deep &  49.85  & 88.69 & 0.0180  & 43.86   \\
+   \cmidrule(lr){1-6}
+    3.63 & Dense &  51.91  & 90.89  & \mybox{\bf 0.0138} & 27.21  \\
+  \cmidrule(lr){1-6}
+    $\approx$2& Cross-Stitch \cite{misra2016cross} &  50.08 & 90.33 & 0.0154 & 34.49    \\
+  \cmidrule(lr){1-6}
+    1.65 & MTAN   & 53.04 & 91.11 &  0.0144 & 33.63  \\
+  \cmidrule(lr){1-6}
+     1.65& PCGrad+MTAN (Ours) & \mybox{\bf 53.59} & \mybox{\bf 91.45} & 0.0171 & 31.34\\
+    \bottomrule
+    \end{tabularx}%
+     \caption{We present the 7-class semantic segmentation and depth estimation results on CityScapes dataset. We use \#P to denote the number of parameters of the network. We use box and bold text to highlight the method that achieves the best validation score for each task. As seen in the results, PCGrad+MTAN with equal weights outperforms MTAN with equal weights in three out of four scores while achieving the top score both scores in the segmentation task.}
+    \label{tbl:cityscapes_partial}
+    \vspace{-0.25cm}
+\end{table}
+
+%
+
+%
+
+%
+
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+
+\section{Goal-Conditioned Reinforcement Learning Results}
+\label{app:goal-conditioned}
+%
+
+\neurips{For our goal-conditioned RL evaluation, \icml{we adopt the goal-conditioned robotic pushing task with a Sawyer robot} where the goals are represented as the concatenations of the initial positions of the puck to be pushed and the its goal location, both of which are uniformly sampled (details in Appendix~\ref{app:goal_conditioned_details}). We also apply the temperature adjustment strategy as discussed in Section~\ref{sec:pcgrad_practical} to predict the temperature for entropy term given the goal. We summarize the results in Figure~\ref{fig:goal-conditioned}. PCGrad with SAC achieves better performance in terms of average distance to the goal position, while the vanilla SAC agent is struggling to successfully accomplish the task. This suggests that PCGrad is able to ease the RL optimization problem also when the task distribution is continuous.}
+
+\begin{figure*}[ht]
+    \centering
+    \includegraphics[width=0.7\columnwidth]{figures/PCGrad_push_random_goals_init_hardest_itr600_3_random_seed_nopa_legend.png}
+    \vspace{-0.2cm}
+    \caption{\footnotesize We present the goal-conditioned RL results. PCGrad outperforms vanilla SAC in terms of both average distance the goal and data efficiency.}
+    \vspace{-0.1cm}
+    \label{fig:goal-conditioned}
+\end{figure*}
+
+
+%
+%
+%
+
+%
+
+%
+
+%
+%
+%
+%
+%
+%
+%
+%
+
+%
+%
+%
+%
+%
+%
+%
+%
+
+
+
+\section{Comparison to CosReg}
+\label{app:cosine}
+
+\icmllast{We compare PCGrad to a prior method CosReg~\citep{suteu2019regularizing}, which adds a regularization term to force the cosine similarity between gradients of two different tasks to stay $0$. PCGrad achieves much better average success rate in MT10 benchmark as shown in Figure~\ref{fig:cosreg}. Hence, while it's important to reduce interference between tasks, it's also crucial to keep the task gradients that enjoy positive cosine similarities in order to ensure sharing across tasks.}
+
+\begin{figure*}[ht]
+    \centering
+    \includegraphics[width=0.5\columnwidth]{figures/PCGrad_mt10_itr900_pcgrad_ablation_nopa_cosine.png}
+    \vspace{-0.2cm}
+    \caption{\footnotesize Comparison between PCGrad and CosReg~\citep{suteu2019regularizing}. PCGrad outperforms CosReg, suggesting that we should both reduce the interference and keep shared structure across tasks.}
+    \vspace{-0.1cm}
+    \label{fig:cosreg}
+\end{figure*}
+
+\section{Ablation study on the task order}
+\label{app:ablation_order}
+
+\arxiv{As stated on line 4 in Algorithm~\ref{alg:dgrad-o}, we sample the tasks from the batch and randomly shuffle the order of the tasks before performing the update steps in PCGrad. With random shuffling, we make PCGrad symmetric w.r.t. the task order in expectation. In Figure~\ref{fig:task_order}, we observe that PCGrad with a random task order achieves better performance between PCGrad with a fixed task order in the setting of MT50 where the number of tasks is large and the conflicting gradient phenomenon is much more likely to happen.}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\columnwidth]{figures/PCGrad_mt50_itr400_random_order_nopa_ablation.png}
+    \caption{\footnotesize \arxiv{Ablation study on using a fixed task order during PCGrad. PCGrad with a random task order does significantly better PCGrad with a fixed task order in MT50 benchmark.}}
+    \vspace{-0.2cm}
+    \label{fig:task_order}
+\end{figure}
+
+\section{Combining PCGrad with other architectures}
+\label{app:combined}
+
+In this subsection, we test whether PCGrad can improve performances when combined with more methods. In Table~\ref{tab:nyuv2_combined}, we find that PCGrad does improve the performance in all four metrics of the three tasks on the NYUv2 dataset when combined with Cross-Stitch~\citep{misra2016cross} and Dense. In Figure~\ref{fig:mt10_combined}, we also show that PCGrad + Multi-head SAC outperforms Multi-head SAC on its own. These results suggest that PCGrad can be flexibly combined with any multi-task learning architectures to further improve performance.
+
+\begin{table}[h]
+  \def\arraystretch{0.9}
+  \setlength{\tabcolsep}{0.42em}
+    \begin{tabularx}{0.9\linewidth}{cccc*{9}{c}}
+  \toprule
+ \multicolumn{1}{c}{\multirow{2}[2]{*}{Method}} & \multicolumn{1}{c}{Segmentation} & \multicolumn{1}{c}{Depth}  & \multicolumn{2}{c}{Surface Normal}\\
+  \cmidrule(lr){4-5}
+   \multicolumn{1}{c}{} & \multicolumn{1}{c}{mIoU} &  \multicolumn{1}{c}{Abs Err}   & \multicolumn{1}{c}{Angle Distance}  & \multicolumn{1}{c}{Within $11.25^\circ$} \\
+\midrule
+  Cross-Stitch   & 15.69  &  0.6277   & 32.69 &  21.63 \\
+  Cross-Stitch + PCGrad  &  {\bf 18.14}  &  {\bf 0.5805}   & {\bf 31.38} &  {\bf 21.75}  \\
+  \cmidrule(lr){1-5}
+  Dense & 16.48  & 0.6282  & 31.68 & 21.73\\
+  Dense + PCGrad & {\bf 18.08}  &  {\bf 0.5850}   & {\bf 30.17} &  {\bf 23.29}\\
+%
+%
+%
+    \bottomrule
+    \end{tabularx}
+    \vspace{0.1cm}
+         \caption{\footnotesize We show the performances of PCGrad combined with other methods on three-task learning on the NYUv2 dataset, where PCGrad further improves the results of prior multi-task learning architectures.
+     \label{tab:nyuv2_combined}
+    %
+     }
+\end{table}
+
+\begin{figure}[h]
+		\centering
+		\includegraphics[width=0.6\columnwidth]{figures/PCGrad_mt10_itr900_multihead_pcgrad.png}
+		\vspace{-0.1cm}
+		\captionof{figure}{\footnotesize We show the comparison between Multi-head SAC and Multi-head SAC + PCGrad on MT10. Multi-head SAC + PCGrad outperforms Multi-head SAC, suggesting that PCGrad can improves the performance of multi-headed architectures in the multi-task RL settings.}
+		\label{fig:mt10_combined}
+%
+\end{figure}
+
+\section{Experiment Details}
+\label{app:exp_details}
+
+\subsection{Multi-Task Supervised Learning Experiment Details}
+\label{app:sl_details}
+
+For all the multi-task supervised learning experiments, PCGrad converges within 12 hours on a NVIDIA TITAN RTX GPU while the vanilla models without PCGrad converge within 8 hours. PCGrad consumes at most 10 GB memory on GPU while the vanilla method consumes 6GB on GPU among all experiments.
+
+For our CIFAR-100 multi-task experiment, we adopt the architecture used in~\cite{rosenbaum2019routing}, which is a convolutional neural network that consists of 3 convolutional layers with $160$ $3\times3$ filters each layer and 2 fully connected layers with $320$ hidden units. As for experiments on the NYUv2 dataset, we follow~\cite{liu2018attention} to use SegNet~\citep{badrinarayanan2017segnet} as the backbone architecture.
+
+We use five algorithms as baselines in the CIFAR-100 multi-task experiment: \textbf{task specific-1-fc} \citep{rosenbaum2017routing}: a convolutional neural network shared across tasks except that each task has a separate last fully-connected layer, \textbf{task specific-1-fc} \citep{rosenbaum2017routing} : all the convolutional layers shared across tasks with separate fully-connected layers for each task, \textbf{cross stitch-all-fc} \citep{misra2016crossstitch}: one convolutional neural network per task along with cross-stitch units to share features across tasks, \textbf{routing-all-fc + WPL} \citep{rosenbaum2019routing}: a network that employs a trainable router trained with multi-agent RL algorithm (WPL) to select trainable functions for each task, \textbf{independent}: training separate neural networks for each task.
+%
+
+For comparisons on the NYUv2 dataset, we consider 5 baselines: \textbf{Single Task, One Task}: the vanilla SegNet used for single-task training, \textbf{Single Task, STAN}~\citep{liu2018attention}: the single-task version of MTAN as mentioned below, \textbf{Multi-Task, Split, Wide / Deep}~\citep{liu2018attention}: the standard SegNet shared for all three tasks except that each task has a separate last layer for final task-specific prediction with two variants \textbf{Wide} and \textbf{Deep} specified in ~\cite{liu2018attention}, \textbf{Multi-Task Dense}: a shared network followed by separate task-specific networks, \textbf{Multi-Task Cross-Stitch}~\citep{misra2016crossstitch}: similar to the baseline used in CIFAR-100 experiment but with SegNet as the backbone, \textbf{MTAN}~\citep{liu2018attention}: a shared network with a soft-attention module for each task.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=1.0\columnwidth]{figures/MT50.png}
+    \vspace{-0.7cm}
+    \caption{\footnotesize The $50$ tasks of MT50 from Meta-World~\citep{metaworld}. MT10 is a subset of these tasks, which includes reach, push, pick \& place, open drawer, close drawer, open door, press button top, open window, close window, and insert peg inside.
+    }
+    \label{fig:metaworld}
+\end{figure}
+
+\subsection{Multi-Task Reinforcement Learning Experiment Details}
+\label{app:rl_details}
+
+Our reinforcement learning experiments all use the SAC~\citep{haarnoja2018sac} algorithm as the base algorithm, where the actor and the critic are represented as 6-layer fully-connected feedforward neural networks for all methods. The numbers of hidden units of each layer of the neural networks are $160$, $300$ and $200$ for MT10, MT50 and goal-conditioned RL respectively.  For the multi-task RL experiments, PCGrad + SAC converges in 1 day (5M simulation steps) and 5 days (20M simulation steps) on the MT10 and MT50 benchmarks respectively on a NVIDIA TITAN RTX GPU while vanilla SAC converges in 12 hours and 3 days on the two benchmarks respectively. PCGrad + SAC consumes 1 GB and 6 GB memory on GPU on the MT10 and MT50 benchmarks respectively while the vanilla SAC consumes 0.5 GB and 3 GB respectively.
+
+\icml{In the case of multi-task reinforcement learning, we evaluate our algorithm on the recently proposed Meta-World benchmark~\citep{metaworld}. This benchmark includes a variety of simulated robotic manipulation tasks contained in a shared, table-top environment with a simulated Sawyer arm (visualized in Fig.~\ref{fig:metaworld}). 
+In particular, we use the multi-task \arxiv{benchmarks MT10 and MT50}, which consists of the 10 tasks \arxiv{and 50 tasks respectively} depicted in Fig.~\ref{fig:metaworld} that require diverse strategies to solve them, which makes them difficult to optimize jointly with a single policy. \arxiv{Note that MT10 is a subset of MT50.}}
+%
+At each data collection step, we collect $600$ samples for each task, and at each training step, we sample $128$ datapoints per task from corresponding replay buffers. We measure success according to the metrics used in the Meta-World benchmark where the reported the success rates are averaged across tasks. For all methods, we apply the temperature adjustment strategy as discussed in Section~\ref{sec:pcgrad_practical} to learn a separate alpha term per task as the task encoding in MT10 and MT50 is just a one-hot encoding. 
+
+On the multi-task and goal-conditioned RL domain, we apply PCGrad to the vanilla SAC algorithm with task encoding as part of the input to the actor and the critic as described in Section~\ref{sec:pcgrad_practical} and compare PCGrad to the vanilla \textbf{SAC} without PCGrad and training actors and critics for each task individually (\textbf{Independent}).
+
+\subsection{Goal-conditioned Experiment Details}
+\label{app:goal_conditioned_details}
+
+We use the pushing environment from the Meta-World benchmark~\citep{metaworld} as shown in Figure~\ref{fig:metaworld}. In this environment, the table spans from $[-0.4, 0.2]$ to $[0.4, 1.0]$ in the 2D space. To construct the goals, we sample the intial positions of the puck from the range $[-0.2, 0.6]$ to $[0.2, 0.7]$ on the table and the goal positions from the range $[-0.2, 0.85]$ to $[0.2, 0.95]$ on the table. The goal is represented as a concatenation of the initial puck position and the goal position. Since in the goal-conditioned setting, the task distribution is continuous, we sample a minibatch of $9$ goals and $128$ samples per goal at each training iteration and also sample $600$ samples per goal in the minibatch at each data collection step.
+
+
+\subsection{Full CityScapes and NYUv2 Results}
+\label{app:full_nyuv2_results}
+
+We provide the full comparison on the CityScapes and NYUv2 datasets in Table~\ref{tbl:cityscapes} and  Table~\ref{tab:nyu_results_full} respectively.
+
+\begin{table}[h]
+  \centering
+  \small
+  \def\arraystretch{0.9}
+  \setlength{\tabcolsep}{0.35em}
+  \begin{tabularx}{0.82\linewidth}{cll*{4}{c}}
+  \toprule
+ \multicolumn{1}{c}{\multirow{2.5}[4]{*}{\#P.}} & \multicolumn{1}{c}{\multirow{2.5}[4]{*}{Architecture}} & \multicolumn{1}{c}{\multirow{2.5}[4]{*}{Weighting}} & \multicolumn{2}{c}{Segmentation} & \multicolumn{2}{c}{Depth}  \\
+  \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+   &\multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{2}{c}{(Higher Better)} & \multicolumn{2}{c}{(Lower Better)} \\
+     \multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{1}{c}{mIoU}  & \multicolumn{1}{c}{Pix Acc}  & \multicolumn{1}{c}{Abs Err} & \multicolumn{1}{c}{Rel Err}  \\
+\midrule
+   2 &   One Task  &n.a. & 51.09 & 90.69 & 0.0158 & 34.17   \\
+   3.04 & STAN & n.a.   &  51.90&90.87 & 0.0145 & 27.46 \\
+  \midrule
+    &   &Equal Weights  & 50.17 & 90.63  & 0.0167  & 44.73  \\
+   1.75 & Split, Wide    & Uncert. Weights \cite{kendall2017multi}    & {\bf 51.21} & {\bf 90.72} & {\bf 0.0158} &  44.01   \\
+    &    & DWA, $T = 2$ & 50.39 & 90.45 & 0.0164 & {\bf 43.93}     \\
+   \cmidrule(lr){1-7}
+    &   &Equal Weights  &  {\bf 49.85}  & 88.69 & 0.0180  & 43.86   \\
+    2  & Split, Deep    & Uncert. Weights \cite{kendall2017multi}   & 48.12  & 88.68 & {\bf 0.0169} & {\bf 39.73}  \\
+    &    & DWA, $T = 2$ & 49.67  & {\bf 88.81}& 0.0182 & 46.63   \\
+   \cmidrule(lr){1-7}
+    &    & Equal Weights & {\bf 51.91}  & 90.89  & 0.0138 & 27.21  \\
+   3.63 & Dense   &Uncert. Weights \cite{kendall2017multi}  &51.89 & {\bf 91.22} & \mybox{\bf 0.0134} & \mybox{\bf 25.36}    \\
+    &     &DWA, $T = 2$   & 51.78 & 90.88 & 0.0137 & 26.67     \\
+  \cmidrule(lr){1-7}
+    &    & Equal Weights &  50.08 & 90.33 & 0.0154 & 34.49    \\
+   $\approx$2& Cross-Stitch \cite{misra2016cross}    &Uncert. Weights \cite{kendall2017multi}  & 50.31 & 90.43 & {\bf 0.0152} & {\bf 31.36}    \\
+   &     &DWA, $T = 2$   & {\bf 50.33} & {\bf 90.55} & 0.0153 & 33.37 \\
+  \cmidrule(lr){1-7}
+    &    & Equal Weights   & 53.04 & 91.11 &  {\bf 0.0144} & 33.63  \\
+  1.65 & MTAN & Uncert. Weights \cite{kendall2017multi} & \mybox{\bf 53.86} & 91.10  &0.0144  & 35.72  \\
+      & &DWA, $T = 2$     & 53.29 & 91.09 & 0.0144  & 34.14 \\
+     1.65& PCGrad+MTAN (Ours) & Equal Weights & 53.59 & \mybox{\bf 91.45} & 0.0171 & {\bf 31.34}\\
+    \bottomrule
+    \end{tabularx}%
+     \caption{We present the 7-class semantic segmentation and depth estimation results on CityScapes dataset. We use \#P to denote the number of parameters of the network, and the best performing variant of each architecture is highlighted in bold. We use box to highlight the method that achieves the best validation score for each task. As seen in the results, PCGrad+MTAN with equal weights outperforms MTAN with equal weights in three out of four scores while achieving the top score in pixel accuracy across all methods.}
+    \label{tbl:cityscapes}
+    \vspace{-0.25cm}
+\end{table}
+
+\begin{table*}[h]
+  \centering
+  \scriptsize
+  \def\arraystretch{0.9}
+%
+  \setlength{\tabcolsep}{0.2em}
+%
+  \begin{tabularx}{0.99\linewidth}{ccll*{9}{c}}
+  \toprule
+  \multicolumn{1}{c}{\multirow{3.5}[4]{*}{Type}} & \multicolumn{1}{c}{\multirow{3.5}[4]{*}{\#P.}} & \multicolumn{1}{c}{\multirow{3.5}[4]{*}{Architecture}} & \multicolumn{1}{c}{\multirow{3.5}[4]{*}{Weighting}} & \multicolumn{2}{c}{Segmentation} & \multicolumn{2}{c}{Depth}  & \multicolumn{5}{c}{Surface Normal}\\
+  \cmidrule(lr){5-6} \cmidrule(lr){7-8} \cmidrule(lr){9-13}
+   &\multicolumn{1}{c}{}  &\multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{2}{c}{\multirow{1.5}[2]{*}{(Higher Better)}} & \multicolumn{2}{c}{\multirow{1.5}[2]{*}{(Lower Better)}}   & \multicolumn{2}{c}{Angle Distance}  & \multicolumn{3}{c}{Within $t^\circ$} \\
+    &\multicolumn{1}{c}{}  &\multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{1}{c}{}  & \multicolumn{1}{c}{}  & \multicolumn{1}{c}{} & \multicolumn{2}{c}{(Lower Better)} & \multicolumn{3}{c}{(Higher Better)} \\
+     &\multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{1}{c}{mIoU}  & \multicolumn{1}{c}{Pix Acc}  & \multicolumn{1}{c}{Abs Err} & \multicolumn{1}{c}{Rel Err} & \multicolumn{1}{c}{Mean}  & \multicolumn{1}{c}{Median}  & \multicolumn{1}{c}{11.25} & \multicolumn{1}{c}{22.5} & \multicolumn{1}{c}{30} \\
+\midrule
+  \multirow{2}*{Single Task}  &  3 &   One Task  &n.a.  &  15.10  &51.54  & 0.7508 & 0.3266      &  31.76& 25.51 & 22.12 & 45.33 &  57.13\\
+   & 4.56 & STAN$^\dagger$ & n.a.    &  15.73 & 52.89 &  0.6935 &  0.2891 & 32.09 & 26.32 & 21.49 &44.38  & 56.51\\
+  \midrule
+  \multirow{15}*{Multi Task}  &  &   &Equal Weights & 15.89  & 51.19   &  0.6494   & 0.2804 & 33.69 & 28.91 & {18.54} & 39.91 & 52.02 \\
+  & 1.75 & Split, Wide    & Uncert. Weights$^*$  & 15.86  & 51.12  &  {\bf 0.6040} & 0.2570 & {\bf 32.33}  & {\bf 26.62} & {\bf 21.68} & {\bf 43.59} & {\bf 55.36 }\\
+  &  &    & DWA$^\dagger$, $T = 2$  & {\bf 16.92}  & {\bf 53.72}  &  0.6125  & {\bf 0.2546} & 32.34  &27.10  & 20.69  &  42.73 & 54.74 \\
+   \cmidrule(lr){2-13}
+    &  &   &Equal Weights & 13.03  & 41.47  &  0.7836 & 0.3326 & 38.28  & 36.55 & 9.50 & 27.11 & 39.63 \\
+  & 2 & Split, Deep    & Uncert. Weights$^*$  & {\bf 14.53}  & 43.69  & 0.7705  & 0.3340 & {\bf 35.14}  & {\bf 32.13 }& {\bf 14.69} & {\bf 34.52} &  {\bf 46.94 }\\
+  &  &    & DWA$^\dagger$, $T = 2$  & 13.63  & {\bf 44.41}  & {\bf 0.7581}  & {\bf 0.3227 }& 36.41  & 34.12 & 12.82 & 31.12 & 43.48 \\
+   \cmidrule(lr){2-13}
+  &  &    &Equal Weights  & 16.06   & 52.73   &  0.6488   & 0.2871  & 33.58 & 28.01 & {20.07} & 41.50 & 53.35 \\
+  & 4.95 & Dense   &Uncert. Weights$^*$  & {\bf 16.48}  & {\bf 54.40}  &   0.6282  & 0.2761  & {\bf 31.68} & {\bf 25.68}  & {\bf 21.73}  & {\bf 44.58} & {\bf 56.65} \\
+  &  &     &DWA$^\dagger$, $T = 2$  &  16.15  & 54.35   &  {\bf 0.6059}  &  {\bf 0.2593} &  32.44 & 27.40 & 20.53  & 42.76 & 54.27\\
+  \cmidrule(lr){2-13}
+  &  &    &Equal Weights   & 14.71  & 50.23   &  0.6481   &  0.2871 & 33.56 & 28.58 & 20.08 & 40.54 & 51.97\\
+  &  $\approx$3 & Cross-Stitch$^\ddagger$    &Uncert. Weights$^*$  &  15.69 &  52.60  &  0.6277   & 0.2702 & 32.69 &  27.26 & 21.63 &  42.84 &  54.45 \\
+  &  &     &DWA$^\dagger$, $T = 2$   & {\bf 16.11} &  {\bf  53.19} & {\bf 0.5922}   & {\bf 0.2611} & {\bf 32.34} & {\bf 26.91} & {\bf 21.81} & {\bf 43.14} & {\bf 54.92} \\
+  \cmidrule(lr){2-13}
+  &  &    & Equal Weights &   {\bf 17.72} &  55.32    & {\bf 0.5906}  &  0.2577 & 31.44  & {\bf 25.37}&  \mybox{\bf 23.17} & 45.65 &57.48\\
+  &1.77 & MTAN$^\dagger$ & Uncert. Weights$^*$  &  17.67    &  {\bf 55.61}  &  0.5927    & 0.2592 & {\bf 31.25} & 25.57 & 22.99 & {\bf 45.83} & {\bf 57.67} \\
+    &    & &DWA$^\dagger$, $T = 2$   &  17.15    &  54.97 &  0.5956  & {\bf 0.2569} & 31.60 & 25.46 & 22.48 & 44.86 & 57.24 \\
+      \cmidrule(lr){2-13}
+  &1.77 & MTAN$^\dagger$ + PCGrad (ours) & Uncert. Weights$^*$  &  \mybox{\bf 20.17}    &  \mybox{\bf 56.65}  &  \mybox{\bf 0.5904}    & \mybox{\bf 0.2467} & \mybox{\bf 30.01} & \mybox{\bf 24.83} & 22.28 & \mybox{\bf 46.12} & \mybox{\bf 58.77} \\
+    \bottomrule
+    \end{tabularx}
+     \caption{We present the full results on three tasks on the NYUv2 dataset: 13-class semantic segmentation, depth estimation, and surface normal prediction results. \#P shows the total number of network parameters. We highlight the best performing combination of multi-task architecture and weighting in bold. The top validation scores for each task are annotated with boxes. The symbols indicate prior methods: $^*$: \citep{kendall2017multi}, $^\dagger$: \citep{liu2018attention}, $^\ddagger$: \citep{misra2016crossstitch}. Performance of other methods taken from \citep{liu2018attention}.
+     }
+    \label{tab:nyu_results_full}
+\end{table*}
+
+%

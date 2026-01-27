@@ -1,0 +1,176 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{tcolorbox}
+
+\usepackage{parskip}
+
+
+\geometry{a4paper, margin=1in}
+
+\title{\textbf{VarShare: Principled Task-Specialization via \\ Variational Weight Adapters in Multi-Task RL}}
+\author{Research Proposal}
+\date{November 2025}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+The primary challenge in Multi-Task Reinforcement Learning (MTRL) is the \textit{Stability-Plasticity Dilemma}: agents must be plastic enough to learn task-specific nuances but stable enough to maintain and transfer shared dynamics across environments. Recent state-of-the-art approaches, such as those presented in the paper \textit{Bigger, Regularized, Categorical (BRC)}, demonstrate that scaling model capacity can mitigate interference. However, these architectures typically rely on unconstrained task embeddings. We argue that this lack of constraint leads to inefficient transfer (over-specialization) and poor zero-shot initialization. To address this, we introduce \textbf{VarShare}. By modeling task-specific parameters as variational residual adapters in weight space, we utilize the Evidence Lower Bound (ELBO) to automatically arbitrate between shared knowledge and task-specific adaptation. We demonstrate analytically that this formulation acts as an adaptive regularizer that enforces sharing by default while permitting specialization only when the reward signal outweighs the information cost.
+\end{abstract}
+
+\section{Introduction and Motivation}
+
+The goal of Multi-Task Reinforcement Learning (MTRL) is to train a single generalist agent capable of solving diverse tasks while leveraging shared structures to improve sample efficiency. 
+
+\subsection{The Current State of the Art}
+Recent advancements, most notably the work \textit{Bigger, Regularized, Categorical: High-Capacity Value Functions are Efficient Multi-Task Learners}, have shifted the focus from complex gradient projection algorithms to architectural scaling. The BRC agent uses massive residual networks (BroNet) and categorical cross-entropy loss to absorb the conflicting gradients inherent in MTRL.
+
+\subsection{The Limitation: Unconstrained Specialization}
+While effective, current high-capacity architectures typically condition the network on a learned task embedding vector $z_m$. These embeddings are updated end-to-end via backpropagation without explicit constraints. This leads to two critical failure modes:
+
+\begin{enumerate}
+    \item \textbf{Redundant Parameterization (Inefficient Transfer):} Because the embeddings are unconstrained, two identical tasks (e.g., "Walk Fast" and "Walk Slow") may learn divergent embeddings. This causes the network to treat them as distinct problems, preventing data from one task from improving the representation of the other.
+    \item \textbf{Initialization Failure:} When a new, unseen task is introduced, it is typically initialized with a random embedding. This results in a random policy, failing to leverage the "average" competency the agent has already acquired.
+    \item \textbf{Gradient Interference:} Without a mechanism to dampen task-specific shifts, high-magnitude gradients from one task can distort the shared backbone, causing negative transfer to other tasks.
+\end{enumerate}
+
+\subsection{The Proposed Solution}
+We propose \textbf{VarShare}, a framework that formalizes the trade-off between sharing and specializing using \textbf{Variational Inference (VI)}. Inspired by the probabilistic principles found in the paper \textit{Variational Continual Learning}, we treat task-specific parameters not as deterministic values, but as random variables constrained by a shared prior. This introduces a "soft tie" that pulls all tasks toward a shared base model unless the data strictly demands specialization.
+
+\section{Intuition: The Adaptive Rubber Band}
+
+To understand the core mechanism of VarShare, we employ a physical analogy. Consider the relationship between the \textbf{Shared Base} ($\theta$) and the \textbf{Task-Specific Parameters} ($\phi_m$) for task $m$.
+
+In VarShare, $\phi_m$ is not a free-floating point; it is connected to the origin (zero) by a "rubber band" (the KL-Divergence penalty). The Shared Base $\theta$ effectively acts as the reference point for all tasks.
+
+\begin{itemize}
+    \item \textbf{The Anchor (Prior):} The system assumes by default that $\phi_m = 0$. In this state, the task relies 100\% on the shared parameters $\theta$.
+    \item \textbf{The Force (Likelihood):} The RL loss (Temporal Difference error) exerts a "pull" on $\phi_m$. It drags the parameters away from zero to minimize prediction error.
+    \item \textbf{The Elasticity (Variance):} Unlike L2 regularization, which acts as a rigid steel spring, VarShare learns the \textit{variance} $\sigma_m$. If the task is noisy or conflicts with the base, the agent can "loosen the spring" (increase $\sigma_m$) to absorb the tension without aggressively shifting the mean.
+\end{itemize}
+
+\textbf{Mechanism:} If tasks agree, the Shared Base $\theta$ moves to solve them. The RL "force" on $\phi_m$ vanishes, and the rubber band snaps $\phi_m$ back to zero (Automatic Sharing). If tasks disagree, $\theta$ gets stuck in the middle. The RL force on $\phi_m$ persists, stretching the band and allowing $\phi_m$ to settle at a new non-zero value (Necessary Specialization).
+
+\section{Methodology: Variational Weight-Space Adapters}
+
+We propose implementing VarShare using \textbf{Weight-Space Composition}. Instead of combining the outputs of two distinct networks, we inject task-specific probabilistic residuals directly into the weight matrices of the shared backbone.
+
+\subsection{Mathematical Formulation}
+
+Let $W \in \mathbb{R}^{d_{in} \times d_{out}}$ be a weight matrix in a layer of the shared backbone. For a specific task $m$, we define the effective weight matrix $W_m$ as:
+
+\begin{equation}
+    W_m = \theta + \phi_m
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $\theta$: The deterministic shared parameters (Standard weights).
+    \item $\phi_m$: The stochastic task-specific residual parameters.
+\end{itemize}
+
+\subsection{Probabilistic Definitions}
+
+We define a hierarchical structure to govern $\phi_m$:
+
+\textbf{1. The Prior (Hypothesis of Similarity):}
+Before seeing data for task $m$, we assume it requires no modification to the base. We place a centered Gaussian prior on $\phi_m$. Crucially, this prior is \textbf{fixed} at zero relative to the base $\theta$:
+\begin{equation}
+    p(\phi_m) = \mathcal{N}(\mathbf{0}, \sigma_{prior}^2 \mathbf{I})
+\end{equation}
+This fixed prior creates the permanent "gravity" that pulls task parameters back to the shared base.
+
+\textbf{2. The Variational Posterior (The Learned Adaptation):}
+We cannot calculate the true posterior analytically. Instead, we approximate it using a variational distribution $q_m$, parameterized by learnable tensors $\mu_m$ (mean) and $\rho_m$ (parameterized variance):
+\begin{equation}
+    q_m(\phi_m) = \mathcal{N}(\mu_m, \text{diag}(\sigma_m^2)) \quad \text{where } \sigma_m = \text{softplus}(\rho_m)
+\end{equation}
+Here, $\mu_m$ and $\rho_m$ are explicit parameters in the neural network, updated via backpropagation.
+\begin{itemize}
+    \item $\mu_m$: Represents the learned \textit{shift} or specialization.
+    \item $\sigma_m$: Represents the \textit{uncertainty} or "looseness" of that specialization.
+\end{itemize}
+
+\subsection{The Objective: Evidence Lower Bound (ELBO)}
+
+We maximize the ELBO, which balances task performance against the cost of specialization:
+
+\begin{equation}
+    \mathcal{L}(\theta, \mu_m, \sigma_m) = \underbrace{\mathbb{E}_{\phi_m \sim q_m} [\log p(\mathcal{D}_m | W_m)]}_{\text{(A) RL Performance (Likelihood)}} - \beta \underbrace{D_{KL}(q_m(\phi_m) || p(\phi_m))}_{\text{(B) Complexity Cost (Regularizer)}}
+\end{equation}
+
+\begin{itemize}
+    \item \textbf{Term A (Likelihood):} The standard Categorical Cross-Entropy loss used in BRC. It encourages $\mu_m$ to move to reduce TD error.
+    \item \textbf{Term B (KL Divergence):} A closed-form penalty. Since the prior is centered at 0, this term minimizes $\mu_m^2$ and penalizes deviations of $\sigma_m$ from $\sigma_{prior}$.
+\end{itemize}
+
+To optimize Term A, we use the \textbf{Reparameterization Trick}. During the forward pass, we sample noise $\epsilon \sim \mathcal{N}(0, I)$ and compute the weights as:
+$$ W_{m, \text{sample}} = \theta + (\mu_m + \sigma_m \odot \epsilon) $$
+
+\section{Analysis: Why Sharing is Preferred}
+
+A critical requirement of VarShare is that the model should prefer updating the shared parameters over the task-specific ones when possible. We analyze the gradient flow to prove this system favors sharing.
+
+\subsection{Cost Asymmetry}
+Let $J$ be the negative ELBO (the Loss we minimize).
+\begin{itemize}
+    \item \textbf{Gradient w.r.t Shared Base $\theta$:} The KL penalty depends only on $\phi_m$, not $\theta$.
+    $$ \nabla_\theta J = \nabla_\theta (\text{RL Loss}) + 0 $$
+    Updating $\theta$ is "free" in terms of complexity cost.
+    
+    \item \textbf{Gradient w.r.t Task Parameters $\mu_m$:} The KL term depends quadratically on $\mu_m$.
+    $$ \nabla_{\mu_m} J = \nabla_{\mu_m} (\text{RL Loss}) + \beta \frac{\mu_m}{\sigma_{prior}^2} $$
+    Every step $\mu_m$ takes away from zero incurs a direct penalty gradient pushing it back.
+\end{itemize}
+
+\subsection{Signal Amplification (The Crowd Effect)}
+In Multi-Task Learning, we update using batches containing data from all $M$ tasks.
+\begin{itemize}
+    \item The Shared Base $\theta$ receives gradients summed across \textbf{all} tasks: $\sum_{m=1}^M \nabla L_m$.
+    \item The Task Parameter $\mu_m$ receives gradients only from task $m$: $\nabla L_m$.
+\end{itemize}
+If tasks possess shared structure, the gradient on $\theta$ is $M$ times stronger than the gradient on $\mu_m$. Combined with the zero penalty for $\theta$, the optimizer will move $\theta$ rapidly to solve the shared structure. Once $\theta$ solves the task, the gradient $\nabla L_m$ vanishes, and the KL penalty drives $\mu_m \to 0$. Specialization only occurs if the gradients on $\theta$ cancel out (conflict), leaving $\mu_m$ as the only way to reduce loss.
+
+\section{Comparison with L2 Regularization}
+
+It is important to distinguish VarShare from simple L2 weight decay ($\lambda ||\phi||^2$). While both penalize the magnitude of weights, VarShare adapts the "stiffness" of the penalty via the learnable variance $\sigma_m$.
+
+\begin{enumerate}
+    \item \textbf{Conflict Absorption:} If Task A wants $\phi=+5$ and Task B wants $\phi=-5$, L2 regularization forces $\phi \approx 0$, causing underfitting on both. VarShare can increase the variance $\sigma_m$. This allows the distribution to "cover" the necessary value without shifting the mean, signaling uncertainty rather than failure.
+    \item \textbf{Auto-Exploration:} Since $\phi_m$ is sampled during training ($W = \theta + \mu + \sigma \epsilon$), high uncertainty ($\sigma$) leads to diverse weight samples. This acts as parameter-space noise (similar to Thompson Sampling), driving exploration on difficult tasks automatically. L2 regularization is deterministic and lacks this property.
+\end{enumerate}
+
+\section{Implementation Proposal}
+
+We integrate VarShare into the standard residual architecture (BroNet) using a \textbf{Variational Residual Adapter}.
+
+For every linear layer in the network defined by $y = \theta x + b$:
+\begin{enumerate}
+    \item \textbf{Storage:} We store the shared matrix $\theta$ (size $D \times D$) and task-specific parameters $\mu_{1:M}, \rho_{1:M}$ (each size $D \times D$).
+    \item \textbf{Forward Pass (Task $m$):}
+    \begin{itemize}
+        \item Compute shared output: $y_{shared} = x \theta^T$.
+        \item Compute variance: $\sigma_m = \log(1 + \exp(\rho_m))$.
+        \item Sample noise: $\epsilon \sim \mathcal{N}(0, I)$.
+        \item Compute specific weight: $\phi_{sample} = \mu_m + \sigma_m \odot \epsilon$.
+        \item Compute specific output: $y_{spec} = x \phi_{sample}^T$.
+        \item Final output: $y = y_{shared} + y_{spec} + b$.
+    \end{itemize}
+    \item \textbf{Backward Pass:} Gradients flow to $\theta, \mu_m, \rho_m$. The KL penalty is added to the loss based on $\mu_m$ and $\sigma_m$.
+\end{enumerate}
+
+\section{Refinements for Stability}
+
+To ensure stability in the noisy context of Reinforcement Learning, we adopt two specific technical refinements:
+
+\begin{itemize}
+    \item \textbf{Flipout Estimator:} Standard sampling uses the same noise $\epsilon$ for an entire mini-batch, which causes high gradient variance. The "Flipout" estimator uses uncorrelated noise for each example in the batch efficiently, significantly stabilizing training.
+    \item \textbf{Post-Training Pruning:} Since the KL term actively pushes unnecessary parameters to zero, we can apply a simple threshold post-training. If $|\mu_m| < \epsilon$, we set $\mu_m = 0$ and remove the parameter from memory. This results in a highly compressed model where tasks only store the sparse "diffs" from the shared base.
+\end{itemize}
+
+\end{document}

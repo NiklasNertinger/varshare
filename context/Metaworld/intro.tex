@@ -1,0 +1,34 @@
+While reinforcement learning (RL) has achieved some success in domains such as assembly~\cite{DBLP:journals/corr/LevineFDA15}, ping pong~\cite{mulling2013learning}, in-hand manipulation~\cite{andrychowicz2018learning}, and hockey~\cite{chebotar2017combining}, state-of-the-art methods require substantially more experience than humans to acquire only one narrowly-defined skill. If we want robots to be broadly useful in realistic environments, we instead need algorithms that can learn a wide variety of skills reliably and efficiently. Fortunately, in most specific domains, such as robotic manipulation or locomotion, many individual tasks share common structure that can be reused to acquire related tasks more efficiently. 
+For example, most robotic manipulation tasks involve grasping or moving objects in the workspace. However, while current methods can learn to individual skills like screwing on a bottle cap \cite{DBLP:journals/corr/LevineFDA15} and hanging a mug \cite{DBLP:journals/corr/abs-1903-06684}, we need algorithms that can efficiently learn shared structure across many related tasks, and use that structure to learn new skills quickly, such as screwing a jar lid or hanging a bag.
+Recent advances in machine learning have provided unparalleled  generalization capabilities in domains such as images~\cite{Krizhevsky:2017:ICD:3098997.3065386} and speech~\cite{DBLP:journals/corr/abs-1810-04805}, suggesting that this should be possible; however, we have yet to see such generalization to diverse tasks in reinforcement learning settings.
+
+Recent works in meta-learning and multi-task reinforcement learning have shown promise for addressing this gap. 
+Multi-task RL methods aim to learn a single policy that can solve multiple tasks more efficiently than learning the tasks individually, while meta-learning methods train on many tasks, and optimize for fast adaptation to a new task.
+While these methods have made progress, the development of both classes of approaches has been limited by the lack of established benchmarks and evaluation protocols that reflect realistic use cases. 
+On one hand, multi-task RL methods have largely been evaluated on disjoint and overly diverse tasks such as the Atari suite  \cite{DBLP:journals/corr/abs-1809-04474}, where there is little efficiency to be gained by learning across games~\cite{parisotto2015actor}.
+On the other hand, meta-RL methods have been evaluated on very narrow task distributions. For example, one popular evaluation of meta-learning involves choosing different running directions for simulated legged robots~\cite{finn2017model}, which then enables fast adaptation to new directions. While these are technically distinct tasks, they are a far cry from the promise of a meta-learned model that can adapt to any new task within some domain.
+In order to study the capabilities of current multi-task and meta-reinforcement learning methods and make it feasible to design new algorithms that actually generalize and adapt quickly on meaningfully distinct tasks, we need evaluation protocols and task suites that are broad enough to enable this sort of generalization, while containing sufficient shared structure for generalization to be possible.
+
+The key contributions of this work are a suite of $50$ diverse simulated manipulation tasks and an extensive empirical evaluation of how previous methods perform on sets of such distinct tasks.
+We contend that multi-task and meta reinforcement learning methods that aim to efficiently learn many tasks and quickly generalize to new tasks should be evaluated on distributions of tasks that are diverse and exhibit shared structure. 
+To this end, we present a benchmark of simulated manipulation tasks with everyday objects, all of which are contained in a shared, table-top environment with a simulated Sawyer arm.
+By providing a large set of distinct tasks that share common environment and control structure, we believe that this benchmark will allow researchers to test the generalization capabilities of the current multi-task and meta RL methods, and help to identify new research avenues to improve the current approaches.
+Our empirical evaluation of existing methods on this benchmark reveals that, despite some impressive progress in multi-task and meta-reinforcement learning over the past few years, current methods are generally not able to learn diverse task sets, much less generalize successfully to entirely new tasks. We provide an evaluation protocol with evaluation modes of varying difficulty, and observe that current methods show varying amounts of success on these modes
+This opens the door for future developments in multi-task and meta reinforcement learning: instead of focusing on further increasing performance on current narrow task suites, we believe that it is essential for future work in these areas to focus on increasing the capabilities of algorithms to handle highly diverse task sets.
+
+By doing so, we can enable meaningful generalization across many tasks and achieve the full potential of meta-learning as a means of incorporating past experience to make it possible for robots to acquire new skills as quickly as people can.
+
+\begin{figure}[t]
+    \centering
+    \vspace{-0.4cm}
+    \includegraphics[width=\columnwidth]{figures_v2/figure_1_metaworld.pdf}
+    \vspace{-0.35cm}
+    \caption{Meta-World contains 50 manipulation tasks, designed to be diverse yet carry shared structure that can be leveraged for efficient multi-task RL and transfer to new tasks via meta-RL. In the most difficult evaluation, the method must use experience from 45 training tasks (left) to quickly learn distinctly new test tasks (right). A larger view of the environments can be found on the next page.
+    }
+    \label{fig:ml45_teaser}
+    \vspace{-0.5cm}
+\end{figure}
+
+
+
+

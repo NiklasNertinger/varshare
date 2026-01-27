@@ -1,0 +1,37 @@
+
+\section{Conclusion and Directions for Future Work}
+\label{sec:conclusion}
+We proposed an open-source benchmark for meta-reinforcement learning and multi-task learning, which consists of a large number of simulated robotic manipulation tasks.
+
+Unlike previous evaluation benchmarks in meta-RL, our benchmark specifically emphasizes generalization to distinctly new tasks, not just in terms of parametric variation in goals, but completely new objects and interaction scenarios. 
+
+While meta-RL can in principle make it feasible for agents to acquire new skills more quickly by leveraging past experience, previous evaluation benchmarks utilize very narrow task distributions, making it difficult to understand the degree to which meta-RL actually enables this kind of generalization. The aim of our benchmark is to make it possible to develop new meta-RL algorithms that actually exhibit this sort of generalization.
+Our experiments show that current meta-RL methods in fact cannot yet generalize effectively to entirely new tasks and do not even learn the meta-training tasks effectively when meta-trained across multiple distinct tasks. This suggests a number of directions for future work, which we describe below.
+
+
+\textbf{Future directions for algorithm design.}
+%\todo{comment on results, recommend areas of focus for future work based on results from analysis}
+The main conclusion from our experimental evaluation with our proposed benchmark is that current meta-RL algorithms generally struggle in settings where the meta-training tasks are highly diverse. This issue mirrors the challenges observed in multi-task RL, which is also challenging with our task suite, and has been observed to require considerable additional algorithmic development to attain good results in prior work~\cite{parisotto2015actor,rusu2015policy,espeholt2018impala}.
+A number of recent works have studied algorithmic improvements in the area of multi-task reinforcement learning, as well as potential explanations for the difficulty of RL in the multi-task setting~\cite{DBLP:journals/corr/abs-1809-04474,schaul2019ray}.
+Incorporating some of these methods into meta-RL, as well as developing new techniques to enable meta-RL algorithms to train on broader task distributions, would be a promising direction for future work to enable meta-RL methods to generalize effectively across diverse tasks, and our proposed benchmark suite can provide future algorithms development with a useful gauge of progress towards the eventual goal of broad task generalization.
+
+\textbf{Future extensions of the benchmark.} While the presented benchmark is significantly broader and more challenging than existing evaluations of meta-reinforcement learning algorithms, there are a number of extensions to the benchmark that would continue to improve and expand upon its applicability to realistic robotics tasks. First, in many situations, the poses of objects are not directly accessible to a robot in the real world.
+Hence, one interesting and important direction for future work is to consider image observations and sparse rewards. Sparse rewards can be derived already using the success metrics, while support for image rendering is already supported by the code. However, for meta-learning algorithms, special care needs to be taken to ensure that the task cannot be inferred directly from the image, else meta-learning algorithms will memorize the training tasks rather than learning to adapt.
+Another natural extension would be to consider including a breadth of compositional long-horizon tasks, where there exist combinatorial numbers of tasks. Such tasks would be a straightforward extension, and provide the possibility to include many more tasks with shared structure.
+Another challenge when deploying robot learning and meta-learning algorithms is the manual effort of resetting the environment. To simulate this case, one simple extension of the benchmark is to significantly reduce the frequency of resets available to the robot while learning. Lastly, in many real-world situations, the tasks are not available all at once. To reflect this challenge in the benchmark, we can add an evaluation protocol that matches that of online meta-learning problem
+statements~\cite{finn2019online}.
+We leave these directions for future work, either to be done by ourselves or in the form of open-source contributions. 
+% However, we emphasize that, despite the numerous opportunities for future benchmark extensions as our algorithms improve, the current proposed form of the task suite already represents a significant step towards evaluating multi-task and meta-learning algorithms on diverse robotic manipulation problems.
+To summarize, we believe that the proposed form of the task suite represents a significant step towards evaluating multi-task and meta-learning algorithms on diverse robotic manipulation problems that will pave the way for future research in these areas.
+
+
+%===============================================================================
+
+% The maximum paper length is 8 pages excluding references and acknowledgements, and 10 pages including references and acknowledgements
+
+
+% The acknowledgments are automatically included only in the final version of the paper.
+\acknowledgments{We thank Suraj Nair for feedback on a draft of the paper. We thank K.R Zentner for her help in maintaining Meta-World. This research was supported in part by the National Science Foundation under IIS-1651843, IIS-1700697, and IIS-1700696, the Office of Naval Research, ARL DCIST CRA W911NF-17-2-0181, DARPA, Google, Amazon, and NVIDIA.
+%Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the funding organizations.
+%%SL: removed the above, unless someone has a reason to actually add this in that is required? Typically we do not list the phrase above unless it is actually required by a funding agency (to my knowledge none of the funders of this project require this).
+}

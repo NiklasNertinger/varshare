@@ -1,0 +1,206 @@
+
+\section{Experiments}
+\label{sec:experiments}
+
+The goal of our experiments is to study the following questions: (1) Does PCGrad make the optimization problems easier for various multi-task learning problems including supervised, reinforcement, and goal-conditioned reinforcement learning settings across different task families? (2) Can PCGrad be combined with other multi-task learning approaches to further improve performance? (3) \KH{Is the tragic triad of multi-task learning} a major factor in making optimization for multi-task learning challenging? To broadly evaluate PCGrad, we consider multi-task supervised learning, multi-task RL, and goal-conditioned RL problems. \neurips{We include the results on goal-conditioned RL in Appendix~\ref{app:goal-conditioned}.}
+%
+%
+%
+%
+
+
+\neurips{
+During our evaluation, we tune the parameters of the baselines independently, ensuring that all methods were fairly provided with equal model and training capacity. PCGrad inherits the hyperparameters of the respective baseline method in all experiments, and has no additional hyperparameters. For more details on the experimental set-up and model architectures, see Appendix~\ref{app:exp_details}.}
+The code is available online\footnote{Code is released at \url{https://github.com/tianheyu927/PCGrad}}.
+
+
+
+\subsection{Multi-Task Supervised Learning}
+
+%
+%
+\neurips{To answer question (1) in the supervised learning setting and question (2), we perform experiments on five standard multi-task supervised learning datasets: MultiMNIST, CityScapes, CelebA, multi-task CIFAR-100 and NYUv2. We include the results on MultiMNIST and CityScapes in Appendix~\ref{app:additional_mt_sup_results}.}
+
+\begin{table*}[t]
+  \centering
+  \scriptsize
+  \def\arraystretch{0.9}
+  \setlength{\tabcolsep}{0.42em}
+    \begin{tabularx}{0.95\linewidth}{ccll*{9}{c}}
+  \toprule
+ \multicolumn{1}{c}{\multirow{3.5}[4]{*}{\#P.}} & \multicolumn{1}{c}{\multirow{3.5}[4]{*}{Architecture}} & \multicolumn{1}{c}{\multirow{3.5}[4]{*}{Weighting}} & \multicolumn{2}{c}{Segmentation} & \multicolumn{2}{c}{Depth}  & \multicolumn{5}{c}{Surface Normal}\\
+  \cmidrule(lr){4-5} \cmidrule(lr){6-7} \cmidrule(lr){8-12}
+   &\multicolumn{1}{c}{}  &\multicolumn{1}{c}{} & \multicolumn{2}{c}{\multirow{1.5}[2]{*}{(Higher Better)}} & \multicolumn{2}{c}{\multirow{1.5}[2]{*}{(Lower Better)}}   & \multicolumn{2}{c}{Angle Distance}  & \multicolumn{3}{c}{Within $t^\circ$} \\
+    &\multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{1}{c}{}  & \multicolumn{1}{c}{}  & \multicolumn{1}{c}{} & \multicolumn{2}{c}{(Lower Better)} & \multicolumn{3}{c}{(Higher Better)} \\
+     & \multicolumn{1}{c}{} & \multicolumn{1}{c}{} & \multicolumn{1}{c}{mIoU}  & \multicolumn{1}{c}{Pix Acc}  & \multicolumn{1}{c}{Abs Err} & \multicolumn{1}{c}{Rel Err} & \multicolumn{1}{c}{Mean}  & \multicolumn{1}{c}{Median}  & \multicolumn{1}{c}{11.25} & \multicolumn{1}{c}{22.5} & \multicolumn{1}{c}{30} \\
+\midrule
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+  &    &Equal Weights   & 14.71  & 50.23   &  0.6481   &  0.2871 & 33.56 & 28.58 & 20.08 & 40.54 & 51.97\\
+  $\approx$3 & Cross-Stitch$^\ddagger$    &Uncert. Weights$^*$  &  15.69 &  52.60  &  0.6277   & 0.2702 & 32.69 &  27.26 & 21.63 &  42.84 &  54.45 \\
+  &     &DWA$^\dagger$, $T = 2$   & {\bf 16.11} &  {\bf  53.19} & {\bf 0.5922}   & {\bf 0.2611} & {\bf 32.34} & {\bf 26.91} & {\bf 21.81} & {\bf 43.14} & {\bf 54.92} \\
+  \cmidrule(lr){2-13}
+  &    & Equal Weights &   {\bf 17.72} &  55.32    & {\bf 0.5906}  &  0.2577 & 31.44  & {\bf 25.37}&  \mybox{\bf 23.17} & 45.65 &57.48\\
+1.77 & MTAN$^\dagger$ & Uncert. Weights$^*$  &  17.67    &  {\bf 55.61}  &  0.5927    & 0.2592 & {\bf 31.25} & 25.57 & 22.99 & {\bf 45.83} & {\bf 57.67} \\    & &DWA$^\dagger$, $T = 2$   &  17.15    &  54.97 &  0.5956  & {\bf 0.2569} & 31.60 & 25.46 & 22.48 & 44.86 & 57.24 \\
+      \cmidrule(lr){2-13}
+1.77 & MTAN$^\dagger$+ PCGrad (ours) & Uncert. Weights$^*$  &  \mybox{\bf 20.17}    &  \mybox{\bf 56.65}  &  \mybox{\bf 0.5904}    & \mybox{\bf 0.2467} & \mybox{\bf 30.01} & \mybox{\bf 24.83} & 22.28 & \mybox{\bf 46.12} & \mybox{\bf 58.77} \\
+    \bottomrule
+    \end{tabularx}
+    \vspace{-0.2cm}
+         \caption{\footnotesize Three-task learning on the NYUv2 dataset: 13-class semantic segmentation, depth estimation, and surface normal prediction results. \#P shows the total number of network parameters. We highlight the best performing combination of multi-task architecture and weighting in bold. The top validation scores for each task are annotated with boxes. The symbols indicate prior methods: $^*$: \citep{kendall2017multi}, $^\dagger$: \citep{liu2018attention}, $^\ddagger$: \citep{misra2016crossstitch}. Performance of other methods as reported in \citet{liu2018attention}.
+     \label{tab:mtl_results_compare}
+     }
+\end{table*}
+
+\begin{wraptable}{R}{0.5\textwidth}
+\vspace{-0.5cm}
+%
+    \begin{center}
+    \begin{small}
+    \begin{tabular}{l|c}
+    \toprule
+        & \% accuracy  \\
+      \midrule
+      task specific, 1-fc~\citep{rosenbaum2017routing} & 42\\
+      %
+      task specific, all-fc~\citep{rosenbaum2017routing} & 49\\
+      cross stitch, all-fc~\citep{misra2016crossstitch} & 53\\
+      %
+      routing, all-fc + WPL~\citep{rosenbaum2019routing} & 74.7\\
+      %
+      independent & 67.7\\
+      \midrule
+      PCGrad (ours) & 71\\
+      routing-all-fc + WPL + PCGrad (ours) & \bf 77.5 \\
+      \bottomrule
+    \end{tabular}
+    \end{small}
+    \end{center}
+    \vspace{-0.4cm}
+    \caption{\footnotesize CIFAR-100 multi-task results. When combined with routing networks, PCGrad leads to a large improvement.}
+    \label{tbl:cifar}
+%
+\end{wraptable}
+
+For CIFAR-100, we follow~\citet{rosenbaum2017routing} to treat 20 coarse labels in the dataset as distinct tasks, creating a dataset with 20 tasks, with 2500 training instances and 500 test instances per task. We combine PCGrad with a powerful multi-task learning architecture, routing networks~\citep{rosenbaum2017routing, rosenbaum2019routing}, by applying PCGrad only to the shared parameters. \icmllast{For the details of this comparison, see Appendix~\ref{app:sl_details}.} As shown in Table~\ref{tbl:cifar}, \arxiv{applying PCGrad to a single network achieves 71\% classification accuracy, which outperforms most of the prior methods such as cross-stitch~\citep{misra2016crossstitch} and independent training, suggesting that sharing representations across tasks is conducive for good performance. While routing networks achieve better performance than PCGrad on its own, they are complementary: combining PCGrad with routing networks leads to a $2.8\%$ absolute improvement in  test accuracy.} %
+
+We also aim to use PCGrad to tackle a multi-label classfication problem, which is a commonly used benchmark for multi-task learning. In multi-label classification, given a set of attributes, the model needs to decide whether each attribute describes the input. Hence, it is essentially a binary classification problem for each attribute. We choose the CelebA dataset~\cite{liu2015deep}, which consists of 200K face images with 40 attributes. Since for each attribution, it is a binary classfication problem and thus we convert it to a 40-way multi-task learning problem following \citep{sener2018multi}. We use the same architecture as in \cite{sener2018multi}.
+
+We use the binary classification error averaged across all $40$ tasks to evaluate the performance as in~\cite{sener2018multi}. Similar to the MultiMNIST results, we compare PCGrad to \citet{sener2018multi} by rerunning the open-sourced code provided in~\cite{sener2018multi}. As shown in Table~\ref{tbl:celeba}, PCGrad outperforms~\citet{sener2018multi}, suggesting that PCGrad is effective in multi-label classification and can also improve multi-task supervised learning performance when the number of tasks is high.
+
+\begin{table}[h]
+    \begin{center}
+    %
+    %
+    \begin{small}
+    \begin{tabular}{l|c}
+    \toprule
+        & average classification error  \\
+      \midrule
+      \citet{sener2018multi} & 8.95\\
+      \midrule
+      PCGrad (ours) & \bf 8.69 \\
+      \bottomrule
+    \end{tabular}
+    \end{small}
+    \end{center}
+    \caption{\footnotesize CelebA results. We show the average classification error across all 40 tasks in CelebA. PCGrad outperforms the prior method~\citet{sener2018multi} in this dataset.}
+    \vspace{-0.4cm}
+    \label{tbl:celeba}
+\end{table}
+
+
+Finally, we combine PCGrad with another state-of-art multi-task learning algorithm, MTAN~\citep{liu2018attention}, and evaluate the performance on a more challenging indoor scene dataset, NYUv2, which contains 3 tasks: \icml{13-class semantic segmentation, depth estimation, and surface normal prediction}. We compare MTAN with PCGrad to a list of methods mentioned in Appendix~\ref{app:sl_details}, where each method is trained with three different weighting schemes as in~\citep{liu2018attention}, equal weighting, weight uncertainty~\citep{kendall2017multi}, and DWA~\citep{liu2018attention}. We only run MTAN with PCGrad with weight uncertainty as we find weight uncertainty as the most effective scheme for training MTAN. The results comparing Cross-Stitch, MTAN and MTAN + PCGrad are presented in Table~\ref{tab:mtl_results_compare} while the full comparison can be found in Table~\ref{tab:nyu_results_full} in the Appendix~\ref{app:full_nyuv2_results}. MTAN with PCGrad is able to achieve the best scores in 8 out of the 9 categories where there are 3 categories per task.
+
+Our multi-task supervised learning results indicate that PCGrad can be seamlessly combined with state-of-art multi-task learning architectures and further improve their results on established supervised multi-task learning benchmarks. We include more results of PCGrad combined with more multi-task learning architectures in Appendix~\ref{app:combined}.
+
+\subsection{Multi-Task Reinforcement Learning}
+
+\neurips{To answer question (2) in the RL setting}, \icml{we first consider the multi-task RL problem and evaluate our algorithm on the recently proposed Meta-World benchmark~\citep{metaworld}. In particular, we test all methods on the MT10 and MT50 benchmarks in Meta-World, which contain $10$ and $50$ manipulation tasks respectively shown in Figure~\ref{fig:metaworld}.} in Appendix~\ref{app:rl_details}.
+%
+%
+
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=1.0\columnwidth]{figures/PCGrad_mt10_mt50_mag_dir_gradnorm.png}
+    \vspace{-0.1cm}
+    \caption{\footnotesize \neurips{For the two plots on the left, we show learning curves on MT10 and MT50 respectively. PCGrad significantly outperforms the other methods in terms of both success rates and data efficiency. In the rightmost plot, we present the ablation study on only using the magnitude and the direction of gradients modified by PCGrad and a comparison to GradNorm~\cite{chen2017gradnorm}. PCGrad outperforms both ablations and GradNorm, indicating the importance of modifying both the gradient directions and magnitudes in multi-task learning.}}
+    \vspace{-0.2cm}
+    \label{fig:rl_results}
+\end{figure*}
+
+The results are shown in left two plots in Figure~\ref{fig:rl_results}. PCGrad combined with SAC learns all tasks with the best data efficiency and successfully solves all of the $10$ tasks in MT10 and about $70$\% of the $50$ tasks in MT50. Training a single SAC policy and a multi-head policy is unable to acquire half of the skills in both MT10 and MT50, suggesting that eliminating gradient interference across tasks can significantly boost performance of multi-task RL. Training independent SAC agents is able to eventually solve all tasks in MT10 and $70$\% of the tasks in MT50, but requires about $2$ millions and $15$ millions more samples than PCGrad with SAC in MT10 and MT50 respectively, implying that applying PCGrad can result in leveraging shared structure among tasks that expedites multi-task learning.
+As noted by~\citet{metaworld}, these tasks involve distinct behavior motions, which makes learning all tasks with a single policy challenging as demonstrated by poor baseline performance. The ability to learn these tasks together opens the door for a number of interesting extensions to meta-learning and generalization to novel task families. 
+%
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/theorem2_analysis.png}
+    \caption{\footnotesize An empirical analysis of the theoretical conditions discussed in Theorem~\ref{thm:local}, showing the first $100$ iterations of training on two RL tasks, reach and press button top. \textbf{Left}: The estimated value of the multi-task curvature. We observe high multi-task curvatures exist throughout training, providing evidence for condition (b) in Theorem~\ref{thm:local}. \textbf{Middle}: The solid lines show the percentage gradients with positive cosine similarity between two task gradients, while the dotted lines and dashed lines show the percentage of iterations in which condition (a) and the implication of condition (b) ($\xi(\rvgone, \rvgtwo) \leq 1$) in Theorem~\ref{thm:local} are held respectively, among iterations when the cosine similarity is negative. \textbf{Right}: The average return of each task achieved by SAC and SAC combined with PCGrad. From the plots in the \textbf{Middle} and on the \textbf{Right}, we can tell that condition (a) holds most of the time for both Adam and Adam combined with PCGrad when they haven't solved Task 2 and as soon as Adam combined PCGrad starts to learn Task 2, the percentage of condition (a) held starts to decline. This observation suggests that condition (a) is a key factor for PCGrad excelling in multi-task learning.
+    }
+    \vspace{-0.3cm}
+    \label{fig:analysis}
+\end{figure*}
+
+%
+\neurips{Since the PCGrad update affects both the gradient direction and the gradient magnitude, we perform an ablation study that tests two variants of PCGrad: (1) only applying the gradient direction corrected with PCGrad while keeping the gradient magnitude unchanged and (2) only applying the gradient magnitude computed by PCGrad while keeping the gradient direction unchanged. We further run a direction comparison to GradNorm~\citep{chen2017gradnorm}, which also scales only the magnitudes of the task gradients.
+%
+As shown in the rightmost plot in Figure~\ref{fig:rl_results}, both variants and GradNorm perform worse than PCGrad and the variant where we only vary the gradient magnitude is much worse than PCGrad. This emphasizes the importance of the orientation change, which is particularly notable as multiple prior works only alter gradient magnitudes~\cite{chen2017gradnorm,sener2018multi}. We also notice that the variant of PCGrad where only the gradient magnitudes change achieves comparable performance to GradNorm, which suggests that it is important to modify both the gradient directions and magnitudes to eliminate interference and achieve good multi-task learning results. Finally, to test the importance of keeping positive cosine similarities between tasks for positive transfer, we compare PCGrad to a recently proposed method in~\cite{suteu2019regularizing} that regularizes cosine similarities of different task gradients towards $0$. PCGrad outperforms \citet{suteu2019regularizing} by a large margin. We leave details of the comparison to Appendix~\ref{app:cosine}}.
+%
+
+%
+
+%
+
+%
+%
+%
+%
+%
+%
+%
+%
+
+%
+%
+
+%
+
+\subsection{Empirical Analysis of the Tragic Triad}
+\label{sec:analysis}
+
+
+
+Finally, to answer question (1), we \icmllast{compare the performance of standard multi-task SAC and the multi-task SAC with PCGrad. We evaluate each method on two tasks, reach and press button top, in the Meta-World~\cite{metaworld} benchmark.} As shown in the leftmost plot in Figure~\ref{fig:analysis}, we plot the multi-task curvature, which is computed as 
+$
+  \mathbf{H}(\mathcal{L};\theta^t\!,\! \theta^{t+1}\!)\! =\! 2\!\cdot\!\left[\mathcal{L}(\theta^{t+1})\!\!-\!\!\mathcal{L}(\theta^{t})\!\!-\!\! \nabla_{\theta^{t}}\mathcal{L}(\theta^{t})^T\!(\theta^{t+1}\!\!-\!\theta^{t})\right]
+$
+by Taylor's Theorem where $\mathcal{L}$ is the multi-task loss, and $\theta^{t}$ and $\theta^{t+1}$ are the parameters at iteration $t$ and $t+1$. During the training process, the multi-task curvature stays positive and is increasing for both Adam and Adam combined PCGrad, suggesting that condition (b) in Theorem~\ref{thm:local} that the multi-task curvature is lower bounded by some positive value is widely held empirically. 
+%
+\icml{To further analyze conditions in Theorem~\ref{thm:local} empirically, we plot the percentage of condition (a) (i.e. conflicting gradients) and the implication of condition (b) ($\xi(\rvgone, \rvgtwo) \leq 1$) in Theorem~\ref{thm:local} being held among the total number of iterations where the cosine similarity is negative in the plot in the middle of Figure~\ref{fig:analysis}. Along with the plot on the right in Figure~\ref{fig:analysis}, which presents the average return of the two tasks during training, we can see that while Adam and Adam with PCGrad haven't received reward signal from Task 2, condition (a) and the implication of condition (b) stay held and as soon as Adam with PCGrad begins to solve Task 2, the percentage of condition (a) and the implication of condition (b) being held start to decrease. Such a pattern suggests that conflicting gradients, high curvatures and dominating gradients indeed produce considerable challenges in optimization before multi-task learner gains any useful learning signal,  which also implies that the tragic triad may indeed be the determining factor where PCGrad can lead to better performance gain over standard multi-task learning in practice.}
+

@@ -1,0 +1,32 @@
+
+Deep Reinforcement Learning (RL) has recently demonstrated extraordinary capabilities in multiple domains, including playing games~\cite{mnih2013playing} and robotic control and manipulation~\cite{lillicrap2015continuous,levine2016end}. Despite its successful applications, 
+% deep RL still requires a large amount of data for training, and the required sample size increases as the task becomes more complex.
+Deep RL still requires a large amount of data for training complex tasks.
+On the other hand, while the current deep RL methods can learn individual policies for specific tasks such as robot grasping and pushing, it remains very challenging to train a single network that generalizes across all possible robotic manipulation tasks. 
+
+In this paper, we study multi-task RL as one step forward towards skill sharing across diverse tasks and ultimately building robots that can generalize. Training deep networks with multiple tasks jointly, agents can learn to share and re-use components across different tasks, which further leads to improved sample efficiency. This is particularly important when we want to adopt RL algorithms in real-world applications. Multi-task learning also provides a natural curriculum since learning easier tasks can be beneficial for learning of more challenging tasks with shared parameters~\cite{pinto2017learning}. 
+
+
+However, multi-task RL remains a hard problem. It becomes even more challenging when the number of tasks increases. For instance, it has been shown by \cite{yu2019meta} that training with diverse robot manipulation tasks jointly with a sharing network backbone and multiple task-specific heads for actions hurt the final performance comparing to independent training in each task. One major reason is that multi-task learning introduces optimization difficulties: It is unclear how the tasks will affect each other when trained jointly, and optimizing some tasks can bring negative impacts on the others~\cite{teh2017distral}. 
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/teaser3-4-update.pdf}
+\vspace{-0.2in}
+\caption{\small{Our multi-task policy network with soft modularization. Given different tasks, our network generate different soft combination of network modules. Gray squares represent network modules and red lines represent the connection between modules (Darker red indicates larger weight).}}
+\label{fig:teaser}
+\vspace{-0.27in}
+\end{figure}
+
+For tackling this problem,  compositional models with multiple modules were introduced~\cite{andreas2017modular,haarnoja2018composable}. For example, researchers proposed to train modular sub-policies and task-specific high-level policies jointly in a Hierarchical Reinforcement Learning (HRL) framework~\cite{andreas2017modular}. The sub-policies can be shared and selected by different high-level policies with a learned policy composition function. 
+However, HRL introduces an optimization challenge on jointly training sub-policies and high-level task-specific policies %that select sub-policies
+while training sub-policies separately often require predefined subtasks or some sophisticated way to discover subgoals, which are typically infeasible for real-world applications. % for policy learning. 
+
+
+In this paper, instead of designing individual modules explicitly for each sub-policy, we propose a soft modularization method that generates soft combinations of different modules for different tasks automatically without explicitly specifying the policy structure. This approach consists of two networks: a base policy network and a routing network. The base policy network, which is composed of multiple modules, takes the state as input and outputs an action for the task.  The routing network takes a task embedding and the current state as input and estimates the routing strategy. 
+
+Given a task, the modules in the base policy network will be reconfigured by the routing network. This is visualized in Figure~\ref{fig:teaser}. Furthermore, instead of taking hard assignments on modules, which is hard to optimize in sequential tasks, our routing network outputs a probability distribution over module assignments for each task. A task-specific base network can be viewed as a weighted combination of the shared modules according to the probability distribution. We benefit from this design to directly back-prop through the routing weights and train both networks jointly over multiple tasks. The advantage is that we can modularize the networks according to tasks without specifying policy hierarchies explicitly (e.g., HRL). The role of each module automatically emerged after training and the routing network 
+determines which modules should be used more for different tasks.
+
+We perform experiments in Meta-World~\cite{yu2019meta}, which contains 50 robotic manipulation tasks. With soft modularization, we achieve significant improvements in both sample efficiency and final performance over previous state-of-the-art multi-task policies. For example, we almost double the manipulation success rate for learning with 50 tasks compared to the multi-task baselines. Our approach utilizes far less training data compared to training individual policies for each task while achieving learned policy that is able to perform closely to the individually trained policies. This shows that enforcing %compositionality with 
+soft modularization can improve the generalization across different tasks in RL. 

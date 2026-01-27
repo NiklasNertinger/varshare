@@ -1,0 +1,63 @@
+
+Our proposed benchmark is aimed at making it possible to study generalization in meta-RL and multi-task RL. In this section, we define the meta-RL and multi-task RL problem statements, and describe some of the challenges associated with task distributions in these settings.
+
+%\subsection{Preliminaries}
+
+\newcommand{\task}{\mathcal{T}}
+
+We use the formalism of Markov decision processes (MDPs), where each task $\task$ corresponds to a different finite horizon MDP, represented by a tuple $(S, A, P, R, H, \gamma)$, where $s \in S$ correspond to states,
+$a \in A$ correspond to the available actions, $P(s_{t+1}|s_t, a_t)$ represents the stochastic transition dynamics,
+$R(s, a)$ is a reward function, $H$ is the horizon and $\gamma$ is the discount factor. In standard reinforcement learning, the goal is to learn a policy $\pi(a|s)$ that maximizes the expected return, which is the sum of (discounted) rewards over all time.
+In multi-task and meta-RL settings, we assume a distribution of tasks $p(\task)$. Different tasks may vary in any aspect of the Markov decision process, though efficiency gains in adaptation to new tasks are only possible if the tasks share some common structure. For example, as we describe in the next section, the tasks in our proposed benchmark have the same action space and horizon, and structurally similar rewards and state spaces.\footnote{In practice, the policy must be able to read in the state for each of the tasks, which typically requires them to at least have the same dimensionality. In our benchmarks, some tasks have different numbers of objects, but the state dimensionality is always the same, meaning that some state coordinates are unused for some tasks.}
+%%SL.7.4: I think some people might be confused here about how you could possibly train one policy on multiple different state spaces.
+%%CF.7.4: Well, the objects are different across tasks, so the state spaces are indeed different. Some tasks only have one objects vs. two. 
+%%SL.7.6: OK, I added a footnote that tries to somewhat address this. Though this is perhaps a little clunky.
+
+\textbf{Multi-task RL problem statement.} 
+The goal of multi-task RL is to learn a single, task-conditioned policy $\pi(a|s, z)$, where $z$ indicates an encoding of the task ID. This policy should maximize the average expected return across all tasks from the task distribution $p(\task)$, given by $\mathbb{E}_{\task \sim p(\task)} [\mathbb{E}_{\pi}[\sum_{t=0}^T \gamma^t R_t(s_t, a_t)]]$.
+%, where we assume to have access to a set of tasks with accompanying, per-task, reward functions $R_t(s, a)$. 
+%%SL.7.6: Commented out above sentence because it should be obvious from the previous paragraph.
+The information about the task can be provided to the policy in various ways, e.g. using a one-hot task identification encoding $z$ that is passed in addition to the current state.
+There is no separate test set of tasks, and multi-task RL algorithms are typically evaluated on their average performance over the \emph{training} tasks.
+%Note, that in contrast to the meta-RL methods, there is no distinction between test and training tasks as multi-task RL algorithms have been commonly evaluated based on the average performance across the training tasks.
+
+\textbf{Meta-RL problem statement.} 
+Meta-reinforcement learning aims to leverage the set of training task to learn a policy $\pi(a|s)$ that can quickly adapt to new test tasks that were not seen during training, where both training and test tasks are assumed to be drawn from the same task distribution $p(\task)$. Typically, the training tasks are referred to as the \emph{meta-training} set, to distinguish from the adaptation (training) phase performed on the (meta-) test tasks.
+During meta-training, the learning algorithm has access to $M$ tasks $\{\task_i\}_{i=1}^M$ that are drawn from the task distribution $p(\task)$.
+At meta-test time, a new task $\task_j \sim p(\task)$ is sampled that was not seen during meta-training, and the meta-trained policy must quickly adapt to this task to achieve the highest return with a small number of samples.
+A key premise in meta-RL is that a sufficiently powerful meta-RL method can meta-learn a model that effectively implements a highly efficient reinforcement learning procedure, which can then solve entirely new tasks very quickly -- much more quickly than a conventional reinforcement learning algorithm learning from scratch. However, in order for this to happen, the meta-training distribution $p(\task)$ must be sufficiently broad to encompass these new tasks. Unfortunately, most prior work in meta-RL evaluates on very narrow task distributions, with only one or two dimensions of parametric variation, such as the running direction for a simulated robot~\cite{finn2017model,rothfuss2018promp,rakelly2019efficient,fernando2018meta}.
+
+%\cf{move motivation content in 3.2 into 4, will work on this now}
+
+\iffalse
+\subsection{Task Design}
+
+Both multi-task and meta-RL learn on a distribution of tasks $p(\task)$, where each task is an MDP. In practical robotics applications, however, formalizing a control problem as an MDP already presents a significant challenge: we must define the reward $R$ in a way that can be observed by the robot, and design the state space, initial state distribution, and reward in a way that is not too difficult for existing RL algorithms to learn effectively.
+Indeed, many practical applications of RL entail iterative engineering of the reward to avoid unexpected outcomes~\cite{something_maybe_the_openai_boat}. 
+Multi-task and meta-RL algorithms exacerbate this challenge. First, instead of defining just one reward function, each task requires its own reward, making it difficult to scale to \emph{many tasks}, where there is the most to be gained from these methods. Second, and more subtly, the tasks in the task distribution must be structurally similar for transfer to be successful, yet sufficiently diverse to achieve generalization to distinctly new tasks.
+Further, even if the optimal policy for multiple tasks is similar, differences in the observation spaces, reward scales, or reward structures can make tasks appear completely distinct for the learning algorithm, masking their shared structure~\cite{DBLP:journals/corr/abs-1809-04474}. 
+These additional constraints on tasks make task design even more challenging for the human user.
+%%SL.7.4: I'm not sure this reward design discussion is really that relevant. Or at least, I don't really see where this is going.
+
+%In particular, to quickly adapt to an unseen skill during test time, at training time, as suggested by prior meta-learning works~\cite{finn2017model}, the agent has to leverage numerous skills that have are diverse but share some underlying structure such that discovering such a structure instigates effective adaptation to the new skill in a way that is faster than simply learning from scratch. 
+%Furthermore, variations within each task can lead to overlapping among observation spaces of all skills and serve as a catalyst for generalization.
+
+%%SL.7.4: I don't think I fully understand what the purpose of this paragraph is. It sounds like it is trying to motivate having multiple tasks? But I'm not sure this really needs so much trouble to motivate, or that this is the right place to motivate it. I might recommend just deleting 3.2 and making 3.1 a top-level section, and then putting a few sentences motivating the challenges of task design into the top of Sec 4 (essentially the paragraph below distilled down to 1 or 2 sentences).
+To sidestep these challenges, prior works have studied task distributions that can be generated by parametrically varying aspects of one problem, such as goal position~\cite{finn2017model}, friction~\cite{clavera2018learning}, or bandit arm probability~\cite{wang1611learning}, or by procedurally generating MDPs, such as different maze layouts~\cite{DBLP:journals/corr/DuanSCBSA16} or stacking blocks in different orders~\cite{duan_one_shot_imitation}.
+%%CF: need to double check that they procedurally generate the mazes.
+In each of these cases, the form of the state space and reward is identical across tasks, which is not reflective of the breadth of environments and objectives that an agent might encounter in real world domains.
+Hence, if we hope to scale these algorithms to more realistic domains, such as the domain of table top manipulation tasks, we requires a suite
+of tasks that reflects the breadth of tasks in the domain while structured in a way that is still amenable to transfer (albeit a more difficult form of transfer than previous evaluations).
+This includes task variability that is inherently non-parametric, where continuous parameter variation cannot be used to describe the differences between qualitatively-distinct tasks.
+However, with enough tasks, even two qualitatively different tasks may overlap, serving as a catalyst for generalization.
+For example, consider a robot that needs to push a block away from itself versus push a drawer closed. For some initial positions of the object and the drawer, these tasks are the nearly the same, as long as the reward functions is structured in a similar way.
+\fi
+
+% We strive for building a widely accessible suite of diverse control tasks, which would serve as a crucial tool to test if meta-RL algorithms can generalize to a new skill that the robot has never experienced before. 
+%In order for a multi-task RL benchmark to be useful, we need a large number of meaningful tasks that share common structure that can be leveraged to learn the tasks more efficiently.
+%The requirements for the useful meta-RL tasks are more nuanced. 
+%In particular, to quickly adapt to an unseen skill during test time, at training time, as suggested by prior meta-learning works~\cite{finn2017model}, the agent has to leverage numerous skills that have are diverse but share some underlying structure such that discovering such a structure instigates effective adaptation to the new skill in a way that is faster than simply learning from scratch. 
+%Furthermore, variations within each task can lead to overlapping among observation spaces of all skills and serve as a catalyst for generalization.
+%%CF.7.4: I think most of the above belongs in the previous section.
+
+

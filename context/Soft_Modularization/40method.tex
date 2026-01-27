@@ -1,0 +1,85 @@
+
+We propose to perform multi-task reinforcement learning using a single base policy network with multiple modules. As visualized in Figure ~\ref{fig:model}, instead of finding discrete routing paths to connect the modules for different tasks, we perform soft modularization: we utilize another routing network (right side of Figure~\ref{fig:model}) which takes the task identity embedding and observed state as inputs and outputs the probabilities to weight the modules in a soft manner.
+
+With soft modularization, it allows task-specific policies to learn and discover what modules to share across different tasks. Since the soft combination process is differentiable, both policy network and the routing network can be trained together in an end-to-end manner. Note that the network for the soft Q-function follows the similar structure but initialized and trained independently. %with different parameters. 
+
+\begin{wrapfigure}{il}{0.35\textwidth}
+  \vspace{-0.25in}
+  \begin{center}
+    \includegraphics[width=0.35\textwidth]{figs/methodv5-short.pdf}
+  \end{center}
+    \caption{\small{Our framework contains a base policy network with multiple modules (left) and a routing network (right) generating connections between modules in the base policy network. }}
+    \label{fig:model}
+  \vspace{-0.45in}
+\end{wrapfigure}
+% 
+Although the soft modularization provides a differentiable way to modularize and share the network across tasks, different tasks can still learn and converge with different training speed based on the difficulties of the tasks. For example, learning ``reaching'' policy is usually much faster than learning ``pick and place'' policy. To tackle this problem, we introduce a simple way to automatically adjust the losses for different tasks to balance the training across tasks.
+
+In the following subsections, we will first introduce our network architecture with soft modularization, and then training objective for multi-task learning with this architecture. 
+
+\vspace{-0.07in}
+\subsection{Soft Modularization}
+\vspace{-0.07in}
+
+As shown in Figure~\ref{fig:model}, our model of multi-task policy contains two networks: the base policy network and the routing network. At each time stage, the network takes the input of the current state $s_t$ and the task embedding $z_\task$ as inputs. We use an one-hot vector for $z_\task$ representing each task. We forward $s_t$ to a 2-layer MLP and obtain a $D$-dimension representation $f(s_t)$, which is then used as inputs for the modules as well as the routing network. We extract the representation for the task embedding by one fully connected layer as $h(z_\task)$, which is also in $D$-dimension. 
+
+\textbf{Routing Network.} The depth of our routing network is corresponding to number of module layers in the base policy network. Supposed we have $L$ module layers and each layer has $n$ modules in the base policy network. The routing network will have $L-1$ layers to output the probabilities to weight the modules and the dimension of the probability vector is $n \times n$. We define the output probability vector for the $l$th layer as $p^l \in \mathbb{R}^{n^2}$. The probability vector for the next layer can be represented as,
+{{
+\begin{align}
+p^{l+1} = \mathcal{W}^{l}_d ({\rm ReLU}(\mathcal{W}^{l}_u p^{l} \cdot( f(s_t) \cdot h(z_\task))) ),
+\end{align}}}
+where $\mathcal{W}^{l}_u$ is a fully connected layer in $\mathbb{R}^{D \times n^2}$ dimensions, which converts the probability vector to an embedding which has the same dimension as the task embedding representation and observation representation. We perform element-wise multiplication between these three embeddings to obtain a new feature representation, combining the information from the probabilities of previous layer, the observation and the task information. This feature is then forwarded to another fully connected layer $\mathcal{W}^{l}_d \in \mathbb{R}^{n^2 \times D}$, which leads to the probability vector for the next layer $p^{l+1}$. We visualize this process on computing $p^{l=2}$ from $p^{l=1}$ in Figure~\ref{fig:model}. To compute the first layer of probabilities, we use the inputs from both the task embedding and the state representation as,
+\begin{align}
+p^{l=1} = \mathcal{W}^{l=1}_d ({\rm ReLU}(f(s_t) \cdot h(z_\task)) ),
+\end{align}
+% \begin{align}
+% $p^{l=1} = \mathcal{W}^{l=1}_d ({\rm ReLU}(f(s_t) \cdot h(z_\task)) )$,
+% % \end{align}
+where $f(s_t)$ is the feature representation of the state with $D$ dimensions. To weight modules in the base policy network, we use softmax function to normalize $p^{l}$ as,
+\vspace{-0.05in}
+\begin{align}
+\hat{p}^{l}_{i,j} = \frac{\exp{(p^{l}_{i,j})}}{\sum_{j=1}^{n}\exp{(p^{l}_{i,j})}},
+\label{eq:prop}
+\end{align}
+% \vspace{-0.1in}
+which is the probability of weighting the $j$th module in the $l$th layer for contributing to the $i$th module in the $l+1$ layer. We will illustrate how this is used in the base policy network in the following.
+
+\textbf{Base Policy Network.} As shown in the left side of Figure~\ref{fig:model}, our base policy network has $L$ layers of modules, and each layer contains $n$ modules. We denote that the input for the $j$th module in the $l$th layer is a $d$-dimensional feature representation $g_j^l \in \mathbb{R}^{d}$. The input feature representation for the $i$th module in the $l+1$ layer can be represented as,
+\vspace{-0.1in}
+\begin{align}
+g_{i}^{l+1} = \sum_{j=1}^n \hat{p}^{l}_{i,j} ({\rm ReLU}(W_j^l g_j^l)),
+\end{align}
+where $W_j^l \in \mathbb{R}^{d \times d}$ represents the module parameters. We compute a weighted sum of the module outputs with the routing probability outputs. Recall from Eq.~\ref{eq:prop} that $\hat{p}^{l}_{i,j}$ represents the probability connecting the $j$th module in layer $l$ to the $i$th module in layer $l+1$ and it is normalized to $\sum_j \hat{p}^{l}_{i,j} = 1$. 
+Given the final layer module outputs, we compute the mean and variance of the action as the outputs,
+\vspace{-0.1in}
+\begin{align}
+\mu, \sigma = \sum_{j=1}^n W_j^L g_j^L,
+\end{align}
+where $W_j^L \in \mathbb{R}^{d \times o}$ are the module parameters in the last layer, $o$ represents the output dimension. 
+
+Note that although we have only introduced the network architectures for policies so far, we adopt similar architectures with soft modularization for Q-function as well. The weights for both the base policy network and the routing network are not shared or reused in the Q-function. 
+% During training, we train all the parameters jointly. 
+
+\vspace{-0.07in}
+\subsection{Multi-task Optimization}
+\vspace{-0.07in}
+
+We focus on the problem of balancing the learning across different tasks, as easier tasks usually converge faster than the harder ones. We scale the training objectives for the policy network with different weights for different tasks. These weights are learned automatically: the objective weight will be small if the confidence of the policy for the task is high, and be large if the confidence is low. 
+
+This loss weight is directly related to the temperature parameter $\alpha$ in SAC, trained via Eq.~\ref{eq:ecsac:alpha_objective}: When value of $\log \pi_\phi(a_t|s_t)$ become larger, which means entropy become smaller, $\alpha$ will become larger to encourage exploration. On the other hand, $\alpha$ will become small if $\log \pi_\phi(a_t|s_t)$ is small. We have different temperature parameters for $M$ different tasks: $\{\alpha_i\}_{i=1}^M$. The objective weights $w_i$ for task $i$ are proportional to the exponential of negative $\alpha_i$,
+\vspace{-0.1in}
+\begin{align}
+w_i  = \frac{\exp{(-\alpha_i)}}{\sum_{j=1}^M \exp{(-\alpha_j)}}.
+\label{eq:ecsac:multitask_alpha_objective}
+\end{align}
+We then adjust the optimization objective from Eq.~\ref{eq:jphi} as,
+% \begin{align}
+% J_\pi(\phi)=\mathbb{E}_{\task \sim p(\task)} \left[w_\task \cdot J_{\pi, \task}(\phi) \right],
+% \end{align}
+$J_\pi(\phi)=\mathbb{E}_{\task \sim p(\task)} \left[w_\task \cdot J_{\pi, \task}(\phi) \right],$
+and the objetive for Q-fuction from Eq.~\ref{eq:jtheta} is adjusted as,
+% \begin{align}
+% J_Q(\theta)=\mathbb{E}_{\task \sim p(\task)} \left[w_\task \cdot J_{Q, \task}(\theta) \right].
+% \end{align}
+$
+J_Q(\theta)=\mathbb{E}_{\task \sim p(\task)} \left[w_\task \cdot J_{Q, \task}(\theta) \right].$
