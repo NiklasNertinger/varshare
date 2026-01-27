@@ -4,8 +4,8 @@
 #SBATCH --error=/netscratch/%u/varshare/logs/%x_%A_%a.err
 #SBATCH --time=24:00:00
 
-# Partitions: Try multiple to reduce queue time (Priority order)
-#SBATCH --partition=RTX3090,RTXA6000,L40S,A100-40GB 
+# Partitions: Prioritize RTXA6000 (Highest Availability) > L40S > batch > RTX3090 (Busy)
+#SBATCH --partition=RTXA6000,L40S,batch,RTX3090,A100-40GB
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8      # Bumped to 8 to match colleague's safe baseline
 #SBATCH --mem=32G
