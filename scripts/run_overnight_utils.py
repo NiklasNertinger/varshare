@@ -155,63 +155,74 @@ def run_seed(
     # Store Task IDs for correct replay
     task_ids = torch.zeros((num_steps, num_envs), dtype=torch.long).to(device)
     
-    # Tracking
-    global_step = 0
-    start_time = time.time()
-    print(f"Seed {seed} Started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
-    
-    # Progress Log
-    metrics_data = []
-    
-    # Metrics Window
-    success_window = [] # Legacy list approach, keeps last 100 eps
-    return_window = deque(maxlen=20) # Track last 20 updates for reward smoothing
-    
     def evaluate_policy(total_eval_episodes=10):
         # Eval loop: Evaluate on all 10 tasks
-        # 1 episode per task? Or 3 episodes per task?
-        # User wants "eval success" and "eval reward".
-        # Let's do 1 episode per task * 1 cycle = 10 episodes total.
         avg_successes = []
         avg_returns = []
-        
         for t_idx in range(10):
             eval_env.reset_task(t_idx)
             obs, _ = eval_env.reset()
             obs = torch.Tensor(obs).to(device).unsqueeze(0)
-            
             terminated = False
             truncated = False
             ep_ret = 0.0
-            
             while not (terminated or truncated):
                 with torch.no_grad():
                     action, _, _, _ = agent.get_action_and_value(obs, task_idx=t_idx, sample=False) # Deterministic
                 next_obs, reward, terminated, truncated, info = eval_env.step(action.cpu().numpy()[0])
                 ep_ret += reward
                 obs = torch.Tensor(next_obs).to(device).unsqueeze(0)
-                
             avg_returns.append(ep_ret)
             avg_successes.append(info.get("success", 0.0))
-            
         return np.mean(avg_returns), np.mean(avg_successes)
-
-    # Start (Initial Task is auto-cycled)
-    next_obs, _ = envs.reset(seed=seed)
-    next_obs = torch.Tensor(next_obs).to(device)
-    next_done = torch.zeros(num_envs).to(device)
-    
-    # Track current task per env
-    current_task_ids = torch.tensor([(i % 10) for i in range(num_envs)], device=device)
 
     num_updates = total_timesteps // batch_size
     
-    # Initial Eval
-    print("Initial Evaluation...")
-    eval_ret, eval_succ = evaluate_policy()
-    print(f"Initial Eval: Return={eval_ret:.2f}, Success={eval_succ:.2f}")
+    # Tracking
+    success_window = [] # Legacy list approach, keeps last 100 eps
+    return_window = deque(maxlen=20) # Track last 20 updates for reward smoothing
 
-    for update in range(1, num_updates + 1):
+    # Initial Env State
+    next_obs, _ = envs.reset(seed=seed)
+    next_obs = torch.Tensor(next_obs).to(device)
+    next_done = torch.zeros(num_envs).to(device)
+    current_task_ids = torch.tensor([(i % 10) for i in range(num_envs)], device=device)
+
+    # --- Resume Logic (Intra-seed) ---
+    checkpoint_path = f"{run_dir}/checkpoint.pt"
+    partial_csv_path = f"{run_dir}/metrics_partial.csv"
+    update_start = 1
+    metrics_data = []
+
+    if os.path.exists(checkpoint_path) and os.path.exists(partial_csv_path):
+        print(f"Loading checkpoint from {checkpoint_path}...")
+        try:
+            checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
+            agent.load_state_dict(checkpoint["model_state_dict"])
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            update_start = checkpoint["update"] + 1
+            global_step = checkpoint["global_step"]
+            if "current_task_ids" in checkpoint:
+                current_task_ids = checkpoint["current_task_ids"].to(device)
+            
+            # Load partial CSV
+            metrics_data = pd.read_csv(partial_csv_path).to_dict("records")
+            print(f"Resuming from Update {update_start}, Step {global_step}")
+        except Exception as e:
+            print(f"Could not load checkpoint: {e}. Starting fresh.")
+            update_start = 1
+            global_step = 0
+            metrics_data = []
+    else:
+        global_step = 0
+        # Initial Eval (only if starting fresh)
+        print("Initial Evaluation...")
+        eval_ret, eval_succ = evaluate_policy()
+        print(f"Initial Eval: Return={eval_ret:.2f}, Success={eval_succ:.2f}")
+
+    start_time = time.time()
+    
+    for update in range(update_start, num_updates + 1):
         # Annealing
         frac = 1.0 - (update - 1.0) / num_updates
         # Handle separate param groups (Actor/Critic)
@@ -442,6 +453,20 @@ def run_seed(
                 "sharing_ratio": t_ratio,
             })
             
+            # --- Checkpointing & Memory Hygiene ---
+            if update % 50 == 0:
+                torch.save({
+                    'update': update,
+                    'global_step': global_step,
+                    'model_state_dict': agent.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'current_task_ids': current_task_ids,
+                }, checkpoint_path)
+                pd.DataFrame(metrics_data).to_csv(partial_csv_path, index=False)
+                print(f"Checkpoint saved at update {update}")
+            
+            if update % 10 == 0:
+                torch.cuda.empty_cache()
     # Save Data
     df = pd.DataFrame(metrics_data)
     df.to_csv(f"{run_dir}/progress.csv", index=False)
@@ -503,6 +528,12 @@ def run_overnight_experiment(algo_name, varshare_args={}, use_reptile=False, use
         }
         run_seed(seed, algo_name, config)
         
+        # Cleanup between seeds
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
     # Aggregate
     print(f"\n=== Aggregating {algo_name} ===")
     all_data = []
