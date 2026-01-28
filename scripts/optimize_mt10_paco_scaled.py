@@ -72,7 +72,7 @@ if __name__ == "__main__":
     os.makedirs(args.analysis_dir, exist_ok=True)
     
     storage_path = os.path.join(args.analysis_dir, "optuna_journal_scaled.log")
-    storage = optuna.storages.JournalStorage(optuna.storages.JournalFileBackend(storage_path))
+    storage = optuna.storages.JournalStorage(optuna.storages.JournalFileStorage(storage_path))
 
     study = optuna.create_study(
         study_name="mt10_paco_scaled",

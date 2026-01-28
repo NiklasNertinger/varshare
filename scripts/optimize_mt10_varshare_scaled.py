@@ -84,7 +84,7 @@ if __name__ == "__main__":
     # Let's stick to Journal for consistency with hpo_utils but NEW file.
     storage_path = os.path.join(args.analysis_dir, "optuna_journal_scaled.log")
     storage = optuna.storages.JournalStorage(
-        optuna.storages.JournalFileBackend(storage_path)
+        optuna.storages.JournalFileStorage(storage_path)
     )
 
     study = optuna.create_study(
