@@ -2,12 +2,16 @@
 import optuna
 import os
 
-# Define the storage URL
-db_dir = os.path.expandvars("/netscratch/$USER/varshare/hpo_db")
-os.makedirs(db_dir, exist_ok=True)
-storage_url = f"sqlite:///{db_dir}/optuna_mt10.db"
+from optuna.storages import JournalStorage, JournalFileStorage
+import os
 
-print(f"Initializing Optuna Database at: {storage_url}")
+# Define the storage location
+analysis_dir = os.path.expandvars("/netscratch/$USER/varshare/analysis")
+os.makedirs(analysis_dir, exist_ok=True)
+journal_path = os.path.join(analysis_dir, "optuna_journal.log")
+storage = JournalStorage(JournalFileStorage(journal_path))
+
+print(f"Initializing Optuna Journal at: {journal_path}")
 
 # List of study names we expect to use
 study_names = [
@@ -23,7 +27,7 @@ for study_name in study_names:
     print(f"Creating/Loading study: {study_name}")
     optuna.create_study(
         study_name=study_name,
-        storage=storage_url,
+        storage=storage,
         direction="maximize",
         load_if_exists=True
     )
