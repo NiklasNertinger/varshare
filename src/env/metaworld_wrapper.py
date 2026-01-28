@@ -10,9 +10,10 @@ class MetaWorldWrapper(gym.Env):
     """
     metadata = {"render_modes": ["human", "rgb_array"]}
 
-    def __init__(self, benchmark="MT10", seed=None):
+    def __init__(self, benchmark="MT10", seed=None, initial_task_idx=0, auto_cycle_task=False):
         super().__init__()
         self.benchmark_name = benchmark
+        self.auto_cycle_task = auto_cycle_task
         
         if benchmark == "MT10":
             self.benchmark = metaworld.MT10(seed=seed)
@@ -39,9 +40,9 @@ class MetaWorldWrapper(gym.Env):
         self.num_tasks = len(self.task_names)
         
         # Current active environment
-        self.current_task_idx = 0
+        self.current_task_idx = initial_task_idx
         self._env = None
-        self._set_task_env(0)
+        self._set_task_env(initial_task_idx)
 
         # Observation and Action Spaces
         # Meta-World usually has 39D observations
@@ -70,6 +71,10 @@ class MetaWorldWrapper(gym.Env):
         self._env.set_task(task)
 
     def reset(self, seed=None, options=None):
+        if self.auto_cycle_task and self.num_tasks > 1:
+            next_idx = (self.current_task_idx + 1) % self.num_tasks
+            self.reset_task(next_idx)
+            
         if seed is not None:
             self._env.action_space.seed(seed)
         obs, info = self._env.reset(seed=seed, options=options)

@@ -161,17 +161,19 @@ def train(report_callback=None):
         print(f"Training on Task ID: {args.task_id}")
     
     # Env Setup
-    def make_env(seed, idx):
+    def make_env(seed, idx, initial_task_idx=0, auto_cycle_task=False):
         def thunk():
             if args.env_type == "ComplexCartPole":
                 env = ComplexCartPole()
             elif args.env_type == "IdenticalCartPole":
                 env = IdenticalCartPole()
             elif args.env_type == "metaworld":
-                env = MetaWorldWrapper(benchmark=args.mt_setting, seed=seed)
-            
-            if args.algo == "oracle":
-                env.reset_task(args.task_id)
+                env = MetaWorldWrapper(
+                    benchmark=args.mt_setting, 
+                    seed=seed, 
+                    initial_task_idx=initial_task_idx,
+                    auto_cycle_task=auto_cycle_task
+                )
             
             env = gym.wrappers.RecordEpisodeStatistics(env)
             env.action_space.seed(seed)
@@ -181,7 +183,15 @@ def train(report_callback=None):
         return thunk
 
     envs = gym.vector.AsyncVectorEnv(
-        [make_env(args.seed + i, i) for i in range(args.num_envs)]
+        [
+            make_env(
+                args.seed + i, 
+                i, 
+                initial_task_idx=(args.task_id if args.algo == "oracle" else i % num_tasks),
+                auto_cycle_task=(args.algo in ["shared", "pcgrad", "paco", "soft_mod"])
+            ) 
+            for i in range(args.num_envs)
+        ]
     )
     
     if args.env_type == "ComplexCartPole":
@@ -398,8 +408,7 @@ def train(report_callback=None):
     
     # Initialize environment tasks
     current_task_idx = args.task_id if args.algo == "oracle" else 0
-    if args.algo in ["shared", "pcgrad", "paco", "soft_mod"]:
-        envs.call("reset_task", current_task_idx)
+    # No manual reset needed now, handled by make_env and auto_cycle
 
     obs, _ = envs.reset(seed=args.seed)
     
@@ -467,11 +476,8 @@ def train(report_callback=None):
                         if "success" in info:
                             success_window.append(info["success"])
             
-            if args.algo in ["shared", "pcgrad", "paco", "soft_mod"]:
-                for i, done in enumerate(dones):
-                    if done:
-                        current_task_idx = (current_task_idx + 1) % num_tasks
-                        envs.env_method("reset_task", current_task_idx, indices=[i])
+            # Auto-cycling is now handled internally by MetaWorldWrapper.reset()
+            # which is called automatically by VectorEnv when a rollout sub-env finishes.
 
         # GAE
         with torch.no_grad():

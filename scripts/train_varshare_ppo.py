@@ -203,14 +203,19 @@ def train(report_callback=None):
     print(f"Logging to: {seed_dir}")
     
     # Env Setup
-    def make_env(seed, idx, capture_video=False, run_name=""):
+    def make_env(seed, idx, capture_video=False, run_name="", initial_task_idx=0, auto_cycle_task=False):
         def thunk():
             if args.env_type == "ComplexCartPole":
                 env = ComplexCartPole()
             elif args.env_type == "IdenticalCartPole":
                 env = IdenticalCartPole()
             elif args.env_type == "metaworld":
-                env = MetaWorldWrapper(benchmark=args.mt_setting, seed=seed)
+                env = MetaWorldWrapper(
+                    benchmark=args.mt_setting, 
+                    seed=seed, 
+                    initial_task_idx=initial_task_idx, 
+                    auto_cycle_task=auto_cycle_task
+                )
             
             env = gym.wrappers.RecordEpisodeStatistics(env)
             env.action_space.seed(seed)
@@ -220,7 +225,17 @@ def train(report_callback=None):
         return thunk
 
     envs = gym.vector.AsyncVectorEnv(
-        [make_env(args.seed + i, i, False, run_name) for i in range(args.num_envs)]
+        [
+            make_env(
+                args.seed + i, 
+                i, 
+                False, 
+                run_name,
+                initial_task_idx=i % num_tasks,
+                auto_cycle_task=True
+            ) 
+            for i in range(args.num_envs)
+        ]
     )
     
     # Separate eval env to not mess with training state
@@ -377,8 +392,8 @@ def train(report_callback=None):
     
     # Initialize environment
     task_idx = 0
-    # For VectorEnv, we use call/env_method to reach the underlying envs in parallel processes
-    envs.call("reset_task", task_idx)
+    # Auto-cycling is now handled internally by MetaWorldWrapper.reset()
+    # which is triggered by VectorEnv's auto-reset.
     
     eval_env.reset_task(task_idx)
 
@@ -484,14 +499,9 @@ def train(report_callback=None):
             # We will iterate through dones and switch task for that env.
             
             for i, done in enumerate(dones):
-                if done:
                     # Switch task for this env
-                    # We need to maintain a separate task_idx per env?
-                    # The original code had a single GLOBAL task_idx variable.
-                    # It cycled task_idx = (task_idx + 1) % 5
-                    # Let's do that.
-                    task_idx = (task_idx + 1) % num_tasks # Global cycle
-                    envs.env_method("reset_task", task_idx, indices=[i]) 
+                    # Auto-cycling now handled internally in MetaWorldWrapper.reset()
+                    pass
                     # Note: VectorEnv `step` resets the env, but `reset_task` might need to be called BEFORE reset?
                     # `MultiTaskCartPole` calls `reset_task` then `reset`.
                     # VectorEnv auto-resets immediately after step.
