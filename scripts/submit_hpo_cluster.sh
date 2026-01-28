@@ -55,4 +55,5 @@ mkdir -p "$RESULTS_DIR"
 
 # 4. Run Optimization with srun (Better process tracking)
 # Python runs ONE trial (--n-trials 1)
-srun python "$SCRIPT_NAME" --n-trials 1 --analysis-dir "$RESULTS_DIR"
+# Use -u for unbuffered output so tail -f works immediately
+srun python -u "$SCRIPT_NAME" --n-trials 1 --analysis-dir "$RESULTS_DIR"
