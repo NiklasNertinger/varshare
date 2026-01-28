@@ -43,11 +43,16 @@ submit_study() {
 #SBATCH --time=${TIME}
 #SBATCH --array=0-$(($ARRAY_SIZE - 1))
 
-source venv/bin/activate
+# 1. Setup Environment
+source /netscratch/$USER/varshare/venv/bin/activate
+export PYTHONPATH=$PYTHONPATH:$HOME/varshare
+
+# 2. Define Storage
+STORAGE_PATH="/netscratch/$USER/varshare/analysis/optuna_journal_mega.log"
 
 # Execute Specific Optimizer Script
 # Each study has its own script now (e.g., scripts/optimize_mt10_varshare_base.py)
-python scripts/optimize_${STUDY_NAME}.py --storage-path analysis/optuna_journal_mega.log --n-trials ${ARRAY_SIZE}
+python scripts/optimize_${STUDY_NAME}.py --storage-path ${STORAGE_PATH} --n-trials ${ARRAY_SIZE}
 
 EOT
 }

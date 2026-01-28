@@ -11,7 +11,7 @@ sbatch --job-name=hpo_pcgrad_scaled \
     --cpus-per-task=8 \
     --mem=8G \
     --time=72:00:00 \
-    --wrap="python scripts/optimize_mt10_pcgrad_scaled.py --n-trials 50"
+    --wrap="source /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_pcgrad_scaled.py --n-trials 50 --analysis-dir /netscratch/\$USER/varshare/analysis"
 
 # PaCo
 sbatch --job-name=hpo_paco_scaled \
@@ -22,7 +22,7 @@ sbatch --job-name=hpo_paco_scaled \
     --cpus-per-task=8 \
     --mem=8G \
     --time=72:00:00 \
-    --wrap="python scripts/optimize_mt10_paco_scaled.py --n-trials 50"
+    --wrap="source /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_paco_scaled.py --n-trials 50 --analysis-dir /netscratch/\$USER/varshare/analysis"
 
 # SoftMod
 sbatch --job-name=hpo_softmod_scaled \
@@ -33,4 +33,4 @@ sbatch --job-name=hpo_softmod_scaled \
     --cpus-per-task=8 \
     --mem=8G \
     --time=72:00:00 \
-    --wrap="python scripts/optimize_mt10_soft_mod_scaled.py --n-trials 50"
+    --wrap="source /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_soft_mod_scaled.py --n-trials 50 --analysis-dir /netscratch/\$USER/varshare/analysis"

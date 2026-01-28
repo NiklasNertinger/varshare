@@ -9,4 +9,4 @@ sbatch --job-name=hpo_oracle_scaled \
     --cpus-per-task=8 \
     --mem=8G \
     --time=72:00:00 \
-    --wrap="python scripts/optimize_mt10_oracle_scaled.py --n-trials 50"
+    --wrap="source /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_oracle_scaled.py --n-trials 50 --analysis-dir /netscratch/\$USER/varshare/analysis"
