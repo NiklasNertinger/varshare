@@ -32,6 +32,9 @@ submit_study() {
     # Create log dir
     mkdir -p logs/hpo_mega
     
+    # Define Storage (Must be defined here for heredoc expansion)
+    STORAGE_PATH="/netscratch/$USER/varshare/analysis/optuna_journal_mega.log"
+    
     sbatch <<EOT
 #!/bin/bash
 #SBATCH --job-name=${STUDY_NAME}
@@ -47,8 +50,8 @@ submit_study() {
 source /netscratch/$USER/varshare/venv/bin/activate
 export PYTHONPATH=$PYTHONPATH:$HOME/varshare
 
-# 2. Define Storage
-STORAGE_PATH="/netscratch/$USER/varshare/analysis/optuna_journal_mega.log"
+# 2. Storage is expanded from parent shell
+# STORAGE_PATH is ${STORAGE_PATH}
 
 # Execute Specific Optimizer Script
 echo "Running Study: ${STUDY_NAME}"
