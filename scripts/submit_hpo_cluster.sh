@@ -7,8 +7,8 @@
 # Partitions: Prioritize RTXA6000 (Highest Availability) > L40S > batch > RTX3090 (Busy)
 #SBATCH --partition=RTXA6000,L40S,batch,RTX3090,A100-40GB
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8      # Bumped to 8 to match colleague's safe baseline
-#SBATCH --mem=8G
+#SBATCH --cpus-per-task=4      # Reduced from 8 based on low utilization
+#SBATCH --mem=4G               # Reduced from 8G (4G is safe for MT10)
 #SBATCH --array=1-50%5
 
 # Notifications (Optional - Uncomment and set email)
