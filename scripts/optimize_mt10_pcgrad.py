@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     study = optuna.create_study(
         study_name="mt10_pcgrad",
-        storage=get_hpo_storage(),
+        storage=get_hpo_storage(base_dir=args.analysis_dir),
         direction="maximize",
         load_if_exists=True,
         sampler=optuna.samplers.TPESampler(seed=42)

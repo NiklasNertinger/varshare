@@ -32,13 +32,9 @@ source /netscratch/$USER/varshare/venv/bin/activate
 export PYTHONPATH="${PYTHONPATH:-}:$HOME/varshare"
 
 # 2. Database Location
-DB_DIR="/netscratch/$USER/varshare/hpo_db"
-mkdir -p "$DB_DIR"
-DB_PATH="$DB_DIR/optuna_mt10.db"
-ln -sf "$DB_PATH" optuna_mt10.db
-
-# 3. Select Algorithm
-ALGO=$1
+# 2. Storage Setup (JournalStorage)
+# We use JournalStorage (file-based) which is robust on NFS. 
+# The log file will be created in RESULTS_DIR automatically by the python script.
 if [ -z "$ALGO" ]; then
     echo "Error: No algorithm specified. Usage: sbatch scripts/submit_hpo_cluster.sh <algo>"
     exit 1

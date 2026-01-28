@@ -23,9 +23,28 @@ SOFTMOD_SEARCH_SPACE = {
     "lr_routing": {"low": 1e-4, "high": 1e-2, "log": True},
 }
 
-def get_hpo_storage():
-    """Returns the shared SQLite storage string."""
-    db_path = os.path.join(os.getcwd(), "optuna_mt10.db")
+from optuna.storages import JournalStorage, JournalFileStorage
+
+def get_hpo_storage(base_dir=None):
+    """
+    Returns a JournalStorage object which is robust on distributed file systems (NFS)
+    where SQLite fails with 'disk I/O error' or locking issues.
+    """
+    if base_dir is None:
+        base_dir = os.getcwd()
+        
+    # Journal file path
+    journal_path = os.path.join(base_dir, "optuna_journal.log")
+    
+    # Use JournalStorage (File-based locking)
+    storage = JournalStorage(JournalFileStorage(journal_path))
+    return storage
+
+def get_sqlite_storage(base_dir=None):
+    """Legacy SQLite storage (Not recommended for cluster)"""
+    if base_dir is None:
+        base_dir = os.getcwd()
+    db_path = os.path.join(base_dir, "optuna_mt10.db")
     return f"sqlite:///{db_path}"
 
 def get_trial_params(trial, algo):
