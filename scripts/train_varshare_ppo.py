@@ -377,12 +377,8 @@ def train(report_callback=None):
     
     # Initialize environment
     task_idx = 0
-    # For VectorEnv, we need to manually call the method on each env or use a wrapper
-    # Since SyncVectorEnv doesn't easily expose custom methods, we can just iterate
-    # But SyncVectorEnv is just a list of envs.
-    # Actually, for SyncVectorEnv in Gym, `envs.envs` gives access to the underlying list.
-    for i in range(args.num_envs):
-        envs.envs[i].unwrapped.reset_task(task_idx)
+    # For VectorEnv, we use call/env_method to reach the underlying envs in parallel processes
+    envs.call("reset_task", task_idx)
     
     eval_env.reset_task(task_idx)
 
@@ -495,7 +491,7 @@ def train(report_callback=None):
                     # It cycled task_idx = (task_idx + 1) % 5
                     # Let's do that.
                     task_idx = (task_idx + 1) % num_tasks # Global cycle
-                    envs.envs[i].unwrapped.reset_task(task_idx) 
+                    envs.env_method("reset_task", task_idx, indices=[i]) 
                     # Note: VectorEnv `step` resets the env, but `reset_task` might need to be called BEFORE reset?
                     # `MultiTaskCartPole` calls `reset_task` then `reset`.
                     # VectorEnv auto-resets immediately after step.

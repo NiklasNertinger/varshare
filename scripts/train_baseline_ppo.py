@@ -399,8 +399,7 @@ def train(report_callback=None):
     # Initialize environment tasks
     current_task_idx = args.task_id if args.algo == "oracle" else 0
     if args.algo in ["shared", "pcgrad", "paco", "soft_mod"]:
-        for i in range(args.num_envs):
-            envs.envs[i].unwrapped.reset_task(current_task_idx)
+        envs.call("reset_task", current_task_idx)
 
     obs, _ = envs.reset(seed=args.seed)
     
@@ -472,7 +471,7 @@ def train(report_callback=None):
                 for i, done in enumerate(dones):
                     if done:
                         current_task_idx = (current_task_idx + 1) % num_tasks
-                        envs.envs[i].unwrapped.reset_task(current_task_idx)
+                        envs.env_method("reset_task", current_task_idx, indices=[i])
 
         # GAE
         with torch.no_grad():
