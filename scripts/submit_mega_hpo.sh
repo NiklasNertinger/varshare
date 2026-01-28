@@ -51,8 +51,9 @@ export PYTHONPATH=$PYTHONPATH:$HOME/varshare
 STORAGE_PATH="/netscratch/$USER/varshare/analysis/optuna_journal_mega.log"
 
 # Execute Specific Optimizer Script
-# Each study has its own script now (e.g., scripts/optimize_mt10_varshare_base.py)
-python scripts/optimize_${STUDY_NAME}.py --storage-path ${STORAGE_PATH} --n-trials ${ARRAY_SIZE}
+echo "Running Study: ${STUDY_NAME}"
+echo "Storage: ${STORAGE_PATH}"
+python scripts/optimize_${STUDY_NAME}.py --storage-path "${STORAGE_PATH}" --n-trials "${ARRAY_SIZE}"
 
 EOT
 }

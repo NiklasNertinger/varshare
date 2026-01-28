@@ -130,7 +130,85 @@ def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
         return 0.0
         
     except subprocess.CalledProcessError as e:
-        print(f"Failed: {e}")
         print("STDOUT:", e.stdout)
         print("STDERR:", e.stderr)
         return -9999.0
+
+def get_trial_params(trial, algo):
+    """
+    Standard parameter ranges for defined algorithms.
+    """
+    params = {}
+    
+    # Common PPO Hyperparams
+    params["learning_rate_actor"] = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
+    if algo == "varshare":
+         # VarShare typically uses same or similar LR for critic, or specific
+         params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)
+         params["rho_init"] = trial.suggest_float("rho_init", -6.0, -2.0)
+         params["kl_beta"] = trial.suggest_float("kl_beta", 1e-3, 1.0, log=True)
+         params["ent_coef"] = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
+    
+    elif algo == "shared":
+         params["learning_rate_actor"] = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
+         params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)
+         params["ent_coef"] = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
+
+    elif algo == "pcgrad":
+         params["learning_rate_actor"] = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
+         params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)
+         params["ent_coef"] = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
+
+    elif algo == "paco":
+         params["learning_rate_actor"] = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
+         params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)
+         params["ent_coef"] = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
+         params["num_experts"] = trial.suggest_int("num_experts", 2, 8)
+         params["lr_weights"] = trial.suggest_float("lr_weights", 1e-4, 1e-2, log=True)
+
+    elif algo == "soft_mod":
+         params["learning_rate_actor"] = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
+         params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)
+         params["ent_coef"] = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
+         params["num_modules"] = trial.suggest_int("num_modules", 2, 8)
+         params["lr_routing"] = trial.suggest_float("lr_routing", 1e-4, 1e-2, log=True)
+         
+    elif algo == "oracle":
+         params["learning_rate_actor"] = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
+         params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)
+         params["ent_coef"] = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
+
+    return params
+
+def calculate_objective(history):
+    """
+    Calculate scalar objective from training history.
+    """
+    if not history:
+        return -9999.0
+    
+    # Prioritize Eval Reward
+    if "eval_reward" in history:
+        return history["eval_reward"]
+    
+    # Fallback to last mean reward
+    if "reward" in history:
+        return history["reward"]
+        
+    return -9999.0
+
+def get_hpo_storage(storage_path):
+    """
+    Return Optuna storage object (Journal or RDB).
+    """
+    if storage_path.startswith("sqlite"):
+        return optuna.storages.RDBStorage(storage_path)
+    
+    try:
+        from optuna.storages import JournalStorage, JournalFileStorage
+        from optuna.storages.journal import JournalFileBackend
+        return JournalStorage(JournalFileBackend(storage_path))
+    except (ImportError, AttributeError):
+        # Fallback for older Optuna
+        from optuna.storages import JournalStorage, JournalFileStorage
+        return JournalStorage(JournalFileStorage(storage_path))
