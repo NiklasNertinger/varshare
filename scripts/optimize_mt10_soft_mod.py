@@ -51,7 +51,7 @@ def objective(trial):
         return calculate_objective(history)
     except Exception as e:
         print(f"Trial {trial.number} failed: {e}")
-        return 0.0
+        raise e
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
