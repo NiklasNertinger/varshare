@@ -8,7 +8,7 @@
 #SBATCH --partition=RTXA6000,L40S,batch,RTX3090,A100-40GB
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8      # Bumped back to 8 to support 8 parallel envs
-#SBATCH --mem=4G               # Reduced from 8G (4G is safe for MT10)
+#SBATCH --mem=8G               # Bumped to 8G to accommodate 8 parallel env processes
 #SBATCH --array=1-50%5
 
 # Notifications (Optional - Uncomment and set email)
