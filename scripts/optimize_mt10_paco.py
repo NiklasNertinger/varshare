@@ -42,7 +42,7 @@ def objective(trial):
     train_args = parse_args()
     
     try:
-        history = train_func()
+        history = train_func(report_callback=trial.report)
         
         save_dir = os.path.join(base_dir, f"optuna/paco/trial_{trial.number}")
         os.makedirs(save_dir, exist_ok=True)

@@ -132,7 +132,7 @@ def evaluate(agent, env, device, num_episodes=5, num_tasks=5):
     agent.train()
     return task_rewards
 
-def train():
+def train(report_callback=None):
     args = parse_args()
     timestamp = int(time.time())
     run_name = f"{args.exp_name}__seed{args.seed}__{timestamp}"
@@ -601,6 +601,10 @@ def train():
             eval_reward_current = eval_reward_mean
             print(f"Eval Reward: {eval_reward_mean:.2f} | Eval Success: {eval_success_mean:.2f}\n")
             next_eval_step += args.eval_freq
+            
+            # Report to Optuna/WandB if callback provided
+            if report_callback:
+                report_callback(eval_success_mean, global_step)
             
         history[-1]["eval_reward"] = eval_reward_current
         history[-1]["eval_success"] = eval_metrics.get("eval/mean_success")
