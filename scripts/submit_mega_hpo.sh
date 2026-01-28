@@ -19,7 +19,7 @@ STUDIES=(
 )
 
 # Common Slurm Settings
-PARTITION="cpu-batch" # Or whatever partition was used before
+PARTITION="batch" # Or whatever partition was used before
 TIME="4:00:00" # 4 hours per trial (2M steps on CPU takes ~2-3h usually)
 CPUS="8" # 8 CPUs per trial
 MEM="8G" # 8GB RAM per trial
