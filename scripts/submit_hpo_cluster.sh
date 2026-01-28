@@ -27,8 +27,9 @@ set -euo pipefail
 # Use ABSOLUTE path to venv to avoid "No such file" errors
 source /netscratch/$USER/varshare/venv/bin/activate
 
-# Add the current directory (repo root) to PYTHONPATH so scripts can find 'src'
-export PYTHONPATH="${PYTHONPATH:-}:$(pwd)"
+# Add the project root to PYTHONPATH so scripts can find 'src'
+# We use $HOME/varshare explicitly to be safe across nodes
+export PYTHONPATH="${PYTHONPATH:-}:$HOME/varshare"
 
 # 2. Database Location
 DB_DIR="/netscratch/$USER/varshare/hpo_db"
