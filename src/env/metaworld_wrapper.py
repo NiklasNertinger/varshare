@@ -41,7 +41,7 @@ class MetaWorldWrapper(gym.Env):
         
         # Current active environment
         self.current_task_idx = initial_task_idx
-        self._env = None
+        self.cached_envs = {}
         self._set_task_env(initial_task_idx)
 
         # Observation and Action Spaces
@@ -53,11 +53,11 @@ class MetaWorldWrapper(gym.Env):
         self.current_task_idx = task_idx
         task_name = self.task_names[task_idx]
         
-        # Instantiate environment class if first time or different
-        if self._env is None or type(self._env) != self.train_classes[task_name]:
-            if self._env is not None:
-                self._env.close()
-            self._env = self.train_classes[task_name]()
+        # Check cache
+        if task_name not in self.cached_envs:
+            self.cached_envs[task_name] = self.train_classes[task_name]()
+            
+        self._env = self.cached_envs[task_name]
         
         # Pick one valid task instance for this task name
         # In newer Meta-World versions, we should be careful with task objects

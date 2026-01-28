@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import math
+from torch.distributions import Normal
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
@@ -115,18 +116,175 @@ class VarShareLayer(nn.Module):
             "sharing_ratio": norm_theta / (norm_theta + norm_mu + 1e-8)
         }
 
+class VarShareLoRALayer(nn.Module):
+    def __init__(self, in_features, out_features, rank=4, prior_scale=1.0):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.rank = rank
+        self.prior_scale = prior_scale
+        
+        # Shared parameters (theta)
+        self.theta = nn.Parameter(torch.Tensor(out_features, in_features))
+        self.bias = nn.Parameter(torch.Tensor(out_features))
+        
+        # Task-specific parameters (LoRA Factors)
+        # B @ A
+        # A: [rank, in_features]
+        # B: [out_features, rank]
+        
+        self.mus_A = nn.ParameterDict()
+        self.rhos_A = nn.ParameterDict()
+        
+        self.mus_B = nn.ParameterDict()
+        self.rhos_B = nn.ParameterDict()
+        
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.kaiming_uniform_(self.theta, a=math.sqrt(5))
+        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.theta)
+        bound = 1 / math.sqrt(fan_in)
+        nn.init.uniform_(self.bias, -bound, bound)
+
+    def add_task(self, task_id, mu_init=0.0, rho_init=-5.0, **kwargs):
+        t_key = str(task_id)
+        
+        # Initialize A: small random to break symmetry? Or zero?
+        # Usually LoRA inits A random, B zero.
+        # Here we are variational.
+        # mu_A ~ N(0, 0.01)
+        self.mus_A[t_key] = nn.Parameter(torch.randn(self.rank, self.in_features) * 0.01)
+        self.rhos_A[t_key] = nn.Parameter(torch.ones(self.rank, self.in_features) * rho_init)
+        
+        # mu_B = 0
+        self.mus_B[t_key] = nn.Parameter(torch.zeros(self.out_features, self.rank))
+        self.rhos_B[t_key] = nn.Parameter(torch.ones(self.out_features, self.rank) * rho_init)
+
+    def forward(self, x, task_id, sample=True):
+        if isinstance(task_id, torch.Tensor):
+            t_id = task_id.flatten()[0].item()
+        else:
+            t_id = task_id
+
+        task_key = str(t_id)
+        if task_key not in self.mus_A:
+            return F.linear(x, self.theta, self.bias)
+
+        # Get Params
+        mu_A = self.mus_A[task_key]
+        rho_A = self.rhos_A[task_key]
+        sigma_A = F.softplus(rho_A)
+        
+        mu_B = self.mus_B[task_key]
+        rho_B = self.rhos_B[task_key]
+        sigma_B = F.softplus(rho_B)
+        
+        # Sample or Mean
+        if self.training and sample:
+            A = Normal(mu_A, sigma_A).rsample()
+            B = Normal(mu_B, sigma_B).rsample()
+        else:
+            A = mu_A
+            B = mu_B
+            
+        # Effective Weight
+        # residual = B @ A -> [out, rank] @ [rank, in] -> [out, in]
+        residual = B @ A
+        weight = self.theta + residual
+        
+        return F.linear(x, weight, self.bias)
+
+    def kl_divergence(self, task_id):
+        if isinstance(task_id, torch.Tensor):
+            t_id = task_id.flatten()[0].item()
+        else:
+            t_id = task_id
+            
+        task_key = str(t_id)
+        if task_key not in self.mus_A: return torch.tensor(0.0, device=self.theta.device)
+        
+        # KL = KL(A) + KL(B)
+        # A
+        mu_A = self.mus_A[task_key]
+        rho_A = self.rhos_A[task_key]
+        sigma_A = F.softplus(rho_A)
+        var_q_A = sigma_A.pow(2)
+        var_p = self.prior_scale ** 2
+        kl_A = 0.5 * (math.log(var_p) - torch.log(var_q_A + 1e-8) + (var_q_A + mu_A.pow(2)) / var_p - 1)
+        
+        # B
+        mu_B = self.mus_B[task_key]
+        rho_B = self.rhos_B[task_key]
+        sigma_B = F.softplus(rho_B)
+        var_q_B = sigma_B.pow(2)
+        kl_B = 0.5 * (math.log(var_p) - torch.log(var_q_B + 1e-8) + (var_q_B + mu_B.pow(2)) / var_p - 1)
+        
+        return kl_A.sum() + kl_B.sum()
+
+    def get_architectural_metrics(self, task_id):
+        task_key = str(task_id)
+        if task_key not in self.mus_A: return None
+        
+        with torch.no_grad():
+            mu_A = self.mus_A[task_key]
+            mu_B = self.mus_B[task_key]
+            residual = mu_B @ mu_A
+            
+            norm_theta = torch.norm(self.theta).item()
+            norm_res = torch.norm(residual).item()
+            
+            return {
+                "norm_theta": norm_theta,
+                "norm_mu": norm_res,
+                "sharing_ratio": norm_theta / (norm_theta + norm_res + 1e-8),
+                "avg_sigma": 0.0 # Simplify
+            }
+
 class VarShareNetwork(nn.Module):
     def __init__(self, input_dim, output_dims, hidden_dims=[64, 64], num_tasks=1, prior_scale=1.0, 
-                 rho_init=-5.0, mu_init=0.0):
+                 rho_init=-5.0, mu_init=0.0, variant="standard", rank=4):
         super().__init__()
         self.layers = nn.ModuleList()
         self.num_tasks = num_tasks
         
         prev_dim = input_dim
-        for h_dim in hidden_dims:
-            layer = VarShareLayer(prev_dim, h_dim, prior_scale=prior_scale)
-            for t in range(num_tasks):
-                layer.add_task(t, mu_init, rho_init)
+        total_layers = len(hidden_dims)
+        
+        for i, h_dim in enumerate(hidden_dims):
+            # Check for "partial" variant
+            # Last 2 layers = VarShare. 
+            # Note: This loops over HIDDEN layers only. 
+            # If hidden_dims=[64, 64], we have Layer 0 (Input->64) and Layer 1 (64->64).
+            # Then usually there is a Head layer.
+            # "Last 2 layers" usually means the output head + last hidden layer?
+            # Or last 2 hidden?
+            # User said "Last 2 layers". Let's assume (Last Hidden + Head).
+            # So here: if we have 2 hidden layers, maybe only the second one is VarShare?
+            # Let's interpret "Partial" as: Only use VarShare for the DEEPEST layers.
+            # If variant="partial", we use Standard Linear for early layers.
+            
+            use_varshare_here = True
+            if variant == "partial":
+                # Let's say we only make the very last hidden layer VarShare
+                # And the Head (handled later) will also be VarShare.
+                # So indices < total_layers - 1 are Standard.
+                if i < total_layers - 1:
+                    use_varshare_here = False
+            
+            if use_varshare_here:
+                if variant == "lora":
+                    layer = VarShareLoRALayer(prev_dim, h_dim, rank=rank, prior_scale=prior_scale)
+                else: 
+                    # Standard or Reptile (same structure) or Scaled (handled by caller passing dims)
+                    layer = VarShareLayer(prev_dim, h_dim, prior_scale=prior_scale)
+                    
+                for t in range(num_tasks):
+                    layer.add_task(t, mu_init, rho_init)
+            else:
+                # Standard Linear Layer (Shared)
+                layer = layer_init(nn.Linear(prev_dim, h_dim))
+                
             self.layers.append(layer)
             prev_dim = h_dim
             
@@ -142,20 +300,39 @@ class VarShareNetwork(nn.Module):
         
     def forward(self, x, task_id, sample=True):
         for layer in self.layers:
-            x = F.relu(layer(x, task_id, sample=sample))
+            # Check if layer supports task_id (VarShare/LoRA)
+            if hasattr(layer, "add_task"):
+                x = F.relu(layer(x, task_id, sample=sample))
+            else:
+                # Standard nn.Linear
+                x = F.relu(layer(x))
         return x
 
     def get_kl(self, task_id):
         kl = 0
         for layer in self.layers:
-            kl += layer.kl_divergence(task_id)
+            if hasattr(layer, "kl_divergence"):
+                 kl += layer.kl_divergence(task_id)
         return kl
 
     def get_architectural_metrics(self, task_id):
         metrics = []
         for layer in self.layers:
-            m = layer.get_architectural_metrics(task_id)
-            if m: metrics.append(m)
+            if hasattr(layer, "get_architectural_metrics"):
+                m = layer.get_architectural_metrics(task_id)
+                if m: metrics.append(m)
+            else:
+                # Standard Layer Metrics (approximate for aggregation)
+                # sharing_ratio = 1.0 (all shared)
+                # norm_theta = actual norm
+                # norm_mu = 0
+                if hasattr(layer, "weight"):
+                     metrics.append({
+                         "norm_theta": torch.norm(layer.weight).item(),
+                         "norm_mu": 0.0,
+                         "avg_sigma": 0.0,
+                         "sharing_ratio": 1.0
+                     })
         
         if not metrics: return {}
         
@@ -171,6 +348,8 @@ class VarShareNetwork(nn.Module):
     def get_task_similarity(self):
         all_similarities = []
         for layer in self.layers:
+            if not hasattr(layer, "mus"): continue # Skip standard
+            
             task_ids = sorted([int(k) for k in layer.mus.keys()])
             if len(task_ids) < 2: continue
             
@@ -237,8 +416,21 @@ class ActorCritic(nn.Module):
             feature_dim = hidden_dim 
             
             # Heads are also VarShareLayers (Reference: "every linear layer")
-            self.critic_head = VarShareLayer(feature_dim, 1, prior_scale=1.0)
-            self.actor_head = VarShareLayer(feature_dim, self.action_dim, prior_scale=1.0)
+            # If variant=partial, head IS VarShare.
+            # If variant=lora, head IS LoRA.
+            
+            variant = varshare_args.get("variant", "standard")
+            rank = varshare_args.get("rank", 4)
+            # Remove from kwargs to avoid dup args if passing separately
+            # But we pass **varshare_args to VarShareNetwork init, so all good.
+            
+            if variant == "lora":
+                 self.critic_head = VarShareLoRALayer(feature_dim, 1, rank=rank, prior_scale=1.0)
+                 self.actor_head = VarShareLoRALayer(feature_dim, self.action_dim, rank=rank, prior_scale=1.0)
+            else:
+                 # Standard, Reptile, Partial (Head is always VS in Partial)
+                 self.critic_head = VarShareLayer(feature_dim, 1, prior_scale=1.0)
+                 self.actor_head = VarShareLayer(feature_dim, self.action_dim, prior_scale=1.0)
             
             for t in range(num_tasks):
                 self.critic_head.add_task(t, **varshare_args) # Re-use args like rho_init
