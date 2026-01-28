@@ -14,6 +14,9 @@ def objective(trial):
     # 1. Sample Hyperparams for PaCo
     params = get_trial_params(trial, "paco")
     
+    if "num_experts" not in params:
+        params["num_experts"] = trial.suggest_int("num_experts", 2, 8)
+    
     config = [
         "--algo", "paco",
         "--env-type", "metaworld",

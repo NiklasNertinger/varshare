@@ -12,11 +12,12 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 
 class VarShareLayer(nn.Module):
-    def __init__(self, in_features, out_features, prior_scale=1.0):
+    def __init__(self, in_features, out_features, prior_scale=1.0, learned_prior=False):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.prior_scale = prior_scale
+        self.learned_prior = learned_prior
         
         # Shared parameters (theta)
         self.theta = nn.Parameter(torch.Tensor(out_features, in_features))
@@ -25,6 +26,11 @@ class VarShareLayer(nn.Module):
         # Task-specific parameters (Weights only)
         self.mus = nn.ParameterDict()
         self.rhos = nn.ParameterDict()
+        
+        # Learned Prior (Empirical Bayes)
+        if self.learned_prior:
+            # Initialize to log(0.1) -> sigma=0.1
+            self.log_sigma_prior = nn.Parameter(torch.tensor(math.log(0.1)))
         
         self.reset_parameters()
 
@@ -89,7 +95,12 @@ class VarShareLayer(nn.Module):
         sigma = F.softplus(rho)
         
         var_q = sigma.pow(2)
-        var_p = self.prior_scale ** 2
+        # Determine Prior Variance
+        if self.learned_prior:
+             # Ensure sigma_prior is positive
+             var_p = torch.exp(self.log_sigma_prior).pow(2)
+        else:
+             var_p = self.prior_scale ** 2
         
         kl_w = 0.5 * (math.log(var_p) - torch.log(var_q + 1e-8) + (var_q + mu.pow(2)) / var_p - 1)
         
@@ -117,12 +128,13 @@ class VarShareLayer(nn.Module):
         }
 
 class VarShareLoRALayer(nn.Module):
-    def __init__(self, in_features, out_features, rank=4, prior_scale=1.0):
+    def __init__(self, in_features, out_features, rank=4, prior_scale=1.0, learned_prior=False):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.rank = rank
         self.prior_scale = prior_scale
+        self.learned_prior = learned_prior
         
         # Shared parameters (theta)
         self.theta = nn.Parameter(torch.Tensor(out_features, in_features))
@@ -139,6 +151,10 @@ class VarShareLoRALayer(nn.Module):
         self.mus_B = nn.ParameterDict()
         self.rhos_B = nn.ParameterDict()
         
+        # Learned Prior
+        if self.learned_prior:
+            self.log_sigma_prior = nn.Parameter(torch.tensor(math.log(0.1)))
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -210,7 +226,12 @@ class VarShareLoRALayer(nn.Module):
         rho_A = self.rhos_A[task_key]
         sigma_A = F.softplus(rho_A)
         var_q_A = sigma_A.pow(2)
-        var_p = self.prior_scale ** 2
+        
+        if self.learned_prior:
+            var_p = torch.exp(self.log_sigma_prior).pow(2)
+        else:
+            var_p = self.prior_scale ** 2
+            
         kl_A = 0.5 * (math.log(var_p) - torch.log(var_q_A + 1e-8) + (var_q_A + mu_A.pow(2)) / var_p - 1)
         
         # B
@@ -243,7 +264,7 @@ class VarShareLoRALayer(nn.Module):
 
 class VarShareNetwork(nn.Module):
     def __init__(self, input_dim, output_dims, hidden_dims=[64, 64], num_tasks=1, prior_scale=1.0, 
-                 rho_init=-5.0, mu_init=0.0, variant="standard", rank=4):
+                 rho_init=-5.0, mu_init=0.0, variant="standard", rank=4, learned_prior=False):
         super().__init__()
         self.layers = nn.ModuleList()
         self.num_tasks = num_tasks
@@ -274,10 +295,10 @@ class VarShareNetwork(nn.Module):
             
             if use_varshare_here:
                 if variant == "lora":
-                    layer = VarShareLoRALayer(prev_dim, h_dim, rank=rank, prior_scale=prior_scale)
+                    layer = VarShareLoRALayer(prev_dim, h_dim, rank=rank, prior_scale=prior_scale, learned_prior=learned_prior)
                 else: 
                     # Standard or Reptile (same structure) or Scaled (handled by caller passing dims)
-                    layer = VarShareLayer(prev_dim, h_dim, prior_scale=prior_scale)
+                    layer = VarShareLayer(prev_dim, h_dim, prior_scale=prior_scale, learned_prior=learned_prior)
                     
                 for t in range(num_tasks):
                     layer.add_task(t, mu_init, rho_init)
@@ -424,13 +445,14 @@ class ActorCritic(nn.Module):
             # Remove from kwargs to avoid dup args if passing separately
             # But we pass **varshare_args to VarShareNetwork init, so all good.
             
+            
             if variant == "lora":
-                 self.critic_head = VarShareLoRALayer(feature_dim, 1, rank=rank, prior_scale=1.0)
-                 self.actor_head = VarShareLoRALayer(feature_dim, self.action_dim, rank=rank, prior_scale=1.0)
+                 self.critic_head = VarShareLoRALayer(feature_dim, 1, rank=rank, prior_scale=1.0, learned_prior=varshare_args.get("learned_prior", False))
+                 self.actor_head = VarShareLoRALayer(feature_dim, self.action_dim, rank=rank, prior_scale=1.0, learned_prior=varshare_args.get("learned_prior", False))
             else:
                  # Standard, Reptile, Partial (Head is always VS in Partial)
-                 self.critic_head = VarShareLayer(feature_dim, 1, prior_scale=1.0)
-                 self.actor_head = VarShareLayer(feature_dim, self.action_dim, prior_scale=1.0)
+                 self.critic_head = VarShareLayer(feature_dim, 1, prior_scale=1.0, learned_prior=varshare_args.get("learned_prior", False))
+                 self.actor_head = VarShareLayer(feature_dim, self.action_dim, prior_scale=1.0, learned_prior=varshare_args.get("learned_prior", False))
             
             for t in range(num_tasks):
                 self.critic_head.add_task(t, **varshare_args) # Re-use args like rho_init

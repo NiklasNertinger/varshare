@@ -15,8 +15,7 @@ def objective(trial):
     params = get_trial_params(trial, "shared")
     
     config = [
-        "--algo", "shared", # PCGrad is an optimizer wrapper, usually applied to shared
-        "--pcgrad",         # Enable PCGrad
+        "--algo", "pcgrad", 
         "--env-type", "metaworld",
         "--mt-setting", "MT10",
         "--total-timesteps", "2000000",

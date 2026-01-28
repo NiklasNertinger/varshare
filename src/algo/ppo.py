@@ -18,7 +18,11 @@ class PPO:
                  max_grad_norm=0.5,
                  update_epochs=10, 
                  minibatch_size=64,
-                 device='cpu'):
+                 device='cpu',
+                 kl_beta=0.0,
+                 kl_schedule="fixed", # fixed, annealing, trigger
+                 kl_controller_args={},
+                 lambda_hyper=0.0): # For learned prior penalty
         
         self.agent = agent
         self.optimizer = optimizer
@@ -32,6 +36,70 @@ class PPO:
         self.update_epochs = update_epochs
         self.minibatch_size = minibatch_size
         self.device = device
+        
+        # Variational Controller Args
+        self.kl_beta = kl_beta
+        self.base_kl_beta = kl_beta # Storage for annealing base
+        self.kl_schedule = kl_schedule
+        self.kl_controller_args = kl_controller_args
+        self.lambda_hyper = lambda_hyper
+        
+        self.global_step = 0 # Track for annealing (approximated by updates)
+        
+        # Controller State
+        self.ratio_ema = None 
+
+    def update_kl_beta(self):
+        """Updates self.kl_beta based on schedule/controller"""
+        if self.kl_schedule == "fixed":
+            return
+            
+        elif self.kl_schedule == "annealing":
+            # Linear Warmup then Hold then Ramp
+            total_updates = self.kl_controller_args.get("total_updates", 1000)
+            warmup_frac = self.kl_controller_args.get("warmup_frac", 0.1)
+            
+            warmup_steps = total_updates * warmup_frac
+            
+            if self.global_step < warmup_steps:
+                # Linear 0 -> base
+                self.kl_beta = self.base_kl_beta * (self.global_step / max(1, warmup_steps))
+            else:
+                self.kl_beta = self.base_kl_beta
+                
+        elif self.kl_schedule == "trigger":
+            # Adjust based on noise/weight ratio
+            # This requires "current ratio" which is computed during loss or separate check
+            # Implemented inside update loop after gathering metrics
+            pass
+
+    def get_noise_ratio(self):
+        # Heuristic: Ratio of median sigma to median theta magnitude
+        # We need to crawl the model
+        sigmas = []
+        thetas = []
+        
+        for name, mod in self.agent.named_modules():
+            # Use specific VarShare/LoRA structure checks
+            if hasattr(mod, "theta") and hasattr(mod, "rhos"):
+                 thetas.append(mod.theta.detach().abs().median())
+                 for k in mod.rhos:
+                      sigmas.append(torch.nn.functional.softplus(mod.rhos[k].detach()).median())
+            
+            # Also check LoRA
+            if hasattr(mod, "mus_A") and hasattr(mod, "rhos_A"):
+                 thetas.append(mod.theta.detach().abs().median())
+                 for k in mod.rhos_A:
+                      sigmas.append(torch.nn.functional.softplus(mod.rhos_A[k].detach()).median())
+                 for k in mod.rhos_B:
+                      sigmas.append(torch.nn.functional.softplus(mod.rhos_B[k].detach()).median())
+
+        if not sigmas or not thetas: return 0.0
+        
+        med_sigma = torch.stack(sigmas).median()
+        med_theta = torch.stack(thetas).median() + 1e-6
+        
+        return (med_sigma / med_theta).item()
 
     def update(self, b_obs, b_actions, b_logprobs, b_rewards, b_dones, b_values, task_ids=None):
         """
@@ -61,10 +129,34 @@ class PPO:
         values: (N,)
         task_ids: (N,) optional
         """
+        self_global_step = self.global_step
+        self.global_step += 1
+        self.update_kl_beta()
         
+        # Trigger Controller Logic (Pre-Update Check)
+        if self.kl_schedule == "trigger" and (self_global_step % 20 == 0):
+            current_ratio = self.get_noise_ratio()
+            
+            # EMA Update
+            alpha = 0.05
+            if self.ratio_ema is None: self.ratio_ema = current_ratio
+            else: self.ratio_ema = (1-alpha)*self.ratio_ema + alpha*current_ratio
+            
+            # Band Logic
+            target_ratio = self.kl_controller_args.get("target_ratio", 0.1)
+            tol = 0.05 # +/- 5%
+            
+            if self.ratio_ema > (target_ratio + tol):
+                self.kl_beta = min(self.kl_beta * 1.1, 100.0) # Increase penalty to reduce sigma
+            elif self.ratio_ema < (target_ratio - tol):
+                self.kl_beta = max(self.kl_beta / 1.1, 1e-6) # Reduce penalty to allow sigma
+
         b_inds = np.arange(len(obs))
         clipfracs = []
-        
+        approx_kl = 0 # fallback
+        kl_loss = torch.tensor(0.0)
+        grad_norm = 0.0
+
         for epoch in range(self.update_epochs):
             np.random.shuffle(b_inds)
             for start in range(0, len(obs), self.minibatch_size):
@@ -113,7 +205,31 @@ class PPO:
                 v_loss = 0.5 * v_loss_max.mean()
 
                 entropy_loss = entropy.mean()
+                
                 loss = pg_loss - self.ent_coef * entropy_loss + self.vf_coef * v_loss
+                
+                # --- VarShare Logic ---
+                kl_loss = torch.tensor(0.0, device=self.device)
+                
+                if hasattr(self.agent, "get_kl") and mb_task_ids is not None:
+                    # Expectation over tasks in batch: Average KL per task
+                    unique_tasks = torch.unique(mb_task_ids)
+                    batch_kl = 0
+                    for t in unique_tasks:
+                         batch_kl += self.agent.get_kl(t)
+                    kl_val = batch_kl / len(unique_tasks)
+                    
+                    kl_loss = self.kl_beta * kl_val
+                    loss += kl_loss
+
+                # --- Empirical Bayes Hyperprior Penalty ---
+                if self.lambda_hyper > 0:
+                     target = math.log(0.1)
+                     hyper_loss = torch.tensor(0.0, device=self.device)
+                     for name, param in self.agent.named_parameters():
+                          if "log_sigma_prior" in name:
+                               hyper_loss += (param - target) ** 2
+                     loss += self.lambda_hyper * hyper_loss
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -127,5 +243,7 @@ class PPO:
             "entropy": entropy_loss.item(),
             "approx_kl": approx_kl.item(),
             "clipfrac": np.mean(clipfracs),
+            "kl_loss": kl_loss.item(),
+            "kl_beta": self.kl_beta,
             "grad_norm": grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
         }

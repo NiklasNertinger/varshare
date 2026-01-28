@@ -1,93 +1,136 @@
+"""
+Shared utilities for VarShare HPO.
+"""
+import subprocess
 import optuna
 import os
-import torch
-import numpy as np
+import sys
 
-# Common Hyperparameter Ranges
-COMMON_SEARCH_SPACE = {
-    "lr_actor": {"low": 1e-4, "high": 3e-3, "log": True},
-    "lr_critic": {"low": 3e-4, "high": 3e-3, "log": True},
-    "ent_coef": {"choices": [0.0, 0.001, 0.005, 0.01]},
-}
-
-VARSHARE_SEARCH_SPACE = {
-    "kl_beta": {"low": 1e-4, "high": 1.0, "log": True},
-    "rho_init": {"low": -7.0, "high": -3.0},
-}
-
-PACO_SEARCH_SPACE = {
-    "lr_weights": {"low": 1e-4, "high": 1e-2, "log": True},
-}
-
-SOFTMOD_SEARCH_SPACE = {
-    "lr_routing": {"low": 1e-4, "high": 1e-2, "log": True},
-}
-
-from optuna.storages import JournalStorage, JournalFileStorage
-
-def get_hpo_storage(base_dir=None):
-    """
-    Returns a JournalStorage object which is robust on distributed file systems (NFS)
-    where SQLite fails with 'disk I/O error' or locking issues.
-    """
-    if base_dir is None:
-        base_dir = os.getcwd()
-        
-    # Journal file path
-    journal_path = os.path.join(base_dir, "optuna_journal.log")
+# Define Study Configs
+STUDIES = {
+    # --- Baseline & Architecture ---
+    "mt10_varshare_base": {
+        "variant": "standard", "embedding": "none", "args": {}
+    },
+    "mt10_varshare_emb_onehot": {
+        "variant": "standard", "embedding": "onehot", "args": {} 
+    },
+    "mt10_varshare_emb_learned": { 
+        "variant": "standard", "embedding": "learned", "args": {}
+    },
+    "mt10_varshare_lora": {
+        "variant": "lora", "embedding": "none", "args": {"lora-rank": 4}
+    },
+    "mt10_varshare_partial": { 
+        "variant": "partial", "embedding": "none", "args": {}
+    },
+    "mt10_varshare_reptile": {
+        "variant": "reptile", "embedding": "none", "args": {}
+    },
+    "mt10_varshare_scaled_down": {
+        "variant": "standard", "embedding": "none", "args": {"hidden-dim": 181}
+    },
     
-    # Use JournalStorage (File-based locking)
-    storage = JournalStorage(JournalFileStorage(journal_path))
-    return storage
+    # --- Adaptive Methods ---
+    "mt10_varshare_fixed_prior": {
+        "variant": "standard", "embedding": "none", "args": {"prior-scale": 0.01} 
+    },
+    "mt10_varshare_annealing": {
+        "variant": "standard", "embedding": "none", 
+        "args": {"kl-schedule": "annealing", "warmup-frac": 0.1}
+    },
+    "mt10_varshare_trigger": {
+        "variant": "standard", "embedding": "none", 
+        "args": {"kl-schedule": "trigger"},
+        "search_space": ["target_ratio"]
+    },
+    "mt10_varshare_emp_bayes": {
+        "variant": "standard", "embedding": "none", 
+        "args": {"learned-prior": True},
+        "search_space": ["lambda_hyper"]
+    }
+}
 
-def get_sqlite_storage(base_dir=None):
-    """Legacy SQLite storage (Not recommended for cluster)"""
-    if base_dir is None:
-        base_dir = os.getcwd()
-    db_path = os.path.join(base_dir, "optuna_mt10.db")
-    return f"sqlite:///{db_path}"
 
-def get_trial_params(trial, algo):
-    """Samples parameters for a given trial and algorithm."""
-    params = {}
+def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
+    # --- Standard Search Space ---
+    lr_actor = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
+    rho_init = trial.suggest_float("rho_init", -6.0, -2.0)
+    kl_beta = trial.suggest_float("kl_beta", 1e-3, 1.0, log=True)
+    ent_coef = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
     
-    # Common PPO Params
-    params["learning_rate_actor"] = trial.suggest_float("lr_actor", **COMMON_SEARCH_SPACE["lr_actor"])
-    params["learning_rate_critic"] = trial.suggest_float("lr_critic", **COMMON_SEARCH_SPACE["lr_critic"])
-    params["ent_coef"] = trial.suggest_categorical("ent_coef", COMMON_SEARCH_SPACE["ent_coef"]["choices"])
+    # --- Extra Search Space (Conditional) ---
+    extra_cmd_args = []
     
-    # Algo Specifics
-    if algo == "varshare":
-        params["kl_beta"] = trial.suggest_float("kl_beta", **VARSHARE_SEARCH_SPACE["kl_beta"])
-        params["rho_init"] = trial.suggest_float("rho_init", **VARSHARE_SEARCH_SPACE["rho_init"])
-        params["prior_scale"] = 1.0 # Fixed
-        
-    elif algo == "paco":
-        params["lr_weights"] = trial.suggest_float("lr_weights", **PACO_SEARCH_SPACE["lr_weights"])
-        
-    elif algo == "soft_mod":
-        params["lr_routing"] = trial.suggest_float("lr_routing", **SOFTMOD_SEARCH_SPACE["lr_routing"])
-        
-    return params
+    if "search_space" in config:
+        if "target_ratio" in config["search_space"]:
+            target_ratio = trial.suggest_float("target_ratio", 0.05, 0.25)
+            extra_cmd_args.extend(["--target-ratio", str(target_ratio)])
+            
+        if "lambda_hyper" in config["search_space"]:
+            lambda_hyper = trial.suggest_float("lambda_hyper", 1e-4, 1e-1, log=True)
+            extra_cmd_args.extend(["--lambda-hyper", str(lambda_hyper)])
 
-def calculate_objective(history):
-    """
-    Calculates the objective value (scalar) from training history.
-    Strategy: Average Eval Success Rate over the last 3 evaluations.
-    """
-    if not history:
+    # --- Construct Command ---
+    hidden_dim = config["args"].get("hidden-dim", 256)
+    
+    # Allow Environment Overrides for Testing (e.g. 30k steps)
+    total_timesteps = os.environ.get("HPO_TIME_STEPS", "2000000")
+    n_steps_arg = os.environ.get("HPO_N_STEPS", str(n_steps))
+    
+    cmd = [
+        sys.executable, "scripts/train_varshare_ppo.py",
+        "--env-type", "metaworld",
+        "--mt-setting", "MT10",
+        "--total-timesteps", str(total_timesteps),
+        "--num-envs", str(n_envs),
+        "--n-steps", str(n_steps_arg),
+        "--hidden-dim", str(hidden_dim),
+        
+        # HPO
+        "--lr-actor", str(lr_actor),
+        "--rho-init", str(rho_init),
+        "--kl-beta", str(kl_beta),
+        "--ent-coef", str(ent_coef),
+        
+        # Variants
+        "--variant", config["variant"],
+        "--embedding-type", config["embedding"],
+    ]
+    
+    # Static Args
+    for k, v in config["args"].items():
+        if k == "hidden-dim": continue
+        if isinstance(v, bool):
+             if v: cmd.append(f"--{k}") # Flag
+             cmd.append("true" if v else "false")
+        else:
+             cmd.extend([f"--{k}", str(v)])
+             
+    cmd.extend(extra_cmd_args)
+    
+    run_name = f"{study_name}_trial_{trial.number}"
+    cmd.extend(["--exp-name", run_name])
+    
+    print(f"Running: {' '.join(cmd)}")
+    
+    # Execute
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        
+        # Parse for Reward
+        score = -9999.0
+        for line in reversed(result.stdout.split('\n')):
+             if "FINAL_EVAL_REWARD:" in line:
+                 score = float(line.split(":")[-1].strip())
+                 return score
+                 
+        # Fallback (Success Rate parse)
+        # Maybe log warning?
         return 0.0
         
-    # Filter for entries that have eval_success data
-    eval_entries = [h for h in history if h.get("eval_success") is not None]
-    
-    if not eval_entries:
-        # Fallback to train success if no eval happened (should not happen if budget is sufficient)
-        return history[-1].get("success", 0.0)
-        
-    # Take last 3 evals
-    last_n = min(3, len(eval_entries))
-    recent_evals = eval_entries[-last_n:]
-    
-    avg_success = np.mean([e["eval_success"] for e in recent_evals])
-    return avg_success
+    except subprocess.CalledProcessError as e:
+        print(f"Failed: {e}")
+        print("STDOUT:", e.stdout)
+        print("STDERR:", e.stderr)
+        return -9999.0
