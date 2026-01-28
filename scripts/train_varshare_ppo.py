@@ -40,6 +40,7 @@ def parse_args():
     parser.add_argument("--mu-init", type=float, default=0.0, help="Mu init")
     parser.add_argument("--rho-init", type=float, default=-5.0, help="Rho init")
     parser.add_argument("--prior-scale", type=float, default=1.0, help="Prior scale for KL")
+    parser.add_argument("--hidden-dim", type=int, default=64, help="Backbone hidden dimension")
     
     parser.add_argument("--cuda", type=lambda x: (str(x).lower() == 'true'), default=True, help="cuda toggle")
     parser.add_argument("--wandb-project", type=str, default="varshare-exp", help="wandb project")

@@ -59,6 +59,9 @@ def parse_args():
     # Method Specific LRs
     parser.add_argument("--lr-weights", type=float, default=0.001, help="PaCo weights learning rate")
     parser.add_argument("--lr-routing", type=float, default=0.001, help="SoftMod routing learning rate")
+    
+    # Architecture
+    parser.add_argument("--hidden-dim", type=int, default=64, help="Network hidden dimension")
 
     args = parser.parse_args()
     return args
