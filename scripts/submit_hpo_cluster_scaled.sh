@@ -7,7 +7,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=8G
-#SBATCH --array=1-50%10
+#SBATCH --array=1-50%5
 
 # =============================================================================
 # DFKI Pegasus HPO Launcher (SCALED: 256-dim, 2M steps)
