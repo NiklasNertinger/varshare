@@ -23,7 +23,7 @@ def objective(trial):
         "--env-type", "metaworld",
         "--mt-setting", "MT10",
         "--total-timesteps", "1000000",
-        "--num-envs", "4",
+        "--num-envs", "8",
         "--seed", str(trial.number),
         "--seed", "1",
         "--exp-name", f"optuna/varshare/trial_{trial.number}",

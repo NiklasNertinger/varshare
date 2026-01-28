@@ -26,7 +26,7 @@ def objective(trial):
         "--mt-setting", "MT10",
         "--task-id", TASK_ID,
         "--total-timesteps", "1000000",
-        "--num-envs", "4",
+        "--num-envs", "8",
         "--seed", "1",
         "--exp-name", f"optuna/oracle/trial_{trial.number}",
         "--eval-freq", "50000"

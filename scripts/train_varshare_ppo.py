@@ -219,7 +219,7 @@ def train(report_callback=None):
             return env
         return thunk
 
-    envs = gym.vector.SyncVectorEnv(
+    envs = gym.vector.AsyncVectorEnv(
         [make_env(args.seed + i, i, False, run_name) for i in range(args.num_envs)]
     )
     

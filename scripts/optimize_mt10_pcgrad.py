@@ -18,7 +18,7 @@ def objective(trial):
         "--env-type", "metaworld",
         "--mt-setting", "MT10",
         "--total-timesteps", "1000000",
-        "--num-envs", "4",
+        "--num-envs", "8",
         "--seed", "1",
         "--exp-name", f"optuna/pcgrad/trial_{trial.number}",
         "--eval-freq", "50000"
