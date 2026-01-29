@@ -304,7 +304,7 @@ def train(report_callback=None):
         embedding_type=args.embedding_type, # Pass embedding type
         embedding_dim=10, # Standard default
         num_tasks=num_tasks,
-        use_varshare=(args.algo == "varshare"),
+        use_varshare=True,
         varshare_args=varshare_args,
         num_layers=args.num_layers
     ).to(device)
