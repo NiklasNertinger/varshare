@@ -75,6 +75,17 @@ def run_seed(
     torch.backends.cudnn.deterministic = True
 
     # Env Setup
+    # Windows OOM Protection strategies
+    if os.name == 'nt':
+        print(f"Windows detected: Limiting num_envs to 2 (was {num_envs}) to prevent MemoryError/BadAllocation.")
+        num_envs = min(num_envs, 2)
+        # Adjust n_steps to maintain batch size if needed, or just let it be smaller batch (safer)
+        # If we reduce envs, we might want to increase n_steps? 
+        # But changing n_steps changes the rollout horizon. 
+        # Let's keep n_steps fixed and accept smaller batch (more updates per epoch, or just less samples).
+        # Actually, PPO batch size = num_envs * n_steps.
+        # If we reduce num_envs, we reduce batch size. This is fine for overnight stability.
+
     envs = gym.vector.AsyncVectorEnv(
         [make_env(seed + i, i, env_id="MT10") for i in range(num_envs)]
     )

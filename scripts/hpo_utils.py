@@ -31,6 +31,16 @@ STUDIES = {
         "variant": "standard", "embedding": "none", "args": {"hidden-dim": 181}
     },
     
+    # --- Clean Slate Tests (Depth) ---
+    "mt10_varshare_base_400": {
+        "variant": "standard", "embedding": "none", 
+        "args": {"hidden-dim": 400, "num-layers": 3}
+    },
+    "mt10_varshare_base_64": {
+        "variant": "standard", "embedding": "none", 
+        "args": {"hidden-dim": 64, "num-layers": 2}
+    },
+    
     # --- Adaptive Methods ---
     "mt10_varshare_fixed_prior": {
         "variant": "standard", "embedding": "none", "args": {"prior-scale": 0.01} 

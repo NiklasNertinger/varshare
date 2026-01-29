@@ -395,7 +395,7 @@ class ActorCritic(nn.Module):
     """
     def __init__(self, observation_space, action_space, hidden_dim=64, 
                  use_task_embedding=False, embedding_dim=10, num_tasks=1,
-                 use_varshare=False, varshare_args={}):
+                 use_varshare=False, varshare_args={}, num_layers=2):
         super().__init__()
         self.use_task_embedding = use_task_embedding
         self.use_varshare = use_varshare
@@ -417,11 +417,14 @@ class ActorCritic(nn.Module):
             input_dim += embedding_dim
             
         if self.use_varshare:
+            # Dynamic Hidden Dims
+            hidden_dims_list = [hidden_dim] * num_layers
+            
             # Separate Backbones (Golden Reference)
             self.actor_backbone = VarShareNetwork(
                 input_dim=input_dim, 
                 output_dims=None,
-                hidden_dims=[hidden_dim, hidden_dim],
+                hidden_dims=hidden_dims_list,
                 num_tasks=num_tasks,
                 **varshare_args
             )
@@ -429,7 +432,7 @@ class ActorCritic(nn.Module):
             self.critic_backbone = VarShareNetwork(
                 input_dim=input_dim, 
                 output_dims=None,
-                hidden_dims=[hidden_dim, hidden_dim],
+                hidden_dims=hidden_dims_list,
                 num_tasks=num_tasks,
                 **varshare_args
             )
@@ -460,21 +463,23 @@ class ActorCritic(nn.Module):
             
         else:
             # Standard MLP
-            self.critic = nn.Sequential(
-                layer_init(nn.Linear(input_dim, hidden_dim)),
-                nn.Tanh(),
-                layer_init(nn.Linear(hidden_dim, hidden_dim)),
-                nn.Tanh(),
-                layer_init(nn.Linear(hidden_dim, 1), std=1.0),
-            )
+            critic_layers = []
+            curr_in = input_dim
+            for _ in range(num_layers):
+                critic_layers.append(layer_init(nn.Linear(curr_in, hidden_dim)))
+                critic_layers.append(nn.Tanh())
+                curr_in = hidden_dim
+            critic_layers.append(layer_init(nn.Linear(hidden_dim, 1), std=1.0))
+            self.critic = nn.Sequential(*critic_layers)
             
-            self.actor_mean = nn.Sequential(
-                layer_init(nn.Linear(input_dim, hidden_dim)),
-                nn.Tanh(),
-                layer_init(nn.Linear(hidden_dim, hidden_dim)),
-                nn.Tanh(),
-                layer_init(nn.Linear(hidden_dim, self.action_dim), std=0.01),
-            )
+            actor_layers = []
+            curr_in = input_dim
+            for _ in range(num_layers):
+                actor_layers.append(layer_init(nn.Linear(curr_in, hidden_dim)))
+                actor_layers.append(nn.Tanh())
+                curr_in = hidden_dim
+            actor_layers.append(layer_init(nn.Linear(hidden_dim, self.action_dim), std=0.01))
+            self.actor_mean = nn.Sequential(*actor_layers)
         
         if self.is_continuous:
             self.actor_logstd = nn.Parameter(torch.zeros(1, self.action_dim))

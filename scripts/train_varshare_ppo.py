@@ -41,6 +41,7 @@ def parse_args():
     parser.add_argument("--rho-init", type=float, default=-5.0, help="Rho init")
     parser.add_argument("--prior-scale", type=float, default=1.0, help="Prior scale for KL")
     parser.add_argument("--hidden-dim", type=int, default=64, help="Backbone hidden dimension")
+    parser.add_argument("--num-layers", type=int, default=2, help="Number of hidden layers")
     
     # New Architectural Variants
     parser.add_argument("--variant", type=str, default="standard", choices=["standard", "lora", "partial", "reptile"], help="VarShare variant")
@@ -304,7 +305,8 @@ def train(report_callback=None):
         embedding_dim=10, # Standard default
         num_tasks=num_tasks,
         use_varshare=(args.algo == "varshare"),
-        varshare_args=varshare_args
+        varshare_args=varshare_args,
+        num_layers=args.num_layers
     ).to(device)
     
     # Configure KL Controller

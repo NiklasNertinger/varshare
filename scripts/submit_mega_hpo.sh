@@ -16,6 +16,8 @@ STUDIES=(
     "mt10_varshare_annealing"
     "mt10_varshare_trigger"
     "mt10_varshare_emp_bayes"
+    "mt10_varshare_base_400"
+    "mt10_varshare_base_64"
 )
 
 # Common Slurm Settings
