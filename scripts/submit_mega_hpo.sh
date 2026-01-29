@@ -58,7 +58,7 @@ export PYTHONPATH=$PYTHONPATH:$HOME/varshare
 # Execute Specific Optimizer Script
 echo "Running Study: ${STUDY_NAME}"
 echo "Storage: ${STORAGE_PATH}"
-python scripts/optimize_${STUDY_NAME}.py --storage-path "${STORAGE_PATH}" --n-trials "${ARRAY_SIZE}"
+python scripts/optimize_${STUDY_NAME}.py --storage-path "${STORAGE_PATH}" --n-trials 1
 
 EOT
 }

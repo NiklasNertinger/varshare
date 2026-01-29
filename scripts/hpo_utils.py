@@ -108,6 +108,11 @@ def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
         "--embedding-type", config["embedding"],
     ]
     
+    # Eval Freq Override
+    env_eval_freq = os.environ.get("HPO_EVAL_FREQ")
+    if env_eval_freq:
+        cmd.extend(["--eval-freq", env_eval_freq])
+
     # Static Args
     for k, v in config["args"].items():
         if k == "hidden-dim": continue
