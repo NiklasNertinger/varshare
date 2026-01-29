@@ -15,6 +15,9 @@ scancel -u $USER
 echo "[2/4] Deleting old HPO databases (keeping base journal)..."
 rm -f /netscratch/$USER/varshare/analysis/optuna_journal_mega.log
 rm -f /netscratch/$USER/varshare/analysis/optuna_journal_scaled.log
+echo "[2b/4] Cleaning up log files..."
+rm -rf logs/hpo_mega/*
+rm -f logs/hpo_std_*
 
 # 3. Configure Test Environment
 echo "[3/4] Exporting Test Environment Variables..."

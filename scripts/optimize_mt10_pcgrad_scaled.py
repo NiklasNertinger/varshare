@@ -18,7 +18,7 @@ def objective(trial):
         "--algo", "pcgrad", 
         "--env-type", "metaworld",
         "--mt-setting", "MT10",
-        "--total-timesteps", "2000000",
+        "--total-timesteps", os.environ.get("HPO_TIME_STEPS", "2000000"),
         "--num-envs", "8",
         "--hidden-dim", "256",
         "--seed", "1",
