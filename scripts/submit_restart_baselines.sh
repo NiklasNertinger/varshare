@@ -14,7 +14,7 @@ sbatch --job-name=hpo_varshare_scaled \
     --cpus-per-task=8 \
     --mem=8G \
     --time=72:00:00 \
-    --wrap="source /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_varshare_scaled.py --n-trials $ARRAY_SIZE --analysis-dir /netscratch/\$USER/varshare/analysis"
+    --wrap=". /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_varshare_scaled.py --n-trials $ARRAY_SIZE --analysis-dir /netscratch/\$USER/varshare/analysis"
 
 # 2. Shared Baseline
 sbatch --job-name=hpo_shared_scaled \
@@ -25,7 +25,7 @@ sbatch --job-name=hpo_shared_scaled \
     --cpus-per-task=8 \
     --mem=8G \
     --time=72:00:00 \
-    --wrap="source /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_shared_scaled.py --n-trials $ARRAY_SIZE --analysis-dir /netscratch/\$USER/varshare/analysis"
+    --wrap=". /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_shared_scaled.py --n-trials $ARRAY_SIZE --analysis-dir /netscratch/\$USER/varshare/analysis"
 
 # 3. PCGrad Baseline
 sbatch --job-name=hpo_pcgrad_scaled \
@@ -36,7 +36,7 @@ sbatch --job-name=hpo_pcgrad_scaled \
     --cpus-per-task=8 \
     --mem=8G \
     --time=72:00:00 \
-    --wrap="source /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_pcgrad_scaled.py --n-trials $ARRAY_SIZE --analysis-dir /netscratch/\$USER/varshare/analysis"
+    --wrap=". /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_pcgrad_scaled.py --n-trials $ARRAY_SIZE --analysis-dir /netscratch/\$USER/varshare/analysis"
 
 # 4. PaCo Baseline
 sbatch --job-name=hpo_paco_scaled \
@@ -47,7 +47,7 @@ sbatch --job-name=hpo_paco_scaled \
     --cpus-per-task=8 \
     --mem=8G \
     --time=72:00:00 \
-    --wrap="source /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_paco_scaled.py --n-trials $ARRAY_SIZE --analysis-dir /netscratch/\$USER/varshare/analysis"
+    --wrap=". /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_paco_scaled.py --n-trials $ARRAY_SIZE --analysis-dir /netscratch/\$USER/varshare/analysis"
 
 # 5. SoftMod Baseline
 sbatch --job-name=hpo_softmod_scaled \
@@ -58,7 +58,7 @@ sbatch --job-name=hpo_softmod_scaled \
     --cpus-per-task=8 \
     --mem=8G \
     --time=72:00:00 \
-    --wrap="source /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_soft_mod_scaled.py --n-trials $ARRAY_SIZE --analysis-dir /netscratch/\$USER/varshare/analysis"
+    --wrap=". /netscratch/\$USER/varshare/venv/bin/activate; export PYTHONPATH=\$PYTHONPATH:\$HOME/varshare; python scripts/optimize_mt10_soft_mod_scaled.py --n-trials $ARRAY_SIZE --analysis-dir /netscratch/\$USER/varshare/analysis"
 
 # 6. Oracle Baseline
 sbatch --job-name=hpo_oracle_scaled \
