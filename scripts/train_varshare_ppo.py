@@ -768,8 +768,9 @@ def train(report_callback=None):
             next_eval_step += args.eval_freq
             
             # Report to Optuna/WandB if callback provided
+            # Report to Optuna/WandB if callback provided
             if report_callback:
-                report_callback(eval_success_mean, global_step)
+                report_callback(eval_reward_mean, global_step)
             
         history[-1]["eval_reward"] = eval_reward_current
         history[-1]["eval_success"] = eval_metrics.get("eval/mean_success")
