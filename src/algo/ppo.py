@@ -244,6 +244,7 @@ class PPO:
             "approx_kl": approx_kl.item(),
             "clipfrac": np.mean(clipfracs),
             "kl_loss": kl_loss.item(),
+            "raw_kl": (kl_loss.item() / self.kl_beta) if self.kl_beta > 0 else 0.0,
             "kl_beta": self.kl_beta,
             "grad_norm": grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
         }
