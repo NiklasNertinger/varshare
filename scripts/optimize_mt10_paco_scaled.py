@@ -21,7 +21,7 @@ def objective(trial):
         "--algo", "paco",
         "--env-type", "metaworld",
         "--mt-setting", "MT10",
-        "--total-timesteps", "2000000",
+        "--total-timesteps", os.environ.get("HPO_TIME_STEPS", "2000000"),
         "--num-envs", "8",
         "--hidden-dim", "256",
         "--seed", "1",
@@ -36,7 +36,7 @@ def objective(trial):
     config.extend(["--lr-actor", str(params["learning_rate_actor"])])
     config.extend(["--lr-critic", str(params["learning_rate_critic"])])
     config.extend(["--ent-coef", str(params["ent_coef"])])
-    config.extend(["--kl-beta", "0.0"]) # PaCo logic doesn't use KL usually? Or maybe for weights? 
+
     # train_baseline_ppo might use it if PaCo has regularization. 
     # Usually PaCo is just composition. Let's pass 0 or standard. 
     # If using regularized PaCo, maybe? But standard PaCo is just param composition.

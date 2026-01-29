@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+import math
 
 class PPO:
     """
@@ -242,7 +243,7 @@ class PPO:
             "value_loss": v_loss.item(),
             "entropy": entropy_loss.item(),
             "approx_kl": approx_kl.item(),
-            "clipfrac": np.mean(clipfracs),
+            "clip_fraction": np.mean(clipfracs),
             "kl_penalty": kl_loss.item() if isinstance(kl_loss, torch.Tensor) else kl_loss,
             "raw_kl": ((kl_loss.item() if isinstance(kl_loss, torch.Tensor) else kl_loss) / self.kl_beta) if self.kl_beta > 0 else 0.0,
             "kl_beta": self.kl_beta,
