@@ -197,13 +197,16 @@ def calculate_objective(history):
     if not history:
         return -9999.0
     
+    # Get last entry
+    last_entry = history[-1]
+    
     # Prioritize Eval Reward
-    if "eval_reward" in history:
-        return history["eval_reward"]
+    if "eval_reward" in last_entry and last_entry["eval_reward"] is not None:
+        return last_entry["eval_reward"]
     
     # Fallback to last mean reward
-    if "reward" in history:
-        return history["reward"]
+    if "reward" in last_entry:
+        return last_entry["reward"]
         
     return -9999.0
 
