@@ -19,6 +19,9 @@ echo "[2b/4] Cleaning up log files..."
 rm -rf logs/hpo_mega/*
 rm -f logs/hpo_std_*
 
+echo "[2c/4] Stopping Dashboard (to release DB lock)..."
+pkill -f launch_dashboard.py || echo "Dashboard not running."
+
 # 3. Configure Test Environment
 echo "[3/4] Exporting Test Environment Variables..."
 export HPO_N_TRIALS=2
