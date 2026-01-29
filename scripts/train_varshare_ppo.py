@@ -301,7 +301,6 @@ def train(report_callback=None):
         envs.single_action_space,
         hidden_dim=args.hidden_dim,
         use_task_embedding=use_task_embedding,
-        embedding_type=args.embedding_type, # Pass embedding type
         embedding_dim=10, # Standard default
         num_tasks=num_tasks,
         use_varshare=True,
