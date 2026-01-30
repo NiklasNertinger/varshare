@@ -49,7 +49,7 @@ submit_study() {
 #SBATCH --cpus-per-task=${CPUS}
 #SBATCH --mem=${MEM}
 #SBATCH --time=${TIME}
-#SBATCH --array=0-$(($ARRAY_SIZE - 1))
+#SBATCH --array=0-$(($ARRAY_SIZE - 1))%5
 
 # 1. Setup Environment
 source /netscratch/$USER/varshare/venv/bin/activate
