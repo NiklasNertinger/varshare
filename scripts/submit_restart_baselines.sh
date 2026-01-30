@@ -3,7 +3,8 @@
 # Includes: VarShare, Shared, PCGrad, PaCo, SoftMod, Oracle
 
 ARRAY_SIZE="${HPO_N_TRIALS:-50}"
-echo "Submitting Baselines with Array Size: $ARRAY_SIZE"
+export HPO_TIME_STEPS="${HPO_TIME_STEPS:-2500000}"
+echo "Submitting Baselines with Array Size: $ARRAY_SIZE, Steps: $HPO_TIME_STEPS"
 
 # 1. VarShare Scaled (Original Study)
 sbatch --job-name=hpo_varshare_scaled \

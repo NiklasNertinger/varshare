@@ -28,6 +28,7 @@ TIME="4:00:00" # 4 hours per trial (2M steps on CPU takes ~2-3h usually)
 CPUS="8" # 8 CPUs per trial
 MEM="8G" # 8GB RAM per trial
 ARRAY_SIZE="${HPO_N_TRIALS:-50}" # Default 50, override with env var
+export HPO_TIME_STEPS="${HPO_TIME_STEPS:-2500000}"
 
 submit_study() {
     STUDY_NAME=$1

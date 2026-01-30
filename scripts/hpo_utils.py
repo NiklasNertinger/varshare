@@ -91,7 +91,7 @@ def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
     hidden_dim = config["args"].get("hidden-dim", 256)
     
     # Allow Environment Overrides for Testing (e.g. 30k steps)
-    total_timesteps = os.environ.get("HPO_TIME_STEPS", "2000000")
+    total_timesteps = os.environ.get("HPO_TIME_STEPS", "2500000")
     n_steps_arg = os.environ.get("HPO_N_STEPS", str(n_steps))
     
     cmd = [

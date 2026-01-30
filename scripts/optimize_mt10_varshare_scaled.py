@@ -22,7 +22,7 @@ def objective(trial):
     config = [
         "--env-type", "metaworld",
         "--mt-setting", "MT10",
-        "--total-timesteps", os.environ.get("HPO_TIME_STEPS", "2000000"),   # INCREASED to 2M
+        "--total-timesteps", os.environ.get("HPO_TIME_STEPS", "2500000"),   # INCREASED to 2.5M
         "--num-envs", "8",
         "--hidden-dim", "256",            # INCREASED to 256
         "--seed", "1",                    # Fixed seed for HPO stability
