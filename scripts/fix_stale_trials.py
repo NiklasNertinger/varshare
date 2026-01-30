@@ -14,16 +14,24 @@ def fix_stale_trials(journal_path):
     studies = optuna.get_all_study_summaries(storage=storage)
     
     for study_sum in studies:
-        study = optuna.load_study(study_name=study_sum.study_name, storage=storage)
-        stale_count = 0
-        for trial in study.trials:
-            if trial.state == optuna.trial.TrialState.RUNNING:
-                # Set to FAIL so they don't block and show up correctly
-                storage.set_trial_state(trial._trial_id, optuna.trial.TrialState.FAIL)
-                stale_count += 1
-        
-        if stale_count > 0:
-            print(f"Fixed {stale_count} stale trials in study '{study_sum.study_name}'")
+        try:
+            study = optuna.load_study(study_name=study_sum.study_name, storage=storage)
+            stale_count = 0
+            # iterate snapshot
+            for trial in study.trials:
+                if trial.state == optuna.trial.TrialState.RUNNING:
+                    print(f"Failing stale trial {trial.number} in study '{study_sum.study_name}'...")
+                    try:
+                        # Use study.tell() to update state safely
+                        study.tell(trial.number, state=optuna.trial.TrialState.FAIL)
+                        stale_count += 1
+                    except Exception as e:
+                        print(f"Could not fail trial {trial.number}: {e}")
+            
+            if stale_count > 0:
+                print(f"Fixed {stale_count} stale trials in study '{study_sum.study_name}'")
+        except Exception as e:
+            print(f"Error processing study {study_sum.study_name}: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
