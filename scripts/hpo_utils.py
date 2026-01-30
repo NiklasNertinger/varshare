@@ -42,8 +42,14 @@ STUDIES = {
     },
     
     # --- Adaptive Methods ---
-    "mt10_varshare_fixed_prior": {
+    "mt10_varshare_fixed_prior_001": {
         "variant": "standard", "embedding": "none", "args": {"prior-scale": 0.01} 
+    },
+    "mt10_varshare_fixed_prior_01": {
+        "variant": "standard", "embedding": "none", "args": {"prior-scale": 0.1}
+    },
+    "mt10_varshare_fixed_prior_0001": {
+        "variant": "standard", "embedding": "none", "args": {"prior-scale": 0.001}
     },
     "mt10_varshare_annealing": {
         "variant": "standard", "embedding": "none", 
