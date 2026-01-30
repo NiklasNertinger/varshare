@@ -21,7 +21,7 @@ def objective(trial):
         params["num_layers"] = trial.suggest_int("num_layers", 2, 4)
     
     config = [
-        "--algo", "soft_modularization",
+        "--algo", "soft_mod",
         "--env-type", "metaworld",
         "--mt-setting", "MT10",
         "--total-timesteps", os.environ.get("HPO_TIME_STEPS", "2000000"),

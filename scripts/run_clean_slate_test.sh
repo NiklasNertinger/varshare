@@ -27,7 +27,7 @@ echo "[3/4] Exporting Test Environment Variables..."
 export HPO_N_TRIALS=2
 export HPO_TIME_STEPS=20000
 export HPO_TIME_LIMIT=04:00:00
-export HPO_EVAL_FREQ=10000
+export HPO_EVAL_FREQ=50000
 # Also export batch-size related things? 
 # n_steps is per rollout. 256 default is fine.
 # 60k steps / 256 approx 234 updates.
