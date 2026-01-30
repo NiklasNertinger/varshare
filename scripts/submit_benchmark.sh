@@ -28,11 +28,11 @@ echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader)"
 echo "---------------------------------------------------"
 
 # 1. Run GPU Test
-echo ">>> Phase 1: GPU Training (100k steps) <<<"
+echo ">>> Phase 1: GPU Training (15k steps) <<<"
 python scripts/train_varshare_ppo.py \
     --env-type metaworld \
     --mt-setting MT10 \
-    --total-timesteps 100000 \
+    --total-timesteps 15000 \
     --cuda true \
     --hidden-dim 256 \
     --num-envs 8 \
@@ -43,11 +43,11 @@ python scripts/train_varshare_ppo.py \
 echo "GPU Run Complete. (Log: $RESULTS_DIR/gpu_log.txt)"
 
 # 2. Run CPU Test
-echo ">>> Phase 2: CPU Training (100k steps) <<<"
+echo ">>> Phase 2: CPU Training (15k steps) <<<"
 python scripts/train_varshare_ppo.py \
     --env-type metaworld \
     --mt-setting MT10 \
-    --total-timesteps 100000 \
+    --total-timesteps 15000 \
     --cuda false \
     --hidden-dim 256 \
     --num-envs 8 \
@@ -62,10 +62,6 @@ echo "---------------------------------------------------"
 echo ">>> Results Summary <<<"
 echo "Method | SPS (Approx)"
 echo "-------|-------------"
-gpu_sps=$(grep "SPS:" "$RESULTS_DIR/gpu_log.txt" | tail -n 5 | awk '{sum+=$10} END {print sum/5}') 
-# Note: Log line format might vary, robust parsing needed.
-# Usually: ... | SPS: 1234 | ...
-# We'll use a python helper for accurate parsing.
 
 python -c "
 import re
@@ -75,18 +71,18 @@ def get_sps(params):
     sps_vals = []
     with open(params, 'r') as f:
         for line in f:
-            if 'SPS:' in line:
-               try:
-                   # '... | SPS: 123 | ...'
-                   parts = line.split('|')
-                   for p in parts:
-                       if 'SPS' in p:
-                           val = float(p.split(':')[1].strip())
-                           sps_vals.append(val)
-               except: pass
-    # Ignore first 10% as warmup
+            # Look for 'SPS: <number>' pattern, regardless of context
+            match = re.search(r'SPS:\s*([\d\.]+)', line)
+            if match:
+                try:
+                    val = float(match.group(1))
+                    sps_vals.append(val)
+                except: pass
+    
     if not sps_vals: return 0.0
-    cutoff = int(len(sps_vals) * 0.1)
+    # Ignore first 10% as warmup
+    cutoff = max(1, int(len(sps_vals) * 0.1))
+    if len(sps_vals) <= cutoff: return statistics.mean(sps_vals)
     return statistics.mean(sps_vals[cutoff:])
 
 gpu = get_sps('$RESULTS_DIR/gpu_log.txt')
@@ -99,5 +95,8 @@ print(f'Speedup: {speedup:.2f}x')
 " > "$RESULTS_DIR/summary_report.txt"
 
 cat "$RESULTS_DIR/summary_report.txt"
+echo "---------------------------------------------------"
+echo ">>> Debug: Last 10 lines of GPU Log <<<"
+tail -n 10 "$RESULTS_DIR/gpu_log.txt"
 echo "---------------------------------------------------"
 echo "Results saved to: $RESULTS_DIR/summary_report.txt"
