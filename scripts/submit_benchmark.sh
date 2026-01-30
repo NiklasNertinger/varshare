@@ -3,7 +3,6 @@
 # 1. Requests a GPU Node
 # 2. Runs Training on GPU
 # 3. Runs Training on CPU (Same Node)
-# 4. Saves logs to separate files for analysis
 
 #SBATCH --job-name=bench_gpu_cpu
 #SBATCH --output=logs/benchmark_%j.out
@@ -27,76 +26,55 @@ echo "CPU: $(lscpu | grep 'Model name' | cut -d ':' -f 2 | xargs)"
 echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader)"
 echo "---------------------------------------------------"
 
-# 1. Run GPU Test
-echo ">>> Phase 1: GPU Training (15k steps) <<<"
-python scripts/train_varshare_ppo.py \
-    --env-type metaworld \
-    --mt-setting MT10 \
-    --total-timesteps 15000 \
-    --cuda true \
-    --hidden-dim 256 \
-    --num-envs 8 \
-    --exp-name benchmark_gpu \
-    --analysis-dir "$RESULTS_DIR" \
-    --seed 777 > "$RESULTS_DIR/gpu_log.txt" 2>&1
+TIMING_FILE="$RESULTS_DIR/times.txt"
+rm -f "$TIMING_FILE"
 
-echo "GPU Run Complete. (Log: $RESULTS_DIR/gpu_log.txt)"
+# Function to run and time
+run_test() {
+    MODE=$1
+    CUDA_FLAG=$2
+    
+    echo ">>> Running $MODE Training (20k steps) <<<"
+    
+    start_time=$(date +%s)
+    
+    python scripts/train_varshare_ppo.py \
+        --env-type metaworld \
+        --mt-setting MT10 \
+        --total-timesteps 20000 \
+        --cuda $CUDA_FLAG \
+        --hidden-dim 256 \
+        --num-envs 8 \
+        --exp-name "benchmark_$MODE" \
+        --analysis-dir "$RESULTS_DIR" \
+        --seed 777 > "$RESULTS_DIR/${MODE}_log.txt" 2>&1
+        
+    end_time=$(date +%s)
+    duration=$((end_time - start_time))
+    
+    echo "$MODE: $duration seconds" >> "$TIMING_FILE"
+    echo "$MODE finished in $duration seconds."
+}
+
+# 1. Run GPU Test
+run_test "GPU" "true"
 
 # 2. Run CPU Test
-echo ">>> Phase 2: CPU Training (15k steps) <<<"
-python scripts/train_varshare_ppo.py \
-    --env-type metaworld \
-    --mt-setting MT10 \
-    --total-timesteps 15000 \
-    --cuda false \
-    --hidden-dim 256 \
-    --num-envs 8 \
-    --exp-name benchmark_cpu \
-    --analysis-dir "$RESULTS_DIR" \
-    --seed 777 > "$RESULTS_DIR/cpu_log.txt" 2>&1
+run_test "CPU" "false"
 
-echo "CPU Run Complete. (Log: $RESULTS_DIR/cpu_log.txt)"
 echo "---------------------------------------------------"
-
-# 3. Quick Analysis
 echo ">>> Results Summary <<<"
-echo "Method | SPS (Approx)"
-echo "-------|-------------"
+cat "$TIMING_FILE"
 
-python -c "
-import re
-import statistics
+# Calculate Speedup
+gpu_time=$(grep "GPU" "$TIMING_FILE" | awk '{print $2}')
+cpu_time=$(grep "CPU" "$TIMING_FILE" | awk '{print $2}')
 
-def get_sps(params):
-    sps_vals = []
-    with open(params, 'r') as f:
-        for line in f:
-            # Look for 'SPS: <number>' pattern, regardless of context
-            match = re.search(r'SPS:\s*([\d\.]+)', line)
-            if match:
-                try:
-                    val = float(match.group(1))
-                    sps_vals.append(val)
-                except: pass
-    
-    if not sps_vals: return 0.0
-    # Ignore first 10% as warmup
-    cutoff = max(1, int(len(sps_vals) * 0.1))
-    if len(sps_vals) <= cutoff: return statistics.mean(sps_vals)
-    return statistics.mean(sps_vals[cutoff:])
-
-gpu = get_sps('$RESULTS_DIR/gpu_log.txt')
-cpu = get_sps('$RESULTS_DIR/cpu_log.txt')
-speedup = gpu / cpu if cpu > 0 else 0
-
-print(f'GPU SPS: {gpu:.2f}')
-print(f'CPU SPS: {cpu:.2f}')
-print(f'Speedup: {speedup:.2f}x')
-" > "$RESULTS_DIR/summary_report.txt"
-
-cat "$RESULTS_DIR/summary_report.txt"
+if [ "$gpu_time" -gt 0 ]; then
+    speedup=$(echo "scale=2; $cpu_time / $gpu_time" | bc)
+    echo "Speedup (CPU Time / GPU Time): ${speedup}x"
+else
+    echo "Error: Invalid GPU time."
+fi
 echo "---------------------------------------------------"
-echo ">>> Debug: Last 10 lines of GPU Log <<<"
-tail -n 10 "$RESULTS_DIR/gpu_log.txt"
-echo "---------------------------------------------------"
-echo "Results saved to: $RESULTS_DIR/summary_report.txt"
+echo "Results saved to: $TIMING_FILE"
