@@ -129,24 +129,75 @@ def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
     
     print(f"Running: {' '.join(cmd)}")
     
-    # Execute
+    # Execute with Streaming
+    final_score = -9999.0
+    current_step = 0
+    
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        process = subprocess.Popen(
+            cmd, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT, # Merge stderr to stdout
+            text=True, 
+            bufsize=1, # Line buffered
+            universal_newlines=True
+        )
         
-        # Parse for Reward
-        score = -9999.0
-        for line in reversed(result.stdout.split('\n')):
-             if "FINAL_EVAL_REWARD:" in line:
-                 score = float(line.split(":")[-1].strip())
-                 return score
-                 
-        # Fallback (Success Rate parse)
-        # Maybe log warning?
-        return 0.0
+        # Stream Output
+        for line in process.stdout:
+            print(line, end="") # Echo to current log
+            
+            # 1. Track Step
+            if "Running Evaluation at Step" in line:
+                try:
+                    # Format: >>> Running Evaluation at Step 60000...
+                    parts = line.split("Step")
+                    if len(parts) > 1:
+                        step_str = parts[1].strip().rstrip("...")
+                        current_step = int(step_str)
+                except ValueError:
+                    pass
+            
+            # 2. Track & Report Reward
+            if "Eval Reward:" in line and "Eval Success:" in line:
+                try:
+                    # Format: Eval Reward: 123.45 | Eval Success: 0.12
+                    parts = line.split("|")
+                    reward_part = parts[0].split(":")[1].strip()
+                    reward_val = float(reward_part)
+                    
+                    # Report to Optuna
+                    trial.report(reward_val, current_step)
+                    
+                    # Pruning Check
+                    if trial.should_prune():
+                        print(f"Trial {trial.number} pruned at step {current_step}.")
+                        process.kill()
+                        raise optuna.exceptions.TrialPruned()
+                        
+                except (ValueError, IndexError):
+                    pass
+
+            # 3. Capture Final Score
+            if "FINAL_EVAL_REWARD:" in line:
+                try:
+                    final_score = float(line.split(":")[-1].strip())
+                except ValueError:
+                    pass
+
+        # Wait for finish
+        ret_code = process.wait()
         
-    except subprocess.CalledProcessError as e:
-        print("STDOUT:", e.stdout)
-        print("STDERR:", e.stderr)
+        if ret_code != 0:
+            print(f"Process failed with return code {ret_code}")
+            return -9999.0
+            
+        return final_score
+
+    except optuna.exceptions.TrialPruned:
+        raise
+    except Exception as e:
+        print(f"Exception during trial execution: {e}")
         return -9999.0
 
 def get_trial_params(trial, algo):
@@ -181,7 +232,7 @@ def get_trial_params(trial, algo):
          params["num_experts"] = trial.suggest_int("num_experts", 2, 8)
          params["lr_weights"] = trial.suggest_float("lr_weights", 1e-4, 1e-2, log=True)
 
-    elif algo == "soft_mod":
+    elif algo == "soft_mod" or algo == "soft_modularization":
          params["learning_rate_actor"] = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
          params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)
          params["ent_coef"] = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
