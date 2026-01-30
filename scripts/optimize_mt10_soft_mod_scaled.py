@@ -17,8 +17,6 @@ def objective(trial):
     # Ensure num_modules is present (if get_trial_params doesn't provide it)
     if "num_modules" not in params:
         params["num_modules"] = trial.suggest_int("num_modules", 2, 8)
-    if "num_layers" not in params:
-        params["num_layers"] = trial.suggest_int("num_layers", 2, 4)
     
     config = [
         "--algo", "soft_mod",
@@ -34,7 +32,6 @@ def objective(trial):
     
     # Soft Mod Specifics
     config.extend(["--num-modules", str(params["num_modules"])])
-    config.extend(["--num-layers", str(params["num_layers"])])
     
     config.extend(["--lr-actor", str(params["learning_rate_actor"])])
     config.extend(["--lr-critic", str(params["learning_rate_critic"])])
