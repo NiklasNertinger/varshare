@@ -70,9 +70,11 @@ STUDIES = {
 
 def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
     # --- Standard Search Space ---
-    lr_actor = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
+    lr_actor = trial.suggest_float("lr_actor", 5e-5, 3e-3, log=True)
+    lr_critic = trial.suggest_float("lr_critic", 1e-4, 5e-3, log=True)
     rho_init = trial.suggest_float("rho_init", -6.0, -2.0)
-    kl_beta = trial.suggest_float("kl_beta", 1e-3, 1.0, log=True)
+    kb_low = 1e-4 if "emp_bayes" in study_name else 1e-3
+    kl_beta = trial.suggest_float("kl_beta", kb_low, 1.0, log=True)
     ent_coef = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
     
     # --- Extra Search Space (Conditional) ---
@@ -105,6 +107,7 @@ def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
         
         # HPO
         "--lr-actor", str(lr_actor),
+        "--lr-critic", str(lr_critic),
         "--rho-init", str(rho_init),
         "--kl-beta", str(kl_beta),
         "--ent-coef", str(ent_coef),
@@ -176,10 +179,11 @@ def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
                     trial.report(reward_val, current_step)
                     
                     # Pruning Check
-                    if trial.should_prune():
-                        print(f"Trial {trial.number} pruned at step {current_step}.")
-                        process.kill()
-                        raise optuna.exceptions.TrialPruned()
+                    # Pruning Check (Disabled for V2)
+                    # if trial.should_prune():
+                    #     print(f"Trial {trial.number} pruned at step {current_step}.")
+                    #     process.kill()
+                    #     raise optuna.exceptions.TrialPruned()
                         
                 except (ValueError, IndexError):
                     pass
@@ -213,10 +217,11 @@ def get_trial_params(trial, algo):
     params = {}
     
     # Common PPO Hyperparams
-    params["learning_rate_actor"] = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
+    lr_low = 5e-5 if algo == "varshare" else 1e-4
+    params["learning_rate_actor"] = trial.suggest_float("lr_actor", lr_low, 3e-3, log=True)
     if algo == "varshare":
          # VarShare typically uses same or similar LR for critic, or specific
-         params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)
+         params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 5e-3, log=True)
          params["rho_init"] = trial.suggest_float("rho_init", -6.0, -2.0)
          params["kl_beta"] = trial.suggest_float("kl_beta", 1e-3, 1.0, log=True)
          params["ent_coef"] = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])

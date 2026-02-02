@@ -75,7 +75,7 @@ if __name__ == "__main__":
     builtins.HPO_ARGS = args
     os.makedirs(args.analysis_dir, exist_ok=True)
     
-    storage_path = os.path.join(args.analysis_dir, "optuna_journal_scaled.log")
+    storage_path = os.path.join(args.analysis_dir, os.environ.get("HPO_STORAGE_FILE", "optuna_journal_scaled.log"))
     # Fix 4.0 deprecation
     try:
         from optuna.storages import JournalStorage, JournalFileStorage

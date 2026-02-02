@@ -82,7 +82,7 @@ if __name__ == "__main__":
     # Creating a Journal file is better for concurrency if on shared file system, 
     # but sqlite is standard. The original script used hpo_utils which defaults to journal.
     # Let's stick to Journal for consistency with hpo_utils but NEW file.
-    storage_path = os.path.join(args.analysis_dir, "optuna_journal_scaled.log")
+    storage_path = os.path.join(args.analysis_dir, os.environ.get("HPO_STORAGE_FILE", "optuna_journal_scaled.log"))
     storage = optuna.storages.JournalStorage(
         optuna.storages.JournalFileStorage(storage_path)
     )
