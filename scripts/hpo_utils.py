@@ -134,7 +134,7 @@ def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
              
     cmd.extend(extra_cmd_args)
     
-    run_name = f"{study_name}_trial_{trial.number}"
+    run_name = os.path.join(study_name, f"trial_{trial.number}")
     cmd.extend(["--exp-name", run_name])
     
     print(f"Running: {' '.join(cmd)}")

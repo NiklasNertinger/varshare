@@ -736,7 +736,8 @@ def train(report_callback=None):
             "success": avg_success,
             "norm_mu": arch_metrics["mean_norm_mu"],
             "norm_theta": arch_metrics["mean_norm_theta"],
-            "sharing_ratio": arch_metrics["sharing_ratio"]
+            "sharing_ratio": arch_metrics["sharing_ratio"],
+            "sigma_prior": arch_metrics.get("sigma_prior", None)
         })
         
         # Evaluation placeholder in history (for nice alignment, use previous or Nan if not eval step)
@@ -846,6 +847,10 @@ def train(report_callback=None):
     plot_metric(history, "norm_mu", "Mean Norm Mu", "norm_mu.png")
     plot_metric(history, "norm_theta", "Mean Norm Theta", "norm_theta.png")
     plot_metric(history, "sharing_ratio", "Sharing Ratio", "sharing_ratio.png")
+    
+    # Optional DB Plot
+    if any(h.get("sigma_prior") is not None for h in history):
+        plot_metric(history, "sigma_prior", "Sigma Prior (Emp. Bayes)", "sigma_prior.png")
     
     # New Plots
     plot_metric(history, "episodes", "Total Episodes", "episodes.png")
