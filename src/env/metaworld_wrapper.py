@@ -41,8 +41,8 @@ class MetaWorldWrapper(gym.Env):
             # Distinct tasks: Reach, Push, Pick-Place, Door-Open
             # Note: Exact names usually have -v2 suffix in MetaWorld MT10
             # Let's inspect available keys or use keywords
-            # Known MT10 tasks: window-close-v2, push-v2, pick-place-v2, door-open-v2, ...
-            desired_tasks = ["window-close-v2", "push-v2", "pick-place-v2", "door-open-v2"]
+            # Known MT10 tasks: window-close-v3, push-v3, pick-place-v3, door-open-v3, ...
+            desired_tasks = ["window-close-v3", "push-v3", "pick-place-v3", "door-open-v3"]
             self.all_tasks = [t for t in self.all_tasks if t.env_name in desired_tasks]
             self.train_classes = {k: v for k, v in self.train_classes.items() if k in desired_tasks}
 
