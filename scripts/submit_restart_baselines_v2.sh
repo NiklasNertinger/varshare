@@ -3,7 +3,7 @@
 # Submit ALL Standalone HPO Studies (Baselines + Scaled VarShare) for V2
 
 ARRAY_SIZE="${HPO_N_TRIALS:-30}"
-export HPO_TIME_STEPS="${HPO_TIME_STEPS:-10000000}"
+export HPO_TIME_STEPS="${HPO_TIME_STEPS:-3000000}"
 # Overide storage file for the python scripts
 export HPO_STORAGE_FILE="optuna_journal_scaled_v2.log" 
 TIME_LIMIT="${HPO_TIME_LIMIT:-12:00:00}"

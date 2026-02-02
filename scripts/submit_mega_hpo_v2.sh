@@ -54,7 +54,8 @@ submit_study() {
 
 source /netscratch/$USER/varshare/venv/bin/activate
 export PYTHONPATH=$PYTHONPATH:$HOME/varshare
-export HPO_TIME_STEPS=${HPO_TIME_STEPS}
+# Default to 3M steps (MT4)
+export HPO_TIME_STEPS="${HPO_TIME_STEPS:-3000000}" 
 export HPO_ANALYSIS_DIR=${HPO_ANALYSIS_DIR}
 
 python scripts/optimize_${STUDY_NAME}.py --storage-path "${STORAGE_PATH}" --n-trials 1

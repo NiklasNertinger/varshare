@@ -23,6 +23,8 @@ class MetaWorldWrapper(gym.Env):
             # MT3 isn't a native class in all versions, often just a subset
             # We'll pick 3 tasks manually if needed or use MT10 and subselect
             self.benchmark = metaworld.MT10(seed=seed) # Fallback to MT10
+        elif benchmark == "MT4":
+            self.benchmark = metaworld.MT10(seed=seed)
         else:
             raise ValueError(f"Unsupported benchmark: {benchmark}")
 
@@ -35,6 +37,14 @@ class MetaWorldWrapper(gym.Env):
             unique_task_names = list(self.train_classes.keys())[:3]
             self.all_tasks = [t for t in self.all_tasks if t.env_name in unique_task_names]
             self.train_classes = {k: v for k, v in self.train_classes.items() if k in unique_task_names}
+        elif benchmark == "MT4":
+            # Distinct tasks: Reach, Push, Pick-Place, Door-Open
+            # Note: Exact names usually have -v2 suffix in MetaWorld MT10
+            # Let's inspect available keys or use keywords
+            # Known MT10 tasks: window-close-v2, push-v2, pick-place-v2, door-open-v2, ...
+            desired_tasks = ["window-close-v2", "push-v2", "pick-place-v2", "door-open-v2"]
+            self.all_tasks = [t for t in self.all_tasks if t.env_name in desired_tasks]
+            self.train_classes = {k: v for k, v in self.train_classes.items() if k in desired_tasks}
 
         self.task_names = list(self.train_classes.keys())
         self.num_tasks = len(self.task_names)

@@ -99,7 +99,7 @@ def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
     cmd = [
         sys.executable, "scripts/train_varshare_ppo.py",
         "--env-type", "metaworld",
-        "--mt-setting", "MT10",
+        "--mt-setting", os.environ.get("HPO_MT_SETTING", "MT10"),
         "--total-timesteps", str(total_timesteps),
         "--analysis-dir", os.environ.get("HPO_ANALYSIS_DIR", "analysis"),
         "--num-envs", str(n_envs),

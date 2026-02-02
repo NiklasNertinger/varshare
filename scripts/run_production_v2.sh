@@ -32,10 +32,11 @@ pkill -f launch_dashboard.py || echo "Dashboard not running."
 
 # 3. Configure Production Environment
 echo "[3/4] Exporting V2 Environment Variables..."
-export HPO_N_TRIALS=2 # TEST MODE
-export HPO_TIME_STEPS=15000 # TEST MODE
-export HPO_TIME_LIMIT=04:00:00 # Safe limit
+export HPO_N_TRIALS=35
+export HPO_TIME_STEPS=3000000
+export HPO_TIME_LIMIT=06:00:00 # Adjusted for 3M steps
 export HPO_EVAL_FREQ=50000
+export HPO_MT_SETTING="MT4"
 export HPO_ANALYSIS_DIR="/netscratch/$USER/varshare/analysis/mega_v2"
 export HPO_SCALED_DIR="/netscratch/$USER/varshare/analysis/scaled_v2"
 
