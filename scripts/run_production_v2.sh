@@ -36,6 +36,11 @@ export HPO_N_TRIALS=2 # TEST MODE
 export HPO_TIME_STEPS=15000 # TEST MODE
 export HPO_TIME_LIMIT=04:00:00 # Safe limit
 export HPO_EVAL_FREQ=50000
+export HPO_ANALYSIS_DIR="analysis/mega_v2"
+
+echo "[3b/4] Cleaning V2 Analysis Directory..."
+rm -rf ${HPO_ANALYSIS_DIR}
+mkdir -p ${HPO_ANALYSIS_DIR}
 
 # 4. Submit Jobs
 echo "[4/4] Submitting Jobs..."

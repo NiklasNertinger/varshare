@@ -101,6 +101,7 @@ def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
         "--env-type", "metaworld",
         "--mt-setting", "MT10",
         "--total-timesteps", str(total_timesteps),
+        "--analysis-dir", os.environ.get("HPO_ANALYSIS_DIR", "analysis"),
         "--num-envs", str(n_envs),
         "--n-steps", str(n_steps_arg),
         "--hidden-dim", str(hidden_dim),
