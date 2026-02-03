@@ -21,13 +21,13 @@ def objective(trial):
     # Fixed Settings for MT10 HPO (Scaled)
     config = [
         "--env-type", "metaworld",
-        "--mt-setting", "MT10",
+        "--mt-setting", os.environ.get("HPO_MT_SETTING", "MT10"),
         "--total-timesteps", os.environ.get("HPO_TIME_STEPS", "2500000"),   # INCREASED to 2.5M
         "--num-envs", "8",
         "--hidden-dim", "256",            # INCREASED to 256
         "--seed", "1",                    # Fixed seed for HPO stability
         "--exp-name", f"optuna_scaled/varshare/trial_{trial.number}",
-        "--eval-freq", "50000"
+        "--eval-freq", os.environ.get("HPO_EVAL_FREQ", "50000")
     ]
     
     # HParams with specific flags

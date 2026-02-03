@@ -17,13 +17,13 @@ def objective(trial):
     config = [
         "--algo", "pcgrad", 
         "--env-type", "metaworld",
-        "--mt-setting", "MT10",
+        "--mt-setting", os.environ.get("HPO_MT_SETTING", "MT10"),
         "--total-timesteps", os.environ.get("HPO_TIME_STEPS", "2000000"),
         "--num-envs", "8",
         "--hidden-dim", "256",
         "--seed", "1",
         "--exp-name", f"optuna_scaled/pcgrad/trial_{trial.number}",
-        "--eval-freq", "50000"
+        "--eval-freq", os.environ.get("HPO_EVAL_FREQ", "50000")
     ]
     
     config.extend(["--lr-actor", str(params["learning_rate_actor"])])

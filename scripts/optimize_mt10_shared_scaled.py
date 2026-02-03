@@ -17,13 +17,13 @@ def objective(trial):
     config = [
         "--algo", "shared",
         "--env-type", "metaworld",
-        "--mt-setting", "MT10",
+        "--mt-setting", os.environ.get("HPO_MT_SETTING", "MT10"),
         "--total-timesteps", os.environ.get("HPO_TIME_STEPS", "2500000"),
         "--num-envs", "8",
         "--hidden-dim", "256",
         "--seed", "1",
         "--exp-name", f"optuna_scaled/shared/trial_{trial.number}",
-        "--eval-freq", "50000"
+        "--eval-freq", os.environ.get("HPO_EVAL_FREQ", "50000")
     ]
     
     # Shared specific (Task Embeddings usually enabled for shared MTL)
