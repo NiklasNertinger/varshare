@@ -31,6 +31,10 @@ class VarShareLayer(nn.Module):
         if self.learned_prior:
             # Initialize to log(0.1) -> sigma=0.1
             self.log_sigma_prior = nn.Parameter(torch.tensor(math.log(0.1)))
+            
+        # Consistent Noise State (V4 Ablation)
+        self.use_consistent_noise = False
+        self.cached_eps = {} # Stores noise per task (non-trainable, but stateful)
         
         self.reset_parameters()
 
@@ -45,6 +49,28 @@ class VarShareLayer(nn.Module):
         # Weights
         self.mus[t_key] = nn.Parameter(torch.zeros_like(self.theta) + mu_init)
         self.rhos[t_key] = nn.Parameter(torch.ones_like(self.theta) * rho_init)
+
+    def sample_noise(self, task_ids=None):
+        """
+        Samples and caches noise for specified tasks (or all known tasks).
+        Used for 'Consistent Noise' ablation.
+        """
+        if task_ids is None:
+            # Sample for all
+            keys = self.mus.keys()
+        else:
+            if isinstance(task_ids, int): task_ids = [task_ids]
+            keys = [str(t) for t in task_ids]
+            
+        for k in keys:
+            if k not in self.mus: continue
+            # Sample epsilon ~ N(0, I) matching theta shape
+            # Consistent with Local Reparam: epsilon matches output OR weight?
+            # Wait, local reparam samples epsilon matching OUTPUT (B, Out).
+            # "Global" reparam (Weight Sampling) samples epsilon matching WEIGHT (Out, In).
+            # We must use weight shape here.
+            eps = torch.randn_like(self.theta)
+            self.cached_eps[k] = eps
 
     def forward(self, x, task_id, sample=True):
         if isinstance(task_id, torch.Tensor):
@@ -65,6 +91,22 @@ class VarShareLayer(nn.Module):
         sigma = F.softplus(rho)
         weight_mean = theta + mu
         
+        # Consistent Noise / Weight Sampling Mode
+        if self.use_consistent_noise and not self.training:
+            # If eval, we usually use mean. But if we want to evaluate STOCHASTIC policy?
+            # User instructions "sample single time per rollout ... including update".
+            # This implies TRAINING mode.
+            pass
+            
+        if self.use_consistent_noise and task_key in self.cached_eps:
+            # Weight Sampling (Global Reparam)
+            # w = theta + mu + sigma * eps_fixed
+            # eps_fixed is [Out, In]
+            eps = self.cached_eps[task_key]
+            # noisy_weight = theta + mu + sigma * eps
+            weight_sample = weight_mean + sigma * eps
+            return F.linear(x, weight_sample, self.bias)
+
         if not self.training or not sample:
             return F.linear(x, weight_mean, self.bias)
 
@@ -111,21 +153,53 @@ class VarShareLayer(nn.Module):
         if task_key not in self.mus:
             return None
         
-        theta = self.theta
-        mu = self.mus[task_key]
-        rho = self.rhos[task_key]
-        sigma = F.softplus(rho)
-        
-        norm_theta = torch.norm(theta).item()
-        norm_mu = torch.norm(mu).item()
-        avg_sigma = torch.mean(sigma).item()
-        
-        return {
-            "norm_theta": norm_theta,
-            "norm_mu": norm_mu,
-            "avg_sigma": avg_sigma,
-            "sharing_ratio": norm_theta / (norm_theta + norm_mu + 1e-8)
-        }
+        with torch.no_grad():
+            theta = self.theta
+            mu = self.mus[task_key]
+            rho = self.rhos[task_key]
+            sigma = F.softplus(rho)
+            
+            norm_theta = torch.norm(theta).item()
+            norm_mu = torch.norm(mu).item()
+            avg_sigma = torch.mean(sigma).item()
+            
+            # --- Advanced Metrics ---
+            # 1. Sparsity: Fraction of |mu| < 0.01 * mean(|theta|)
+            theta_abs_mean = torch.mean(torch.abs(theta)).item()
+            sparsity_threshold = 0.01 * (theta_abs_mean + 1e-8)
+            sparsity = (torch.abs(mu) < sparsity_threshold).float().mean().item()
+            
+            # 2. Residual SNR: mean(|mu| / sigma)
+            # Avoid div by zero
+            snr = torch.mean(torch.abs(mu) / (sigma + 1e-8)).item()
+            
+            # 3. Posterior Collapse Rate: Fraction of dims with KL < 1e-4
+            # We need per-dimension KL. Re-use logic from kl_divergence but kept vectorized.
+            var_q = sigma.pow(2)
+            if self.learned_prior:
+                var_p = torch.exp(self.log_sigma_prior).pow(2)
+            else:
+                var_p = self.prior_scale ** 2
+            
+            # KL_i = 0.5 * (log(vp) - log(vq) + (vq + mu^2)/vp - 1)
+            kl_elem = 0.5 * (math.log(var_p) - torch.log(var_q + 1e-8) + (var_q + mu.pow(2)) / var_p - 1)
+            collapse_rate = (kl_elem < 1e-4).float().mean().item()
+            
+            # 4. Sigma Homogeneity: Variance of sigma
+            # If all sigmas are equal -> var=0 -> high homogeneity (low heterogeneity)
+            # Metric name: sigma_variance
+            sigma_variance = torch.var(sigma).item()
+
+            return {
+                "norm_theta": norm_theta,
+                "norm_mu": norm_mu,
+                "avg_sigma": avg_sigma,
+                "sharing_ratio": norm_theta / (norm_theta + norm_mu + 1e-8),
+                "sparsity": sparsity,
+                "residual_snr": snr,
+                "posterior_collapse": collapse_rate,
+                "sigma_variance": sigma_variance
+            }
 
 class VarShareLoRALayer(nn.Module):
     def __init__(self, in_features, out_features, rank=4, prior_scale=1.0, learned_prior=False):
@@ -155,6 +229,11 @@ class VarShareLoRALayer(nn.Module):
         if self.learned_prior:
             self.log_sigma_prior = nn.Parameter(torch.tensor(math.log(0.1)))
 
+        # Consistent Noise State (V4 Ablation)
+        self.use_consistent_noise = False
+        self.cached_eps_A = {}
+        self.cached_eps_B = {}
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -177,6 +256,22 @@ class VarShareLoRALayer(nn.Module):
         self.mus_B[t_key] = nn.Parameter(torch.zeros(self.out_features, self.rank))
         self.rhos_B[t_key] = nn.Parameter(torch.ones(self.out_features, self.rank) * rho_init)
 
+    def sample_noise(self, task_ids=None):
+        """
+        Samples and caches noise for specified tasks (or all known tasks).
+        """
+        if task_ids is None:
+            keys = self.mus_A.keys()
+        else:
+            if isinstance(task_ids, int): task_ids = [task_ids]
+            keys = [str(t) for t in task_ids]
+            
+        for k in keys:
+            if k not in self.mus_A: continue
+            
+            self.cached_eps_A[k] = torch.randn(self.rank, self.in_features).to(self.theta.device)
+            self.cached_eps_B[k] = torch.randn(self.out_features, self.rank).to(self.theta.device)
+
     def forward(self, x, task_id, sample=True):
         if isinstance(task_id, torch.Tensor):
             t_id = task_id.flatten()[0].item()
@@ -196,13 +291,30 @@ class VarShareLoRALayer(nn.Module):
         rho_B = self.rhos_B[task_key]
         sigma_B = F.softplus(rho_B)
         
-        # Sample or Mean
-        if self.training and sample:
-            A = Normal(mu_A, sigma_A).rsample()
-            B = Normal(mu_B, sigma_B).rsample()
+        # Consistent Noise Logic
+        if self.use_consistent_noise and task_key in self.cached_eps_A:
+             eps_A = self.cached_eps_A[task_key]
+             eps_B = self.cached_eps_B[task_key]
+             
+             A = mu_A + sigma_A * eps_A
+             B = mu_B + sigma_B * eps_B
+        elif self.training and sample:
+             # Standard Local Reparam (on weights)
+             # Wait, LoRA usually doesn't do local reparam on forward(x)? 
+             # It does reparam on A and B matrices themselves.
+             # So LoRA is inherently "Weight" sampling anyway (just limited rank).
+             # The difference is whether we resample per batch element or per batch?
+             # Standard VarLoRA implementation here uses `Normal(mu, sigma).rsample()` 
+             # which generates [rank, in] matrix. This is per-forward-pass per-batch?
+             # If `forward` is called with batch `x`, `rsample()` makes ONE sample of A, B.
+             # So actually, VarLoRA ALREADY does "Weight Reparameterization" (it doesn't sample per x in batch).
+             # BUT, it samples NEW weights every forward call.
+             # "Consistent Noise" means keep A, B fixed across rollout.
+             A = Normal(mu_A, sigma_A).rsample()
+             B = Normal(mu_B, sigma_B).rsample()
         else:
-            A = mu_A
-            B = mu_B
+             A = mu_A
+             B = mu_B
             
         # Effective Weight
         # residual = B @ A -> [out, rank] @ [rank, in] -> [out, in]
@@ -319,6 +431,16 @@ class VarShareNetwork(nn.Module):
         
         self.output_dim = prev_dim 
         
+    def sample_noise(self, task_ids=None):
+        for layer in self.layers:
+            if hasattr(layer, "sample_noise"):
+                layer.sample_noise(task_ids)
+                
+    def set_consistent_noise(self, enabled=True):
+        for layer in self.layers:
+            if hasattr(layer, "use_consistent_noise"):
+                layer.use_consistent_noise = enabled
+
     def forward(self, x, task_id, sample=True):
         for layer in self.layers:
             # Check if layer supports task_id (VarShare/LoRA)
@@ -338,21 +460,25 @@ class VarShareNetwork(nn.Module):
 
     def get_architectural_metrics(self, task_id):
         metrics = []
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             if hasattr(layer, "get_architectural_metrics"):
                 m = layer.get_architectural_metrics(task_id)
-                if m: metrics.append(m)
+                if m: 
+                    m["layer_index"] = i
+                    metrics.append(m)
             else:
                 # Standard Layer Metrics (approximate for aggregation)
-                # sharing_ratio = 1.0 (all shared)
-                # norm_theta = actual norm
-                # norm_mu = 0
                 if hasattr(layer, "weight"):
                      metrics.append({
+                         "layer_index": i,
                          "norm_theta": torch.norm(layer.weight).item(),
                          "norm_mu": 0.0,
                          "avg_sigma": 0.0,
-                         "sharing_ratio": 1.0
+                         "sharing_ratio": 1.0,
+                         "sparsity": 0.0,
+                         "residual_snr": 0.0,
+                         "posterior_collapse": 0.0,
+                         "sigma_variance": 0.0
                      })
         
         if not metrics: return {}
@@ -362,8 +488,25 @@ class VarShareNetwork(nn.Module):
             "mean_norm_theta": np.mean([m["norm_theta"] for m in metrics]),
             "mean_norm_mu": np.mean([m["norm_mu"] for m in metrics]),
             "sharing_ratio": np.mean([m["sharing_ratio"] for m in metrics]),
-            "avg_sigma": np.mean([m["avg_sigma"] for m in metrics])
+            "avg_sigma": np.mean([m["avg_sigma"] for m in metrics]),
+            "sparsity": np.mean([m.get("sparsity", 0.0) for m in metrics]),
+            "residual_snr": np.mean([m.get("residual_snr", 0.0) for m in metrics]),
+            "posterior_collapse": np.mean([m.get("posterior_collapse", 0.0) for m in metrics]),
+            "sigma_variance": np.mean([m.get("sigma_variance", 0.0) for m in metrics])
         }
+        
+        # Layer-wise Profile (Mu/Theta ratio per layer)
+        # We store this as a dict of "profile_layer_X"
+        for m in metrics:
+            idx = m["layer_index"]
+            # Ratio
+            ratio = m["norm_mu"] / (m["norm_theta"] + 1e-8)
+            avg_metrics[f"profile_layer_{idx}"] = ratio
+            
+            # Explicit Layer Norms for Dynamics Plot
+            avg_metrics[f"norm_mu_layer_{idx}"] = m["norm_mu"]
+            avg_metrics[f"norm_sigma_layer_{idx}"] = m["avg_sigma"]
+            
         return avg_metrics
 
     def get_task_similarity(self):
@@ -519,6 +662,25 @@ class ActorCritic(nn.Module):
             # Pass task_id to critic head
             return self.critic_head(features, task_idx)
         return self.critic(x_in)
+
+    def sample_noise(self, task_ids=None):
+        """
+        Samples noise for all VarShare layers in the network.
+        Used for 'Consistent Noise' ablation (V4).
+        """
+        if self.use_varshare:
+            # Consistent Noise / Weight Sampling Helpers
+            self.actor_backbone.sample_noise(task_ids)
+            self.critic_backbone.sample_noise(task_ids)
+            if hasattr(self.actor_head, "sample_noise"): self.actor_head.sample_noise(task_ids)
+            if hasattr(self.critic_head, "sample_noise"): self.critic_head.sample_noise(task_ids)
+            
+    def set_consistent_noise(self, enabled=True):
+        if self.use_varshare:
+            self.actor_backbone.set_consistent_noise(enabled)
+            self.critic_backbone.set_consistent_noise(enabled)
+            if hasattr(self.actor_head, "use_consistent_noise"): self.actor_head.use_consistent_noise = enabled
+            if hasattr(self.critic_head, "use_consistent_noise"): self.critic_head.use_consistent_noise = enabled
 
     def get_action_and_value(self, x, action=None, task_idx=None, sample=True):
         x_in = self._get_input(x, task_idx)
