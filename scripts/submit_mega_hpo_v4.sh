@@ -30,7 +30,8 @@ submit_job() {
     fi
     
     # Separate DB per Environment
-    STORAGE_PATH="sqlite:////netscratch/$USER/varshare/analysis/v4_hpo_${ENV_KEY}.db"
+    # Using JournalStorage (.log) to avoid SQLite NFS locking issues
+    STORAGE_PATH="/netscratch/$USER/varshare/analysis/v4_hpo_${ENV_KEY}.log"
     
     echo "Submitting: $STUDY_NAME (Env: $ENV_KEY, Method: $METHOD, Consistent: $CONSISTENT, DB: $STORAGE_PATH)"
     
