@@ -341,3 +341,65 @@ class MultiTaskLunarLander(gym.Env):
         
     def close(self):
         self.env.close()
+
+
+class IdenticalLunarLander(gym.Env):
+    """
+    Identical Multi-Task LunarLander environment.
+    7 tasks, all identical to Task 0 of MultiTaskLunarLander.
+    """
+    def __init__(self, task_idx: int = 0):
+        super().__init__()
+        try:
+            self.env = gym.make('LunarLander-v3')
+        except gym.error.Error:
+             self.env = gym.make('LunarLander-v2')
+             
+        self.task_idx = task_idx
+        
+        # All tasks are identical to Task 0 (Standard)
+        # {'gravity': -10.0, 'wind': 0.0, 'turbulence': 0.0, 'target_x': 0.0}
+        self.task_configs = [
+            {'gravity': -10.0, 'wind': 0.0, 'turbulence': 0.0, 'target_x': 0.0}
+            for _ in range(7) 
+        ]
+        
+        self.observation_space = self.env.observation_space
+        self.action_space = self.env.action_space
+        self.current_config = self.task_configs[0]
+
+    @property
+    def num_tasks(self):
+        return len(self.task_configs)
+
+    def reset_task(self, task_idx: int):
+        self.task_idx = task_idx % len(self.task_configs)
+        self.current_config = self.task_configs[self.task_idx]
+        
+        unwrapped = self.env.unwrapped
+        if hasattr(unwrapped, 'world') and unwrapped.world is not None:
+             unwrapped.world.gravity = (0, self.current_config['gravity'])
+        
+        if hasattr(unwrapped, 'enable_wind'):
+            unwrapped.enable_wind = False
+            unwrapped.wind_power = 0.0
+            unwrapped.turbulence_power = 0.0
+
+    def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None):
+        if options and 'task_idx' in options:
+            self.reset_task(options['task_idx'])
+        else:
+            self.reset_task(self.task_idx)
+            
+        obs, info = self.env.reset(seed=seed, options=options)
+        # No transform needed as target_x is always 0
+        return obs, info
+
+    def step(self, action):
+        return self.env.step(action)
+         
+    def render(self):
+        return self.env.render()
+        
+    def close(self):
+        self.env.close()

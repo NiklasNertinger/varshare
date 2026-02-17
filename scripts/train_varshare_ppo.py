@@ -16,8 +16,19 @@ import json
 import matplotlib.pyplot as plt
 
 from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
+from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
 from src.models import ActorCritic
 from src.algo.ppo import PPO
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.float32):
+            return float(obj)
+        if isinstance(obj, np.float64):
+            return float(obj)
+        return super(NumpyEncoder, self).default(obj)
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -65,10 +76,17 @@ def parse_args():
     parser.add_argument("--analysis-dir", type=str, default="analysis", help="Root analysis directory")
     
     # Environment selection
-    parser.add_argument("--env-type", type=str, default="ComplexCartPole", choices=["ComplexCartPole", "IdenticalCartPole", "metaworld"], help="Environment type")
-    parser.add_argument("--mt-setting", type=str, default="MT10", choices=["MT1", "MT3", "MT4", "MT10", "MT50"], help="Meta-World setting")
+    parser.add_argument("--env-type", type=str, default="ComplexCartPole", 
+        choices=["ComplexCartPole", "IdenticalCartPole", "metaworld", "MultiTaskLunarLander", "IdenticalLunarLander"], 
+        help="Environment type")
+    parser.add_argument("--mt-setting", type=str, default="MT10", choices=["MT1", "MT3", "MT4", "MT10", "MT50", "None"], help="Meta-World setting")
+    
+    # V4 Ablations
+    parser.add_argument("--consistent-noise", type=str, default="false", help="Sample noise once per rollout (True/False)")
+    parser.add_argument("--max-grad-norm", type=float, default=2.0, help="Max gradient norm for clipping")
 
     args = parser.parse_args()
+    args.consistent_noise = args.consistent_noise.lower() == "true"
     return args
 
 def calculate_explained_variance(y_true, y_pred):
@@ -170,6 +188,7 @@ def train(report_callback=None):
         "diagnostics/grad_norm", "diagnostics/clip_fraction", "diagnostics/explained_variance",
         "varshare/mean_norm_mu", "varshare/mean_norm_theta",
         "varshare/sharing_ratio", "varshare/avg_sigma", "varshare/task_similarity",
+        "varshare/sparsity", "varshare/residual_snr", "varshare/posterior_collapse", "varshare/sigma_variance",
         "performance/train_reward_50", "performance/train_success_50",
         "eval/mean_reward", "eval/mean_success"
     ]
@@ -230,6 +249,10 @@ def train(report_callback=None):
                     initial_task_idx=initial_task_idx, 
                     auto_cycle_task=auto_cycle_task
                 )
+            elif args.env_type == "MultiTaskLunarLander":
+                env = MultiTaskLunarLander(task_idx=initial_task_idx)
+            elif args.env_type == "IdenticalLunarLander":
+                env = IdenticalLunarLander(task_idx=initial_task_idx)
             
             env = gym.wrappers.RecordEpisodeStatistics(env)
             env.action_space.seed(seed)
@@ -259,6 +282,10 @@ def train(report_callback=None):
         eval_env = IdenticalCartPole()
     elif args.env_type == "metaworld":
         eval_env = MetaWorldWrapper(benchmark=args.mt_setting, seed=args.seed + 1000)
+    elif args.env_type == "MultiTaskLunarLander":
+        eval_env = MultiTaskLunarLander()
+    elif args.env_type == "IdenticalLunarLander":
+        eval_env = IdenticalLunarLander()
         
     eval_env.action_space.seed(args.seed + 1000)
     if hasattr(eval_env.observation_space, 'seed'):
@@ -307,6 +334,11 @@ def train(report_callback=None):
         varshare_args=varshare_args,
         num_layers=args.num_layers
     ).to(device)
+    
+    # V4 Ablation: Consistent Noise
+    if args.consistent_noise:
+        print(">>> Enabling Consistent Noise Sampling (V4 Ablation)")
+        agent.set_consistent_noise(True)
     
     # Configure KL Controller
     kl_controller_args = {
@@ -404,7 +436,7 @@ def train(report_callback=None):
                     self.optimizer.zero_grad()
                     loss.backward()
                     
-                    # Grad Norm
+                    # Grad Norm & Clipping
                     total_norm = 0.0
                     for group in self.optimizer.param_groups:
                         for p in group['params']:
@@ -412,6 +444,9 @@ def train(report_callback=None):
                                 total_norm += p.grad.data.norm(2).item() ** 2
                     total_norm = total_norm ** 0.5
                     
+                    # Gradient Clipping
+                    nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
+
                     self.optimizer.step()
                     
             return {
@@ -574,6 +609,11 @@ def train(report_callback=None):
     last_k_rewards = deque(maxlen=3)
     
     for update in range(n_updates):
+        # Sample Consistent Noise for Rollout
+        if args.consistent_noise:
+             # Sample for ALL tasks to cover any active env
+             agent.sample_noise(task_ids=list(range(num_tasks)))
+
         # Rollout Storage
         # Shape: (n_steps, num_envs, ...)
         mb_obs = torch.zeros((n_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
@@ -730,15 +770,34 @@ def train(report_callback=None):
         
         avg_reward = np.mean(reward_window) if reward_window else 0.0
         avg_success = np.mean(success_window) if success_window else 0.0
-        history.append({
+        # History tracking
+        hist_entry = {
             "step": global_step,
             "reward": avg_reward,
             "success": avg_success,
             "norm_mu": arch_metrics["mean_norm_mu"],
             "norm_theta": arch_metrics["mean_norm_theta"],
             "sharing_ratio": arch_metrics["sharing_ratio"],
-            "sigma_prior": arch_metrics.get("sigma_prior", None)
-        })
+            "sigma_prior": arch_metrics.get("sigma_prior", None),
+            
+            # Loss Components for Stacked Plot
+            "loss_total": metrics["loss"],
+            "loss_policy": metrics["policy_loss"],
+            "loss_value": metrics["value_loss"],
+            "loss_kl": metrics["kl_penalty"],
+            "loss_raw_kl": metrics["raw_kl"],
+            "loss_entropy": metrics["entropy"],
+            
+            # Diagnostics
+            "explained_variance": explained_var,
+        }
+        
+        # Add dynamic layer keys
+        for k, v in arch_metrics.items():
+            if k.startswith("norm_mu_layer_") or k.startswith("norm_sigma_layer_"):
+                hist_entry[k] = v
+                
+        history.append(hist_entry)
         
         # Evaluation placeholder in history (for nice alignment, use previous or Nan if not eval step)
         sps = int(global_step / (time.time() - start_time))
@@ -800,6 +859,10 @@ def train(report_callback=None):
             "varshare/sharing_ratio": arch_metrics["sharing_ratio"],
             "varshare/avg_sigma": arch_metrics["avg_sigma"],
             "varshare/task_similarity": task_sim,
+            "varshare/sparsity": arch_metrics.get("sparsity", 0.0),
+            "varshare/residual_snr": arch_metrics.get("residual_snr", 0.0),
+            "varshare/posterior_collapse": arch_metrics.get("posterior_collapse", 0.0),
+            "varshare/sigma_variance": arch_metrics.get("sigma_variance", 0.0),
             "performance/train_reward_50": avg_reward,
             "performance/train_success_50": avg_success,
         }
@@ -855,6 +918,16 @@ def train(report_callback=None):
     # New Plots
     plot_metric(history, "episodes", "Total Episodes", "episodes.png")
     
+    # Advanced VarShare Metrics Plots
+    if any(h.get("sparsity") is not None for h in history):
+        plot_metric(history, "sparsity", "Sparsity of Specialization", "sparsity.png")
+    if any(h.get("residual_snr") is not None for h in history):
+        plot_metric(history, "residual_snr", "Residual SNR", "residual_snr.png")
+    if any(h.get("posterior_collapse") is not None for h in history):
+        plot_metric(history, "posterior_collapse", "Posterior Collapse Rate", "posterior_collapse.png")
+    if any(h.get("sigma_variance") is not None for h in history):
+        plot_metric(history, "sigma_variance", "Sigma Homogeneity (Variance)", "sigma_variance.png")
+    
     # Filter for eval reward (ignore Nones)
     eval_history = [d for d in history if d.get("eval_reward") is not None]
     if eval_history:
@@ -864,9 +937,81 @@ def train(report_callback=None):
     plot_metric(history, "grad_norm", "Gradient Norm", "grad_norm.png")
     plot_metric(history, "avg_sigma", "Average Weight Sigma", "avg_sigma.png")
     
+    # --- New Requested Plots ---
+    
+    # 1. Explained Variance
+    if any(h.get("explained_variance") is not None for h in history):
+        plot_metric(history, "explained_variance", "Explained Variance", "explained_variance.png")
+        
+    # 2. Raw KL
+    if any(h.get("loss_raw_kl") is not None for h in history):
+        plot_metric(history, "loss_raw_kl", "Raw KL Divergence", "raw_kl.png")
+        
+    # 3. Stacked Loss Plot (Total, KL, Value, Policy)
+    # We use a custom plot function here for multi-line
+    try:
+        plt.figure(figsize=(10, 6))
+        steps = [h["step"] for h in history]
+        
+        # We plot lines for components
+        # Policy is usually negative. We plot it as is to show direction.
+        # Total is sum.
+        # KL is scaled penalty.
+        plt.plot(steps, [h["loss_total"] for h in history], label="Total Loss", linewidth=2, color="black")
+        plt.plot(steps, [h["loss_kl"] for h in history], label="KL Penalty (Scaled)", alpha=0.7)
+        plt.plot(steps, [h["loss_value"] for h in history], label="Value Loss", alpha=0.7)
+        plt.plot(steps, [h["loss_policy"] for h in history], label="Policy Loss", alpha=0.7)
+        
+        plt.xlabel("Total Environment Steps")
+        plt.ylabel("Loss Value")
+        plt.title(f"Optimization Landscape ({args.exp_name})")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.savefig(os.path.join(seed_dir, "loss_breakdown.png"))
+        plt.close()
+    except Exception as e:
+        print(f"Failed to plot loss breakdown: {e}")
+
+    # 4. Layer-wise Dynamics (Multi-Line)
+    # Find all layer keys
+    layer_mu_keys = [k for k in history[0].keys() if k.startswith("norm_mu_layer_")]
+    layer_sigma_keys = [k for k in history[0].keys() if k.startswith("norm_sigma_layer_")]
+    
+    # Sort by layer index
+    layer_mu_keys.sort(key=lambda x: int(x.split("_")[-1]))
+    layer_sigma_keys.sort(key=lambda x: int(x.split("_")[-1]))
+    
+    if layer_mu_keys:
+        plt.figure(figsize=(10, 6))
+        steps = [h["step"] for h in history]
+        for key in layer_mu_keys:
+            layer_idx = key.split("_")[-1]
+            plt.plot(steps, [h[key] for h in history], label=f"Layer {layer_idx}")
+        plt.xlabel("Steps")
+        plt.ylabel("Norm Mu")
+        plt.title("Layer-wise Specialization Magnitude")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.savefig(os.path.join(seed_dir, "layer_mu_dynamics.png"))
+        plt.close()
+        
+    if layer_sigma_keys:
+        plt.figure(figsize=(10, 6))
+        steps = [h["step"] for h in history]
+        for key in layer_sigma_keys:
+            layer_idx = key.split("_")[-1]
+            plt.plot(steps, [h[key] for h in history], label=f"Layer {layer_idx}")
+        plt.xlabel("Steps")
+        plt.ylabel("Avg Sigma")
+        plt.title("Layer-wise Uncertainty (Sigma)")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.savefig(os.path.join(seed_dir, "layer_sigma_dynamics.png"))
+        plt.close()
+    
     # Save history as JSON for later synthesis
     with open(os.path.join(seed_dir, "history.json"), "w") as f:
-        json.dump(history, f)
+        json.dump(history, f, cls=NumpyEncoder)
 
     # 6. Final Summary Report
     total_params, active_params = get_parameter_counts(agent)
@@ -903,6 +1048,9 @@ Final Eval Success: {eval_metrics.get("eval/mean_success", 0.0):.2f}
     envs.close()
     eval_env.close()
     # wandb.finish()
+    
+    # HPO Parsing Hook
+    print(f"FINAL_EVAL_REWARD: {final_eval_reward:.4f}")
     
     print("Training Complete.")
     return history

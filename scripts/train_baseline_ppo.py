@@ -54,7 +54,7 @@ def parse_args():
     
     # Environment selection
     parser.add_argument("--env-type", type=str, default="ComplexCartPole", choices=["ComplexCartPole", "IdenticalCartPole", "metaworld"], help="Environment type")
-    parser.add_argument("--mt-setting", type=str, default="MT10", choices=["MT1", "MT3", "MT4", "MT10", "MT50"], help="Meta-World setting")
+    parser.add_argument("--mt-setting", type=str, default="MT10", choices=["MT1", "MT3", "MT4", "MT10", "MT50", "None"], help="Meta-World setting")
     
     # Method Specific LRs
     parser.add_argument("--lr-weights", type=float, default=0.001, help="PaCo weights learning rate")
@@ -665,6 +665,10 @@ Final Eval Success: {eval_metrics.get("eval/mean_success", 0.0):.2f}
 
     heartbeat_file.close()
     envs.close()
+    
+    # HPO Parsing Hook
+    print(f"FINAL_EVAL_REWARD: {final_eval_reward:.4f}")
+    
     print("Training Complete.")
     
     # Generate final plots
