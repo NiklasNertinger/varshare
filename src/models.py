@@ -36,6 +36,9 @@ class VarShareLayer(nn.Module):
         self.use_consistent_noise = False
         self.cached_eps = {} # Stores noise per task (non-trainable, but stateful)
         
+        # Deterministic Training (Ablation)
+        self.deterministic_training = False
+        
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -91,13 +94,11 @@ class VarShareLayer(nn.Module):
         sigma = F.softplus(rho)
         weight_mean = theta + mu
         
+        # Deterministic / Eval Mode
+        if self.deterministic_training or not self.training or not sample:
+            return F.linear(x, weight_mean, self.bias)
+
         # Consistent Noise / Weight Sampling Mode
-        if self.use_consistent_noise and not self.training:
-            # If eval, we usually use mean. But if we want to evaluate STOCHASTIC policy?
-            # User instructions "sample single time per rollout ... including update".
-            # This implies TRAINING mode.
-            pass
-            
         if self.use_consistent_noise and task_key in self.cached_eps:
             # Weight Sampling (Global Reparam)
             # w = theta + mu + sigma * eps_fixed
@@ -106,9 +107,6 @@ class VarShareLayer(nn.Module):
             # noisy_weight = theta + mu + sigma * eps
             weight_sample = weight_mean + sigma * eps
             return F.linear(x, weight_sample, self.bias)
-
-        if not self.training or not sample:
-            return F.linear(x, weight_mean, self.bias)
 
         # Reparameterization (Local Reparam)
         # Mean output
@@ -234,6 +232,9 @@ class VarShareLoRALayer(nn.Module):
         self.cached_eps_A = {}
         self.cached_eps_B = {}
 
+        # Deterministic Training (Ablation)
+        self.deterministic_training = False
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -292,29 +293,18 @@ class VarShareLoRALayer(nn.Module):
         sigma_B = F.softplus(rho_B)
         
         # Consistent Noise Logic
-        if self.use_consistent_noise and task_key in self.cached_eps_A:
+        if self.deterministic_training or not self.training or not sample:
+             A = mu_A
+             B = mu_B
+        elif self.use_consistent_noise and task_key in self.cached_eps_A:
              eps_A = self.cached_eps_A[task_key]
              eps_B = self.cached_eps_B[task_key]
              
              A = mu_A + sigma_A * eps_A
              B = mu_B + sigma_B * eps_B
-        elif self.training and sample:
-             # Standard Local Reparam (on weights)
-             # Wait, LoRA usually doesn't do local reparam on forward(x)? 
-             # It does reparam on A and B matrices themselves.
-             # So LoRA is inherently "Weight" sampling anyway (just limited rank).
-             # The difference is whether we resample per batch element or per batch?
-             # Standard VarLoRA implementation here uses `Normal(mu, sigma).rsample()` 
-             # which generates [rank, in] matrix. This is per-forward-pass per-batch?
-             # If `forward` is called with batch `x`, `rsample()` makes ONE sample of A, B.
-             # So actually, VarLoRA ALREADY does "Weight Reparameterization" (it doesn't sample per x in batch).
-             # BUT, it samples NEW weights every forward call.
-             # "Consistent Noise" means keep A, B fixed across rollout.
+        else:
              A = Normal(mu_A, sigma_A).rsample()
              B = Normal(mu_B, sigma_B).rsample()
-        else:
-             A = mu_A
-             B = mu_B
             
         # Effective Weight
         # residual = B @ A -> [out, rank] @ [rank, in] -> [out, in]
@@ -440,6 +430,11 @@ class VarShareNetwork(nn.Module):
         for layer in self.layers:
             if hasattr(layer, "use_consistent_noise"):
                 layer.use_consistent_noise = enabled
+
+    def set_deterministic_training(self, enabled=True):
+        for layer in self.layers:
+            if hasattr(layer, "deterministic_training"):
+                layer.deterministic_training = enabled
 
     def forward(self, x, task_id, sample=True):
         for layer in self.layers:
@@ -681,6 +676,13 @@ class ActorCritic(nn.Module):
             self.critic_backbone.set_consistent_noise(enabled)
             if hasattr(self.actor_head, "use_consistent_noise"): self.actor_head.use_consistent_noise = enabled
             if hasattr(self.critic_head, "use_consistent_noise"): self.critic_head.use_consistent_noise = enabled
+
+    def set_deterministic_training(self, enabled=True):
+        if self.use_varshare:
+            self.actor_backbone.set_deterministic_training(enabled)
+            self.critic_backbone.set_deterministic_training(enabled)
+            if hasattr(self.actor_head, "deterministic_training"): self.actor_head.deterministic_training = enabled
+            if hasattr(self.critic_head, "deterministic_training"): self.critic_head.deterministic_training = enabled
 
     def get_action_and_value(self, x, action=None, task_idx=None, sample=True):
         x_in = self._get_input(x, task_idx)

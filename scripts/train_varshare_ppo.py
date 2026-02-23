@@ -83,6 +83,7 @@ def parse_args():
     
     # V4 Ablations
     parser.add_argument("--consistent-noise", type=str, default="false", help="Sample noise once per rollout (True/False)")
+    parser.add_argument("--deterministic-training", action="store_true", help="Ablation: Force noise to 0 during training")
     parser.add_argument("--max-grad-norm", type=float, default=2.0, help="Max gradient norm for clipping")
 
     args = parser.parse_args()
@@ -339,6 +340,11 @@ def train(report_callback=None):
     if args.consistent_noise:
         print(">>> Enabling Consistent Noise Sampling (V4 Ablation)")
         agent.set_consistent_noise(True)
+
+    # V4 Ablation: Deterministic Training
+    if args.deterministic_training:
+        print(">>> Enabling Deterministic Training (V4 Ablation)")
+        agent.set_deterministic_training(True)
     
     # Configure KL Controller
     kl_controller_args = {
