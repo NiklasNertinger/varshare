@@ -15,6 +15,7 @@ import json
 import matplotlib.pyplot as plt
 
 from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
+from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
 from src.models import ActorCritic
 from src.algo.ppo import PPO
 from src.algo.pcgrad import PCGrad
@@ -53,7 +54,7 @@ def parse_args():
     parser.add_argument("--analysis-dir", type=str, default="analysis", help="Root analysis directory")
     
     # Environment selection
-    parser.add_argument("--env-type", type=str, default="ComplexCartPole", choices=["ComplexCartPole", "IdenticalCartPole", "metaworld"], help="Environment type")
+    parser.add_argument("--env-type", type=str, default="ComplexCartPole", choices=["ComplexCartPole", "IdenticalCartPole", "metaworld", "MultiTaskLunarLander", "IdenticalLunarLander"], help="Environment type")
     parser.add_argument("--mt-setting", type=str, default="MT10", choices=["MT1", "MT3", "MT4", "MT10", "MT50", "None"], help="Meta-World setting")
     
     # Method Specific LRs
@@ -170,6 +171,10 @@ def train(report_callback=None):
                 env = ComplexCartPole()
             elif args.env_type == "IdenticalCartPole":
                 env = IdenticalCartPole()
+            elif args.env_type == "MultiTaskLunarLander":
+                env = MultiTaskLunarLander(task_idx=initial_task_idx)
+            elif args.env_type == "IdenticalLunarLander":
+                env = IdenticalLunarLander()
             elif args.env_type == "metaworld":
                 env = MetaWorldWrapper(
                     benchmark=args.mt_setting, 
@@ -201,6 +206,10 @@ def train(report_callback=None):
         eval_env = ComplexCartPole()
     elif args.env_type == "IdenticalCartPole":
         eval_env = IdenticalCartPole()
+    elif args.env_type == "MultiTaskLunarLander":
+        eval_env = MultiTaskLunarLander(task_idx=args.task_id if args.algo == "oracle" else 0)
+    elif args.env_type == "IdenticalLunarLander":
+        eval_env = IdenticalLunarLander()
     elif args.env_type == "metaworld":
         eval_env = MetaWorldWrapper(benchmark=args.mt_setting, seed=args.seed + 1000)
         
