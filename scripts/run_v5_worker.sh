@@ -1,9 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=v5_worker
-#SBATCH --time=48:00:00
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=12G
-#SBATCH --partition=gpu
+#SBATCH --partition=batch
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=8G
 #SBATCH --gres=gpu:1
 #SBATCH --output=/netscratch/%u/varshare/logs/v5_full_%A_%a.out
 
@@ -13,12 +12,12 @@ ANALYSIS_DIR=/netscratch/$USER/varshare/analysis/det_hpo/v5_full/${ENV_KEY}/${ME
 
 mkdir -p $ANALYSIS_DIR
 
-source .venv/bin/activate
-export PYTHONPATH=.
+source /netscratch/$USER/varshare/venv/bin/activate
+export PYTHONPATH=$PYTHONPATH:$HOME/varshare
 
 python scripts/optimize_v5.py \
     --env-key $ENV_KEY \
     --method $METHOD \
     --n-trials 1 \
-    --storage sqlite:////netscratch/$USER/varshare/v5_hpo_${ENV_KEY}.db \
+    --storage $3 \
     --analysis-dir $ANALYSIS_DIR

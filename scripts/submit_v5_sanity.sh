@@ -23,7 +23,7 @@ for ENV in "${ENVS[@]}"; do
         echo "  -> Submitting Sanity Array (2 trials) for: $METHOD"
         sbatch --job-name="v5_${ENV}_${METHOD}" \
                --array=1-2 \
-               scripts/run_v5_sanity_worker.sh $ENV $METHOD
+               scripts/run_v5_sanity_worker.sh $ENV $METHOD "/netscratch/$USER/varshare/v5_sanity_${ENV}.log"
     done
 done
 

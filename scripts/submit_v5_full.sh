@@ -28,7 +28,7 @@ for ENV in "${ENVS[@]}"; do
         echo "  -> Submitting Array (30 trials, max 5 parallel) for: $METHOD"
         sbatch --job-name="v5_${ENV}_${METHOD}" \
                --array=1-30%5 \
-               scripts/run_v5_worker.sh $ENV $METHOD
+               scripts/run_v5_worker.sh $ENV $METHOD "/netscratch/$USER/varshare/v5_hpo_${ENV}.log"
     done
 done
 
