@@ -1,0 +1,748 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+import random
+import time
+import argparse
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import gymnasium as gym
+from collections import deque
+import csv
+import json
+import matplotlib.pyplot as plt
+
+from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
+from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
+from deterministic.src.models import DetActorCritic
+from src.algo.ppo import PPO
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.float32):
+            return float(obj)
+        if isinstance(obj, np.float64):
+            return float(obj)
+        return super(NumpyEncoder, self).default(obj)
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--exp-name", type=str, default="det_varshare_base", help="experiment name")
+    parser.add_argument("--seed", type=int, default=1, help="seed")
+    parser.add_argument("--total-timesteps", type=int, default=500000, help="total timesteps")
+    parser.add_argument("--n-steps", type=int, default=256, help="rollout steps")
+    parser.add_argument("--batch-size", type=int, default=64, help="minibatch size")
+    parser.add_argument("--num-envs", type=int, default=1, help="number of parallel envs")
+    
+    # Golden Hyperparameters
+    parser.add_argument("--lr-actor", type=float, default=0.001, help="actor learning rate")
+    parser.add_argument("--lr-critic", type=float, default=0.0001, help="critic learning rate")
+    parser.add_argument("--gamma", type=float, default=0.99, help="discount factor")
+    parser.add_argument("--gae-lambda", type=float, default=0.95, help="gae lambda")
+    parser.add_argument("--eps-clip", type=float, default=0.2, help="clip coefficient")
+    parser.add_argument("--k-epochs", type=int, default=4, help="update epochs")
+    parser.add_argument("--ent-coef", type=float, default=0.01, help="entropy coefficient")
+    parser.add_argument("--max-grad-norm", type=float, default=2.0, help="Max gradient norm for clipping")
+    
+    # DetVarShare specific
+    parser.add_argument("--mu-l2-coef", type=float, default=0.001, help="L2 penalty coefficient for mu weights")
+    parser.add_argument("--mu-init", type=float, default=0.0, help="Mu init")
+    parser.add_argument("--hidden-dim", type=int, default=64, help="Backbone hidden dimension")
+    parser.add_argument("--num-layers", type=int, default=2, help="Number of hidden layers")
+    parser.add_argument("--variant", type=str, default="base", 
+        choices=["base", "lora", "gated", "l1", "film", "pcgrad", "decay", "hyperprior", "ara"], 
+        help="Deterministic Architectural Variant")
+    parser.add_argument("--lora-rank", type=int, default=4, help="Rank for LoRA (only used if variant=lora)")
+    
+    parser.add_argument("--cuda", type=lambda x: (str(x).lower() == 'true'), default=True, help="cuda toggle")
+    
+    parser.add_argument("--eval-mode", type=bool, default=True, help="Run periodic evaluations")
+    parser.add_argument("--eval-freq", type=int, default=5000, help="Eval every N steps")
+    parser.add_argument("--eval-episodes", type=int, default=5, help="Episodes per task during eval")
+    parser.add_argument("--analysis-dir", type=str, default="deterministic/analysis", help="Root analysis directory")
+    
+    # Environment selection
+    parser.add_argument("--env-type", type=str, default="ComplexCartPole", 
+        choices=["ComplexCartPole", "IdenticalCartPole", "metaworld", "MultiTaskLunarLander", "IdenticalLunarLander"], 
+        help="Environment type")
+    parser.add_argument("--mt-setting", type=str, default="MT10", choices=["MT1", "MT3", "MT4", "MT10", "MT50", "None"], help="Meta-World setting")
+    
+    args = parser.parse_args()
+    return args
+
+def calculate_explained_variance(y_true, y_pred):
+    var_y = np.var(y_true)
+    if var_y == 0: return 0
+    return 1 - np.var(y_true - y_pred) / var_y
+
+def evaluate(agent, env, device, num_episodes=5, num_tasks=5):
+    agent.eval()
+    task_rewards = {}
+    for t_idx in range(num_tasks):
+        rewards = []
+        successes = []
+        for _ in range(num_episodes):
+            env.reset_task(t_idx)
+            obs, _ = env.reset()
+            done = False
+            ep_reward = 0
+            ep_success = 0
+            while not done:
+                obs_t = torch.Tensor(obs).unsqueeze(0).to(device)
+                with torch.no_grad():
+                    action, _, _, _, _ = agent.get_action_and_value(obs_t, task_idx=t_idx, deterministic=True)
+                obs, reward, terminated, truncated, info = env.step(action.cpu().numpy()[0])
+                done = terminated or truncated
+                ep_reward += reward
+                if "success" in info:
+                    ep_success = max(ep_success, info["success"])
+            rewards.append(ep_reward)
+            successes.append(ep_success)
+        task_rewards[t_idx] = {"reward": np.mean(rewards), "success": np.mean(successes)}
+    agent.train()
+    return task_rewards
+
+def train(report_callback=None):
+    args = parse_args()
+    timestamp = int(time.time())
+    run_name = f"{args.exp_name}__seed{args.seed}__{timestamp}"
+    
+    exp_dir = os.path.join(args.analysis_dir, args.exp_name)
+    seed_dir = os.path.join(exp_dir, f"seed_{args.seed}")
+    os.makedirs(seed_dir, exist_ok=True)
+    
+    heartbeat_path = os.path.join(seed_dir, "heartbeat.csv")
+    heartbeat_file = open(heartbeat_path, "w", newline="")
+    
+    fieldnames = [
+        "TOTAL_ENV_STEPS", "EPISODES_COMPLETED", "TOTAL_GRAD_STEPS",
+        "WALL_CLOCK_TIME", "SPS",
+        "loss/total", "loss/policy", "loss/value", "loss/entropy", "loss/reg_penalty", "loss/ara",
+        "diagnostics/grad_norm", "diagnostics/clip_fraction", "diagnostics/explained_variance",
+        "detvarshare/mean_norm_mu", "detvarshare/mean_norm_theta",
+        "detvarshare/sharing_ratio",
+        "performance/train_reward_50", "performance/train_success_50",
+        "eval/mean_reward", "eval/mean_success"
+    ]
+    
+    if args.env_type == "metaworld":
+        temp_env = MetaWorldWrapper(benchmark=args.mt_setting, seed=args.seed)
+        num_tasks = temp_env.num_tasks
+        temp_env.close()
+    else:
+        num_tasks = 5
+        
+    for t in range(num_tasks):
+        fieldnames.append(f"eval/reward_task_{t}")
+        fieldnames.append(f"eval/success_task_{t}")
+        
+    heartbeat_writer = csv.DictWriter(heartbeat_file, fieldnames=fieldnames)
+    heartbeat_writer.writeheader()
+    
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.backends.cudnn.deterministic = args.cuda
+    
+    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    print(f"Using device: {device}")
+    
+    def make_env(seed, idx, initial_task_idx=0, auto_cycle_task=False):
+        def thunk():
+            if args.env_type == "ComplexCartPole":
+                env = ComplexCartPole()
+            elif args.env_type == "IdenticalCartPole":
+                env = IdenticalCartPole()
+            elif args.env_type == "metaworld":
+                env = MetaWorldWrapper(
+                    benchmark=args.mt_setting, 
+                    seed=seed, 
+                    initial_task_idx=initial_task_idx, 
+                    auto_cycle_task=auto_cycle_task
+                )
+            elif args.env_type == "MultiTaskLunarLander":
+                env = MultiTaskLunarLander(task_idx=initial_task_idx)
+            elif args.env_type == "IdenticalLunarLander":
+                env = IdenticalLunarLander(task_idx=initial_task_idx)
+            
+            env = gym.wrappers.RecordEpisodeStatistics(env)
+            env.action_space.seed(seed)
+            if hasattr(env.observation_space, 'seed'):
+                env.observation_space.seed(seed)
+            return env
+        return thunk
+
+    envs = gym.vector.AsyncVectorEnv(
+        [
+            make_env(
+                args.seed + i, 
+                i, 
+                initial_task_idx=i % num_tasks,
+                auto_cycle_task=True
+            ) 
+            for i in range(args.num_envs)
+        ]
+    )
+    
+    if args.env_type == "ComplexCartPole":
+        eval_env = ComplexCartPole()
+    elif args.env_type == "IdenticalCartPole":
+        eval_env = IdenticalCartPole()
+    elif args.env_type == "metaworld":
+        eval_env = MetaWorldWrapper(benchmark=args.mt_setting, seed=args.seed + 1000)
+    elif args.env_type == "MultiTaskLunarLander":
+        eval_env = MultiTaskLunarLander()
+    elif args.env_type == "IdenticalLunarLander":
+        eval_env = IdenticalLunarLander()
+        
+    eval_env.action_space.seed(args.seed + 1000)
+    if hasattr(eval_env.observation_space, 'seed'):
+        eval_env.observation_space.seed(args.seed + 1000)
+    
+    agent = DetActorCritic(
+        envs, 
+        hidden_dim=args.hidden_dim,
+        num_layers=args.num_layers,
+        variant=args.variant,
+        lora_rank=args.lora_rank,
+        is_continuous=not isinstance(envs.single_action_space, gym.spaces.Discrete),
+        use_task_embedding=False
+    ).to(device)
+    
+    # Register Tasks
+    for t_idx in range(num_tasks):
+        agent.actor_backbone.add_task(t_idx, mu_init=args.mu_init)
+        agent.critic_backbone.add_task(t_idx, mu_init=args.mu_init)
+        agent.actor_head.add_task(t_idx, mu_init=args.mu_init)
+        agent.critic_head.add_task(t_idx, mu_init=args.mu_init)
+    
+    actor_params = list(agent.actor_backbone.parameters()) + list(agent.actor_head.parameters())
+    if hasattr(agent, 'actor_logstd'):
+        actor_params += [agent.actor_logstd]
+    critic_params = list(agent.critic_backbone.parameters()) + list(agent.critic_head.parameters())
+    
+    # We rely on explicit mu_l2_coef instead of optim weight_decay, to protect theta
+    optimizer = optim.Adam([
+        {'params': actor_params, 'lr': args.lr_actor},
+        {'params': critic_params, 'lr': args.lr_critic}
+    ], eps=1e-5)
+    
+    class DetVarSharePPO(PPO):
+        def __init__(self, *args, batch_size=64, max_grad_norm=2.0, mu_l2_coef=0.001, variant="base", ara_coef=0.1, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._batch_size = batch_size
+            self.max_grad_norm = max_grad_norm
+            self.mu_l2_coef = mu_l2_coef
+            self.variant = variant
+            self.ara_coef = ara_coef
+
+        @property
+        def batch_size(self):
+            return self._batch_size
+
+        def update_from_storage(self, obs, actions, logprobs, returns, advantages, values, task_ids=None):
+            self.agent.train()
+            inds = np.arange(len(obs))
+            clipfracs = []
+            
+            for epoch in range(self.update_epochs):
+                np.random.shuffle(inds)
+                for start in range(0, len(obs), self.batch_size):
+                    end = start + self.batch_size
+                    mb_inds = inds[start:end]
+                    
+                    mb_obs = obs[mb_inds]
+                    mb_actions = actions[mb_inds]
+                    mb_task_ids = task_ids[mb_inds] if task_ids is not None else None
+                    mb_logprobs = logprobs[mb_inds]
+                    mb_returns = returns[mb_inds]
+                    mb_advantages = advantages[mb_inds]
+                    
+                    _, newlogprob, entropy, newvalue, ara_logits = self.agent.get_action_and_value(
+                        mb_obs, mb_actions, task_idx=mb_task_ids
+                    )
+                    
+                    logratio = newlogprob - mb_logprobs
+                    ratio = logratio.exp()
+
+                    with torch.no_grad():
+                        clipfracs += [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
+
+                    pg_loss1 = -mb_advantages * ratio
+                    pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
+                    pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+                    newvalue = newvalue.view(-1)
+                    v_loss = 0.5 * ((newvalue - mb_returns) ** 2).mean()
+
+                    entropy_loss = entropy.mean()
+                    
+                    # Structural Regularization (L2, L1, or Decay)
+                    reg_penalty = 0.0
+                    
+                    if self.variant == "decay":
+                        # Progressively penalize mu more in deeper layers to force early sharing
+                        num_layers = self.agent.actor_backbone.num_layers
+                        for name, param in self.agent.named_parameters():
+                            if "mus" in name:
+                                # Extract layer idx if possible (e.g. `actor_backbone.layers.0.mus...`)
+                                layer_idx = -1
+                                parts = name.split(".")
+                                for p in parts:
+                                    if p.isdigit(): 
+                                        layer_idx = int(p)
+                                        break
+                                
+                                penalty_factor = 1.0
+                                if layer_idx >= 0:
+                                    # Example: Layer 0 -> scale 0.1, Layer 1 -> scale 1.0
+                                    penalty_factor = (layer_idx + 1) / (num_layers + 1e-5)
+                                    
+                                reg_penalty += penalty_factor * torch.sum(param ** 2)
+                                
+                    else:
+                        for name, param in self.agent.named_parameters():
+                            if "mus" in name or "betas" in name:
+                                if self.variant == "l1":
+                                    reg_penalty += torch.sum(torch.abs(param))
+                                else:
+                                    reg_penalty += torch.sum(param ** 2)
+                    
+                    loss = pg_loss - self.ent_coef * entropy_loss + self.vf_coef * v_loss + self.mu_l2_coef * reg_penalty
+
+                    # ARA Loss
+                    ara_loss_val = 0.0
+                    if ara_logits is not None and mb_task_ids is not None:
+                        import torch.nn.functional as F
+                        ara_loss_tensor = F.cross_entropy(ara_logits, mb_task_ids)
+                        loss += self.ara_coef * ara_loss_tensor
+                        ara_loss_val = (self.ara_coef * ara_loss_tensor).item()
+
+                    self.optimizer.zero_grad()
+                    
+                    if self.variant == "pcgrad" and mb_task_ids is not None:
+                        # PCGrad: Compute per-task gradients and project conflicts
+                        unique_tasks = torch.unique(mb_task_ids)
+                        task_grads = []
+                        
+                        # 1. Gather per-task gradients
+                        for t_id in unique_tasks:
+                            self.optimizer.zero_grad()
+                            t_mask = (mb_task_ids == t_id)
+                            # Recompute loss ONLY for this task's items
+                            # (A slight approximation for speed, pulling isolated components)
+                            t_pg_loss1 = -mb_advantages[t_mask] * ratio[t_mask]
+                            t_pg_loss2 = -mb_advantages[t_mask] * torch.clamp(ratio[t_mask], 1 - self.clip_coef, 1 + self.clip_coef)
+                            t_pg_loss = torch.max(t_pg_loss1, t_pg_loss2).mean()
+                            
+                            t_v_loss = 0.5 * ((newvalue[t_mask].view(-1) - mb_returns[t_mask]) ** 2).mean()
+                            t_entropy_loss = entropy[t_mask].mean()
+                            
+                            t_loss = t_pg_loss - self.ent_coef * t_entropy_loss + self.vf_coef * t_v_loss
+                            
+                            # Backward to populate .grad
+                            t_loss.backward(retain_graph=True)
+                            
+                            # Flatten grads
+                            flat_grad = []
+                            for p in self.agent.parameters():
+                                if p.grad is not None:
+                                    flat_grad.append(p.grad.view(-1).clone())
+                                else:
+                                    flat_grad.append(torch.zeros_like(p.view(-1)))
+                            task_grads.append(torch.cat(flat_grad))
+                            
+                        self.optimizer.zero_grad()
+                        
+                        # 2. Project Conflicting Gradients
+                        num_tasks = len(task_grads)
+                        if num_tasks > 1:
+                            random.shuffle(task_grads)
+                            for i in range(num_tasks):
+                                grad_i = task_grads[i]
+                                for j in range(num_tasks):
+                                    if i == j: continue
+                                    grad_j = task_grads[j]
+                                    
+                                    dot_prod = torch.dot(grad_i, grad_j)
+                                    if dot_prod < 0:
+                                        # Project i onto normal of j
+                                        grad_i = grad_i - (dot_prod / (torch.norm(grad_j)**2 + 1e-8)) * grad_j
+                                task_grads[i] = grad_i
+                                
+                            # Aggregate
+                            final_grad = torch.stack(task_grads).sum(dim=0)
+                            
+                            # Apply back to parameters
+                            offset = 0
+                            for p in self.agent.parameters():
+                                numel = p.numel()
+                                p.grad = final_grad[offset:offset+numel].view_as(p).clone()
+                                offset += numel
+                        else:
+                            # Fallback if only 1 task in mini-batch
+                            loss.backward()
+                    else:
+                        # Standard Backward
+                        loss.backward()
+                    
+                    total_norm = 0.0
+                    for group in self.optimizer.param_groups:
+                        for p in group['params']:
+                            if p.grad is not None:
+                                total_norm += p.grad.data.norm(2).item() ** 2
+                    total_norm = total_norm ** 0.5
+                    
+                    nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
+                    self.optimizer.step()
+                    
+            return {
+                "loss": loss.item(),
+                "policy_loss": pg_loss.item(),
+                "value_loss": v_loss.item(),
+                "entropy": entropy_loss.item(),
+                "reg_penalty": reg_penalty.item() * self.mu_l2_coef if isinstance(reg_penalty, torch.Tensor) else reg_penalty * self.mu_l2_coef,
+                "ara_loss": ara_loss_val,
+                "grad_norm": total_norm,
+                "clip_fraction": np.mean(clipfracs),
+                "rollout_len": len(obs)
+            }
+
+    ppo = DetVarSharePPO(
+        agent, 
+        optimizer, 
+        lr=args.lr_actor, 
+        gamma=args.gamma, 
+        gae_lambda=args.gae_lambda, 
+        clip_coef=args.eps_clip, 
+        ent_coef=args.ent_coef, 
+        update_epochs=args.k_epochs, 
+        minibatch_size=args.batch_size,
+        device=device,
+        max_grad_norm=args.max_grad_norm,
+        mu_l2_coef=args.mu_l2_coef,
+        variant=args.variant
+    )
+    
+    n_steps = args.n_steps
+    n_updates = args.total_timesteps // (n_steps * args.num_envs)
+    
+    task_idx = 0
+    # eval_env doesn't auto-rotate so we set it
+    eval_env.reset_task(task_idx)
+
+    obs, _ = envs.reset(seed=args.seed)
+    
+    reward_window = deque(maxlen=25)
+    success_window = deque(maxlen=25)
+    time_window = deque(maxlen=25)
+    
+    num_episodes_finished = 0
+    
+    history = []
+    start_time = time.time()
+    global_step = 0
+    next_eval_step = 0
+    eval_reward_current = 0.0
+    eval_metrics = {}
+    
+    last_k_rewards = deque(maxlen=3)
+    
+    for update in range(n_updates):
+        mb_obs = torch.zeros((n_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+        mb_actions = torch.zeros((n_steps, args.num_envs) + envs.single_action_space.shape).to(device)
+        mb_logprobs = torch.zeros((n_steps, args.num_envs)).to(device)
+        mb_rewards = torch.zeros((n_steps, args.num_envs)).to(device)
+        mb_dones = torch.zeros((n_steps, args.num_envs)).to(device)
+        mb_values = torch.zeros((n_steps, args.num_envs)).to(device)
+        mb_task_ids = torch.zeros((n_steps, args.num_envs), dtype=torch.long).to(device)
+        
+        for step in range(n_steps):
+            global_step += 1 * args.num_envs
+            
+            with torch.no_grad():
+                task_ids_tensor = torch.full((args.num_envs,), task_idx, dtype=torch.long).to(device)
+                action, logprob, _, value, _ = agent.get_action_and_value(
+                    torch.tensor(obs).float().to(device), 
+                    task_idx=task_ids_tensor
+                )
+                
+            mb_obs[step] = torch.tensor(obs).float().to(device)
+            mb_actions[step] = action
+            mb_logprobs[step] = logprob
+            mb_values[step] = value.flatten()
+            mb_task_ids[step] = task_ids_tensor
+            
+            next_obs, rewards, terminations, truncations, infos = envs.step(action.cpu().numpy())
+            dones = np.logical_or(terminations, truncations)
+            mb_dones[step] = torch.tensor(dones).float().to(device)
+            mb_rewards[step] = torch.tensor(rewards).float().to(device)
+            
+            obs = next_obs
+            
+            if "episode" in infos:
+                if "_episode" in infos:
+                    for i, has_ep in enumerate(infos["_episode"]):
+                        if has_ep:
+                            num_episodes_finished += 1
+                            reward_window.append(infos["episode"]["r"][i])
+                            time_window.append(infos["episode"]["l"][i])
+                            if "success" in infos:
+                                success_window.append(infos["success"][i])
+            elif "final_info" in infos:
+                for info in infos["final_info"]:
+                    if info and "episode" in info:
+                        num_episodes_finished += 1
+                        reward_window.append(info["episode"]["r"])
+                        time_window.append(info["episode"]["l"])
+                        if "success" in info:
+                            success_window.append(info["success"])
+
+        with torch.no_grad():
+            task_ids_tensor = torch.full((args.num_envs,), task_idx, dtype=torch.long).to(device)
+            _, _, _, next_value, _ = agent.get_action_and_value(
+                torch.tensor(obs).float().to(device), 
+                task_idx=task_ids_tensor
+            )
+            next_value = next_value.reshape(1, -1)
+            
+        advantages = torch.zeros_like(mb_rewards).to(device)
+        lastgaelam = 0
+        for t in reversed(range(n_steps)):
+            if t == n_steps - 1:
+                nextnonterminal = 1.0 - mb_dones[t]
+                nextvalues = next_value.flatten()
+            else:
+                nextnonterminal = 1.0 - mb_dones[t]
+                nextvalues = mb_values[t+1]
+            
+            delta = mb_rewards[t] + args.gamma * nextvalues * nextnonterminal - mb_values[t]
+            advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
+        
+        returns = advantages + mb_values
+        
+        b_obs = mb_obs.reshape((-1,) + envs.single_observation_space.shape)
+        b_logprobs = mb_logprobs.reshape(-1)
+        b_actions = mb_actions.reshape((-1,) + envs.single_action_space.shape)
+        b_advantages = advantages.reshape(-1)
+        b_returns = returns.reshape(-1)
+        b_values = mb_values.reshape(-1)
+        b_task_ids = mb_task_ids.reshape(-1)
+        
+        b_returns = (b_returns - b_returns.mean()) / (b_returns.std() + 1e-7)
+        b_advantages = (b_advantages - b_advantages.mean()) / (b_advantages.std() + 1e-7)
+        
+        metrics = ppo.update_from_storage(
+            b_obs, b_actions, b_logprobs, b_returns, b_advantages, b_values, task_ids=b_task_ids
+        )
+        
+        explained_var = calculate_explained_variance(b_returns.cpu().numpy(), b_values.cpu().numpy())
+        
+        # Aggregate Architecture metrics
+        arch_data = agent.actor_backbone.get_metrics(task_idx)
+        # Average these out:
+        mean_norm_mu = np.mean([v for k,v in arch_data.items() if "norm_mu" in k]) if arch_data else 0.0
+        mean_norm_theta = np.mean([v for k,v in arch_data.items() if "norm_theta" in k]) if arch_data else 0.0
+        sharing_ratio = mean_norm_theta / (mean_norm_theta + mean_norm_mu + 1e-8)
+        
+        avg_reward = np.mean(reward_window) if reward_window else 0.0
+        avg_success = np.mean(success_window) if success_window else 0.0
+        
+        hist_entry = {
+            "step": global_step,
+            "reward": avg_reward,
+            "success": avg_success,
+            "norm_mu": mean_norm_mu,
+            "norm_theta": mean_norm_theta,
+            "sharing_ratio": sharing_ratio,
+            "loss_total": metrics["loss"],
+            "loss_policy": metrics["policy_loss"],
+            "loss_value": metrics["value_loss"],
+            "loss_entropy": metrics["entropy"],
+            "loss_reg_penalty": metrics["reg_penalty"],
+            "loss_ara": metrics["ara_loss"],
+            "explained_variance": explained_var,
+        }
+        
+        if arch_data:
+            for k, v in arch_data.items():
+                hist_entry[k] = v
+        
+        history.append(hist_entry)
+        
+        sps = int(global_step / (time.time() - start_time))
+        
+        if args.eval_mode and global_step >= next_eval_step:
+            print(f"\n>>> Running Evaluation at Step {global_step}...")
+            task_stats = evaluate(agent, eval_env, device, num_episodes=args.eval_episodes, num_tasks=num_tasks)
+            
+            eval_reward_mean = np.mean([s["reward"] for s in task_stats.values()])
+            eval_success_mean = np.mean([s["success"] for s in task_stats.values()])
+            
+            for k, v in task_stats.items():
+                eval_metrics[f"eval/reward_task_{k}"] = v["reward"]
+                eval_metrics[f"eval/success_task_{k}"] = v["success"]
+                
+            eval_metrics["eval/mean_reward"] = eval_reward_mean
+            eval_metrics["eval/mean_success"] = eval_success_mean
+            eval_reward_current = eval_reward_mean
+            
+            last_k_rewards.append(eval_reward_mean)
+            avg_last_k = np.mean(last_k_rewards)
+            
+            print(f"Eval Reward: {eval_reward_mean:.2f} | Eval Success: {eval_success_mean:.2f}")
+            print(f"FINAL_EVAL_SCORE: {eval_success_mean:.4f}")
+            print(f"FINAL_EVAL_REWARD: {avg_last_k:.4f}")
+            next_eval_step += args.eval_freq
+            
+            if report_callback:
+                report_callback(eval_reward_mean, global_step)
+            
+        history[-1]["eval_reward"] = eval_reward_current
+        history[-1]["eval_success"] = eval_metrics.get("eval/mean_success")
+        history[-1]["grad_norm"] = metrics["grad_norm"]
+        history[-1]["episodes"] = num_episodes_finished
+        
+        full_metrics = {
+            "TOTAL_ENV_STEPS": global_step,
+            "EPISODES_COMPLETED": num_episodes_finished,
+            "TOTAL_GRAD_STEPS": (update + 1) * args.k_epochs * (n_steps * args.num_envs // args.batch_size),
+            "WALL_CLOCK_TIME": time.time() - start_time,
+            "SPS": sps,
+            "loss/total": metrics["loss"],
+            "loss/policy": metrics["policy_loss"],
+            "loss/value": metrics["value_loss"],
+            "loss/entropy": metrics["entropy"],
+            "loss/reg_penalty": metrics["reg_penalty"],
+            "loss/ara": metrics["ara_loss"],
+            "diagnostics/grad_norm": metrics["grad_norm"],
+            "diagnostics/clip_fraction": metrics["clip_fraction"],
+            "diagnostics/explained_variance": explained_var,
+            "detvarshare/mean_norm_mu": mean_norm_mu,
+            "detvarshare/mean_norm_theta": mean_norm_theta,
+            "detvarshare/sharing_ratio": sharing_ratio,
+            "performance/train_reward_50": avg_reward,
+            "performance/train_success_50": avg_success,
+        }
+        for t in range(num_tasks):
+            eval_metrics[f"eval/reward_task_{t}"] = eval_metrics.get(f"eval/reward_task_{t}", 0.0)
+            eval_metrics[f"eval/success_task_{t}"] = eval_metrics.get(f"eval/success_task_{t}", 0.0)
+        
+        full_metrics.update(eval_metrics)
+        
+        heartbeat_writer.writerow(full_metrics)
+        heartbeat_file.flush()
+        
+        print_freq = 2500
+        step_increment = n_steps * args.num_envs
+        if global_step // print_freq > (global_step - step_increment) // print_freq:
+             print(f"Step {global_step:>7d} | Eps {num_episodes_finished:>4d} | Rew {avg_reward:>6.1f} | SPS {sps:>4d} | Loss {metrics['loss']:>7.3f} | Ent {metrics['entropy']:>5.3f}")
+
+    total_duration = time.time() - start_time
+    print(f"\nFinal Average Reward: {avg_reward:.2f}")
+    print(f"Total Duration: {total_duration:.2f}s")
+    
+    print(f">>> Generating scientific plots in {seed_dir}...")
+    def plot_metric(data, key, ylabel, filename):
+        plt.figure(figsize=(10, 6))
+        steps = [d["step"] for d in data]
+        values = [d[key] for d in data]
+        plt.plot(steps, values)
+        plt.xlabel("Total Environment Steps")
+        plt.ylabel(ylabel)
+        plt.title(f"{ylabel} vs Steps ({args.exp_name})")
+        plt.grid(True, alpha=0.3)
+        plt.savefig(os.path.join(seed_dir, filename))
+        plt.close()
+
+    plot_metric(history, "reward", "Training Reward (Moving Avg)", "train_reward.png")
+    plot_metric(history, "success", "Training Success Rate", "train_success.png")
+    plot_metric(history, "norm_mu", "Mean Norm Mu", "norm_mu.png")
+    plot_metric(history, "norm_theta", "Mean Norm Theta", "norm_theta.png")
+    plot_metric(history, "sharing_ratio", "Sharing Ratio", "sharing_ratio.png")
+    plot_metric(history, "episodes", "Total Episodes", "episodes.png")
+    
+    eval_history = [d for d in history if d.get("eval_reward") is not None]
+    if eval_history:
+         plot_metric(eval_history, "eval_reward", "Evaluation Reward", "eval_reward.png")
+         plot_metric(eval_history, "eval_success", "Evaluation Success Rate", "eval_success.png")
+    plot_metric(history, "grad_norm", "Gradient Norm", "grad_norm.png")
+
+    # Stacked Loss Plot (Total, L2, Value, Policy, Entropy)
+    try:
+        plt.figure(figsize=(10, 6))
+        steps = [h["step"] for h in history]
+        
+        plt.plot(steps, [h["loss_total"] for h in history], label="Total Loss", linewidth=2, color="black")
+        plt.plot(steps, [h["loss_reg_penalty"] for h in history], label="Reg Penalty", alpha=0.7)
+        if any(h["loss_ara"] > 0 for h in history):
+            plt.plot(steps, [h["loss_ara"] for h in history], label="ARA Loss", alpha=0.7)
+        plt.plot(steps, [h["loss_value"] for h in history], label="Value Loss", alpha=0.7)
+        plt.plot(steps, [h["loss_policy"] for h in history], label="Policy Loss", alpha=0.7)
+        plt.plot(steps, [h["loss_entropy"] for h in history], label="Entropy Loss", alpha=0.7)
+        
+        plt.xlabel("Total Environment Steps")
+        plt.ylabel("Loss Value")
+        plt.title(f"Optimization Landscape ({args.exp_name})")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.savefig(os.path.join(seed_dir, "loss_breakdown.png"))
+        plt.close()
+    except Exception as e:
+        print(f"Failed to plot loss breakdown: {e}")
+
+    # Layer-wise Dynamics Plots (Stacked)
+    try:
+        # Identify dynamic layer keys
+        layer_mu_keys = sorted([k for k in history[0].keys() if "norm_mu" in k and k.startswith("layer")])
+        layer_theta_keys = sorted([k for k in history[0].keys() if "norm_theta" in k and k.startswith("layer")])
+        
+        steps = [h["step"] for h in history]
+
+        # 1. Stacked plot for Mu
+        if layer_mu_keys:
+            plt.figure(figsize=(10, 6))
+            mu_values = []
+            labels = []
+            for key in layer_mu_keys:
+                layer_idx = key.split("_")[0].replace("layer", "")
+                mu_values.append([h[key] for h in history])
+                labels.append(f"Layer {layer_idx} (Mu)")
+                
+            plt.stackplot(steps, mu_values, labels=labels, alpha=0.8)
+            plt.xlabel("Total Environment Steps")
+            plt.ylabel("Cumulative Mu Norm")
+            plt.title(f"Layer-wise Structural Evolution: Mu ({args.exp_name})")
+            plt.legend(loc='upper left')
+            plt.grid(True, alpha=0.3)
+            plt.savefig(os.path.join(seed_dir, "layerwise_mu_norms.png"))
+            plt.close()
+
+        # 2. Stacked plot for Theta
+        if layer_theta_keys:
+            plt.figure(figsize=(10, 6))
+            theta_values = []
+            labels = []
+            for key in layer_theta_keys:
+                layer_idx = key.split("_")[0].replace("layer", "")
+                theta_values.append([h[key] for h in history])
+                labels.append(f"Layer {layer_idx} (Theta)")
+                
+            plt.stackplot(steps, theta_values, labels=labels, alpha=0.8)
+            plt.xlabel("Total Environment Steps")
+            plt.ylabel("Cumulative Theta Norm")
+            plt.title(f"Layer-wise Structural Evolution: Theta ({args.exp_name})")
+            plt.legend(loc='upper left')
+            plt.grid(True, alpha=0.3)
+            plt.savefig(os.path.join(seed_dir, "layerwise_theta_norms.png"))
+            plt.close()
+    except Exception as e:
+        print(f"Failed to plot layer-wise dynamics: {e}")
+
+if __name__ == "__main__":
+    train()
