@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=v5_worker
 #SBATCH --partition=batch
+#SBATCH --time=48:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=8G
 #SBATCH --gres=gpu:1
