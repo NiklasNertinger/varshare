@@ -128,12 +128,21 @@ def main():
     print("   Submitting Final Evaluation Campaign to SLURM  ")
     print("==================================================")
     
-    for env_key in ENV_SETTINGS.keys():
-        print(f"\n>>> Preparing Environment: {env_key}")
-        env_config = ENV_SETTINGS[env_key]
+    for target_phase in [1, 2]:
+        print(f"\n{'='*50}")
+        print(f"   SUBMITTING PHASE {target_phase} ALGORITHMS ")
+        print(f"{'='*50}")
         
-        for variant in VARIANTS:
-            phase, name, script, base_args, hpo_key, hpo_version = variant
+        for env_key in ENV_SETTINGS.keys():
+            print(f"\n>>> Preparing Environment: {env_key}")
+            env_config = ENV_SETTINGS[env_key]
+            
+            for variant in VARIANTS:
+                phase, name, script, base_args, hpo_key, hpo_version = variant
+                
+                # Enforce precise Phase 1 -> Phase 2 sequencing
+                if phase != target_phase:
+                    continue
             
             # Special Handling for Legacy
             if hpo_key == "LEGACY":
