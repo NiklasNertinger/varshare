@@ -1,0 +1,74 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{hyperref}
+
+\geometry{margin=1in}
+
+\title{Historical Iterations of Probabilistic VarShare}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+Prior to adopting the purely deterministic regularized-residual framework, the VarShare algorithm was extensively explored in its original Variational Bayesian formulation. Under this stochastic approach, the effective weights $w_t$ for a task $t$ were defined as random variables, sampled via the reparameterization trick:
+\[ w_t = \theta + \mu_t + \sigma_t \odot \epsilon \quad \text{with} \quad \epsilon \sim \mathcal{N}(0, I) \]
+where $\sigma_t$ was modeled as a learned, per-weight standard deviation parameterizing the posterior $\mathcal{N}(\mu_t, \sigma_t^2)$. 
+
+The training objective jointly optimized the reinforcement learning return and constrained the posterior via a Kullback-Leibler (KL) divergence penalty against a prior $\mathcal{N}(0, \sigma_{prior}^2)$.
+
+Due to persistent optimization challenges—specifically, the unstable interaction between the high-variance PPO surrogate objective and the closed-form KL penalty—several algorithmic ablations and structural variants were proposed and tested. This document details those historical formulations.
+
+\section{Algorithmic Variations and Ablations}
+
+\subsection{The ``Consistent Noise'' Ablation}
+\begin{itemize}
+    \item \textbf{Mathematical Motivation:} Proximal Policy Optimization (PPO) relies on a clipped surrogate advantage objective, $\min(r(\theta)\hat{A}, \text{clip}(r(\theta), 1-\epsilon, 1+\epsilon)\hat{A})$, evaluated over multiple optimization epochs on the same transition batch. Resampling the weight-space noise $\epsilon$ across these epochs inherently violates the on-policy assumption, destroying the advantage estimation.
+    \item \textbf{Implementation:} We altered the sampling procedure such that the noise tensor $\epsilon$ is sampled exactly once per episode trajectory and cached: $\epsilon_{episode} \sim \mathcal{N}(0, I)$. This frozen noise is broadcasted across all forward passes within the episode and maintained during the $K$ internal PPO update epochs, ensuring temporally consistent behavioral exploration and a stable trust region.
+\end{itemize}
+
+\subsection{Continuous and Discrete KL-Schedules}
+\begin{itemize}
+    \item \textbf{Mathematical Motivation:} The magnitude of the analytic gradient $\nabla_\sigma \mathcal{D}_{KL}$ often vastly exceeded the magnitude of the policy-gradient estimate $\nabla_\sigma \mathcal{L}^{CLIP}$, particularly early in training when the advantage estimate $\hat{A}$ is poorly scaled. 
+    \item \textbf{Implementation:} We modulated the scalar weight of the KL divergence term, defined as $\beta$, using temporal scheduling functions $\beta(t)$ based on the training timestep $t$:
+    \begin{itemize}
+        \item \textbf{Linear Annealing:} $\beta(t) = \min(\beta_{target}, \frac{t}{T_{warmup}} \beta_{target})$, allowing the RL loss to establish the parameters $\mu_t, \sigma_t$ before the regularization penalty strictly enforced the prior.
+        \item \textbf{Trigger Schedules:} $\beta(t) = \beta_{target} \cdot \mathbf{1}(\mathbb{E}[R] > R_{threshold})$, where $\mathbf{1}$ is the indicator function switching the penalty on only when the episodic return surpassed a predefined benchmark.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Empirical Bayes (Learned Priors)}
+\begin{itemize}
+    \item \textbf{Mathematical Motivation:} A fixed, uninformative prior $\mathcal{N}(0, \sigma_{fixed}^2)$ imposes an arbitrary scale constraint on the network. Tasks requiring high structural variance for specific complex features are overly penalized.
+    \item \textbf{Implementation:} We transitioned from a fixed prior to a parameterized prior distribution, optimizing $\sigma_{prior}$ via gradient descent jointly with the network parameters. The KL divergence becomes $\mathcal{D}_{KL}( \mathcal{N}(\mu_t, \sigma_t^2) \| \mathcal{N}(0, \sigma_{prior}^2) )$, where $\sigma_{prior}$ is updated to minimize the overall composite loss function, creating a moving-target regularization scheme.
+\end{itemize}
+
+\subsection{Hyperprior Penalties (The $\lambda_{hyper}$ Experiments)}
+\begin{itemize}
+    \item \textbf{Mathematical Motivation:} To explicitly suppress unnecessary stochasticity independent of the KL divergence, we sought an additive penalty acting directly on the scale of the variance parameters.
+    \item \textbf{Implementation:} The variance was parameterized as $\sigma_t = \text{Softplus}(\rho_t)$. We introduced an explicit L2 regularization term acting on the underlying $\rho$ variables: $\mathcal{L}_{hyper} = \lambda_{hyper} \|\rho_t\|^2$. This term was added to the final PPO loss objective to induce deterministic behavior in parameters that did not exhibit strong gradients favoring exploration.
+\end{itemize}
+
+\subsection{Target Noise-to-Weight Ratios}
+\begin{itemize}
+    \item \textbf{Mathematical Motivation:} To prevent $\sigma_t$ from scaling disproportionately to its corresponding mean parameter $\mu_t$, we sought to enforce a relative constraint bounding the coefficient of variation, $c_v = \frac{\sigma_t}{|\mu_t|}$.
+    \item \textbf{Implementation:} The scalar $\sigma_t$ was algorithmically constrained such that it scaled as a strict proportion of $\mu$, e.g., enforcing $\sigma_t \approx \alpha \cdot |\mu_t|$ where $\alpha$ is a predefined hyperparameter (e.g., $0.1$). This was enforced either via hard clipping Operations during the forward pass or via an additional penalty in the loss term measuring the distance from the target ratio.
+\end{itemize}
+
+\subsection{Structural Architectural Variants}
+Rather than solely altering the optimization objective, the probabilistic formulation was applied selectively to different architectural sub-components:
+\begin{itemize}
+    \item \textbf{VarShare-LoRA:} The stochastic sampling was isolated exclusively to the low-rank projection matrices $A \in \mathbb{R}^{d \times r}$ and $B \in \mathbb{R}^{r \times k}$, maintaining the primary shared projection layer $\theta$ as a purely deterministic mapping.
+    \item \textbf{Partial / Decoupled VarShare:} Noise injection was selectively activated based on network depth, e.g., applying Variational Bayesian sampling only to the final task-specific action decoders while keeping the shared $\theta$ feature-extraction layers fully deterministic.
+    \item \textbf{Reptile Initialization:} Applying first-order meta-learning algorithms (Reptile) to pre-train the shared initialization state of $\theta$ and $\mu_t$ across the task distribution before engaging the stochastic VarShare optimization process.
+\end{itemize}
+
+\end{document}

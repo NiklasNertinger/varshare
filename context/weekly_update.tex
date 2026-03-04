@@ -1,0 +1,86 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{hyperref}
+
+\geometry{margin=1in}
+
+\title{Weekly Update}
+\author{Niklas Nertinger}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Brief Summary}
+
+\subsection*{VarShare - Multi-Task Reinforcement Learning Algorithm}
+\begin{itemize}
+    \item \textbf{RLC Submission (05/03):} It currently appears that the RLC submission deadline will not be feasible.
+    \item \textbf{Performance Trends:} While the algorithm performed well on simpler benchmarks (exhibiting faster convergence than baselines), it struggled on \textbf{MT10}, the gold standard for multi-task RL. Most common baselines ultimately outperformed it in this setting.
+    \item \textbf{Fixes and Improvements:} Several adjustments were attempted to improve performance, but none provided the necessary performance boost.
+    \item \textbf{Switch to Deterministic:} Notably, transitioning from the probabilistic framework to a purely \textbf{deterministic} one improved performance significantly.
+    \item \textbf{New Focus:} The focus has shifted to a version based on \textbf{regularized residuals}. This involves using task-specific weights as offsets from a shared backbone, which helps regulate the degree to which each task diverges from the group.
+\end{itemize}
+
+\subsection*{Type 1 Diabetes (T1D) Simulator}
+\begin{itemize}
+    \item \textbf{Lab Meeting:} I met with Drew from Prof. Braune's Lab again this week.
+    \item \textbf{Data Issues:} We have not yet been able to obtain glucose and insulin data that includes sleep or menstrual cycle information.
+    \item \textbf{HORMONITOR Study:} Encouragingly, the HORMONITOR study (which examines T1D and hormonal cycles) has received ethics approval. However, the data will not be available for at least another 6 months.
+    \item \textbf{Alternative Dataset:} In the meantime, we have gained access to another robust dataset. It contains detailed glucose and insulin data for 150 participants over 6 to 12 months each.
+    \item \textbf{Current Goal:} The immediate plan is to use this new data for general improvements to the Digital Twin Simulator until data becomes available to incorporate menstrual cycle and sleep factors.
+\end{itemize}
+
+\section{Detailed VarShare Update}
+
+\subsection{Reminder: The VarShare Idea}
+The original goal of VarShare was to enable knowledge transfer in Multi-Task RL using a Variational Bayesian approach. Instead of learning fixed weights, we learn a posterior distribution over the parameters for each task. The effective weights $w_t$ for task $t$ are sampled using the reparameterization trick:
+\[ w_t = \theta + \mu_t + \sigma_t \odot \epsilon \quad \text{with} \quad \epsilon \sim \mathcal{N}(0, I) \]
+In this formulation:
+\begin{itemize}
+    \item $\theta$ is the \textbf{shared global backbone}, representing universal knowledge shared across all tasks.
+    \item $\mu_t$ is the \textbf{task-specific mean residual}, allowing the model to adapt $\theta$ to the specific requirements of task $t$.
+    \item $\sigma_t$ is the \textbf{per-weight standard deviation} for task $t$. This provides a learned uncertainty estimate for every individual parameter, theoretically allowing the network to explore more where it is less certain.
+\end{itemize}
+The training objective includes a KL divergence penalty, $\mathcal{D}_{KL}( \mathcal{N}(\mu_t, \sigma_t^2) \| \mathcal{N}(0, \sigma_{prior}^2) )$, which forces the task-specific parameters to stay close to the shared backbone unless the RL signal is strong enough to justify a deviation.
+
+In summary, this means VarShare has two key defining properties: \textbf{probabilistic weights} and \textbf{regularized task-residuals}.
+
+\subsection{Why would we want regularized residuals for MTRL?}
+The residual structure ($w_t = \theta + \mu_t$) is beneficial for several reasons:
+\begin{itemize}
+    \item \textbf{Faster Learning:} Gradients from all tasks flow into the shared backbone $\theta$. This enables the model to learn general features (such as basic physics or vision) much faster than training separate models.
+    \item \textbf{Pressure Relief for Tasks:} The $\mu_t$ residuals act as a mechanism for handling task conflicts. If gradients disagree, they can cancel out in the shared weights while allowing individual tasks to learn specialized features in their own residuals. 
+    \item \textbf{Parameter Efficiency:} It is much more efficient to store one shared model and small offsets for each task (potentially using LoRA) than it is to maintain a full model for every task.
+\end{itemize}
+
+\subsection{Why would we want probabilistic weights for MTRL?}
+Using probabilistic weights offers several significant theoretical advantages:
+\begin{itemize}
+    \item \textbf{Targeted Exploration:} Instead of adding noise to actions, we inject it into the weights. This creates consistent behavior over an episode. Since the network learns the variance ($\sigma_t$), it should theoretically be able to identify where to explore and where to settle.
+    \item \textbf{Finding Robust Solutions:} Injecting weight-space noise during training forces the network to find ``wide valleys'' in the loss landscape. This makes the model more robust to environment changes compared to a standard model that might settle into a sharp, brittle minimum.
+\end{itemize}
+
+\subsection{Challenges with the Probabilistic Approach}
+While the advantages mentioned are theoretically attractive, they proved less effective in practice. The primary issue was that in our tests, the task-specific variances ($\sigma_t$) converged to the prior value ($\sigma_{prior}$) almost immediately. They failed to convey useful information about uncertainty. It appears the unstable RL loss struggles to compete with the KL loss, which is much easier for the optimizer to satisfy by simply flattening the noise.
+
+Furthermore, these fixed noise levels caused the model to stop learning in the later stages of training. While weight-space noise can be helpful for finding "wide" reward maxima, in reality, high-performance reinforcement learning policies often require settling into very narrow and precise parameter regions. The constant jitter prevented the model from executing the deep, successful trajectories needed for convergence, essentially capping the performance.
+
+\subsection{Shift to Deterministic Approach}
+Because the noise was not beneficial, I removed the probabilistic aspect and retained only the regularized task-residuals. Mathematically, this simplifies the weights to:
+\[ w_t = \theta + \mu_t \]
+We now apply an L2 penalty to $\mu_t$ to prevent the tasks from drifting too far from the shared representation.
+
+On the \textbf{MT4} benchmark (a subset of MT10 used for faster iteration), this deterministic version significantly outperformed other baselines, including Shared networks (with and without PCGrad) and PaCo. It nearly reached the performance of \textbf{Soft Modularization}, which is currently the most competitive baseline.
+
+\subsection{Next Steps}
+I am now focusing entirely on this deterministic approach. I am currently testing several adjustments to see if we can further improve performance and address the remaining issues.
+
+\end{document}

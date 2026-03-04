@@ -1,0 +1,138 @@
+\documentclass{article} % For LaTeX2e
+\pdfoutput=1
+
+% if you need to pass options to natbib, use, e.g.:
+% \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading nips_2017
+%
+% to avoid loading the natbib package, add option nonatbib:
+% \usepackage[nonatbib]{nips_2017}
+
+%\usepackage{nips_2017}
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+% \PassOptionsToPackage{numbers, compress}{natbib}
+% \usepackage[final]{nips_2017}
+\usepackage{iclr2018_conference,times}
+\iclrfinalcopy
+\usepackage{hyperref}
+\usepackage{url}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{placeins}
+
+% Additional macros and packages.
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{bbm}
+\usepackage[inline]{enumitem}
+\usepackage{tikz}
+\usepackage{mathtools}
+\usepackage{subfigure}
+\allowdisplaybreaks
+
+\usepackage{lipsum}
+
+% \newcommand\blfootnote[1]{%
+%   \begingroup
+%   \renewcommand\thefootnote{}\footnote{#1}%
+%   \addtocounter{footnote}{-1}%
+%   \endgroup
+% }
+
+
+% \renewcommand{\bibsection}{\subsection*{References}}
+
+\DeclarePairedDelimiterX{\infdivx}[2]{(}{)}{%
+  #1\;\delimsize\|\;#2%
+}
+\newcommand{\kl}{D_{\text{KL}}\infdivx}
+
+\usepackage{bm}
+\usepackage{xcolor}
+%\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\renewcommand{\vec}[1]{\boldsymbol{#1}}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+
+\renewcommand{\subsectionautorefname}{Section}
+\renewcommand{\subsubsectionautorefname}{Section}
+
+\renewcommand{\S}{\mathcal{S}}
+\renewcommand{\O}{\mathcal{O}}
+\newcommand{\G}{\mathcal{G}}
+\newcommand{\A}{\mathcal{A}}
+\newcommand{\N}{\mathcal{N}}
+\renewcommand{\L}{\mathcal{L}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\1}{\mathbbm{1}}
+
+%\newcommand{\change}[1]{\textcolor{red}{#1}}
+\newcommand{\change}[1]{#1}
+
+% \usepackage{titlesec}
+% \titlespacing\section{0pt}{0pt plus 4pt minus 2pt}{0pt plus 2pt minus 2pt}
+% \titlespacing\subsection{0pt}{0pt plus 4pt minus 2pt}{0pt plus 2pt minus 2pt}
+% \setlength{\belowcaptionskip}{-5pt}
+
+\title{Parameter Space Noise for Exploration}
+
+% The \author macro works with any number of authors. There are two
+% commands used to separate the names and addresses of multiple
+% authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to
+% break the lines. Using \AND forces a line break at that point. So,
+% if LaTeX puts 3 of 4 authors names on the first line, and the last
+% on the second line, try using \AND instead of \And before the third
+% author name.
+
+\author{
+  Matthias Plappert$^{\dagger \ddagger}$, Rein Houthooft$^{\dagger}$, Prafulla Dhariwal$^{\dagger}$, Szymon Sidor$^{\dagger}$,\\
+  \textbf{Richard Y.\ Chen$^{\dagger}$, Xi Chen$^{\dagger\dagger}$, Tamim Asfour$^{\ddagger}$, Pieter Abbeel$^{\dagger\dagger}$, and Marcin Andrychowicz$^{\dagger}$}\\
+  $^{\dagger}$ OpenAI\\
+  $^{\ddagger}$ Karlsruhe Institute of Technology (KIT)\\
+  $^{\dagger\dagger}$ University of California, Berkeley \\
+  Correspondence to \texttt{matthias@openai.com} \\
+}
+
+\begin{document}    
+
+\maketitle
+
+\begin{abstract}
+Deep reinforcement learning (RL) methods generally engage in exploratory behavior through noise injection in the action space. An alternative is to add noise directly to the agent's parameters, which can lead to more consistent exploration and a richer set of behaviors. Methods such as evolutionary strategies use parameter perturbations, but discard all temporal structure in the process and require significantly more samples. Combining parameter noise with traditional RL methods allows to combine the best of both worlds. We demonstrate that both off- and on-policy methods benefit from this approach through experimental comparison of DQN, DDPG, and TRPO on high-dimensional discrete action environments as well as continuous control tasks.
+% Our results show that RL with parameter noise learns more efficiently than traditional RL with action space noise and evolutionary strategies individually.
+\end{abstract}
+
+\input{sections/introduction}
+
+\input{sections/background}
+
+\input{sections/param_noise}
+
+\input{sections/exp}
+
+\input{sections/related_work}
+
+\input{sections/conclusion}
+
+\begingroup
+    \small
+    \bibliographystyle{iclr2018_conference}
+    \small
+    \bibliography{main}
+\endgroup
+
+\appendix
+\input{appendix}
+
+\end{document}
