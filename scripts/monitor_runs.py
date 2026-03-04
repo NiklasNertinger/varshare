@@ -38,12 +38,12 @@ def monitor_runs():
             data = dict(zip(header, last_line))
             
             # Extract path details
-            # path: .../phaseX/ENV/ALGO/seed_Y/heartbeat.csv
+            # path: .../phaseX/ENV/ALGO/EXP_NAME/seed_Y/heartbeat.csv
             parts = csv_file.parts
             seed = parts[-2]
-            algo = parts[-3]
-            env = parts[-4]
-            phase = parts[-5]
+            algo = parts[-4]
+            env = parts[-5]
+            phase = parts[-6]
             
             # Math
             step = float(data.get("TOTAL_ENV_STEPS", 0))
