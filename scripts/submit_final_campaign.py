@@ -145,47 +145,47 @@ def main():
                 if phase != target_phase:
                     continue
             
-            # Special Handling for Legacy
-            if hpo_key == "LEGACY":
-                # Only run legacy on MT4 & MT10
-                if env_key not in ["MT4", "MT10"]:
-                    continue
-                # Hardcoded legacy hyperparams. Legacy uses its original un-constrained 2.0 max grad norm implicitly (we don't pass the new 1.0)
-                hpo_args = ["--kl-beta", "0.00043", "--lr-actor", "0.000117", "--lr-critic", "0.000259", "--rho-init", "-5.0", "--prior-scale", "1.0"]
-                hidden_dim_to_use = 64 # Special 64x64 backbone
-                grad_clip_arg = [] # Fallback to whatever defaults existed
-            else:
-                hidden_dim_to_use = env_config["hidden_dim"]
-                grad_clip_arg = ["--max-grad-norm", "1.0"] # Conservative empirical clipping
-                # Extract HPOs
-                try:
-                    # MT10 natively uses MT4 params due to extraction parsing logic (we copied it over)
-                    best_params = hparams_db[hpo_version][env_key].get(hpo_key, None)
-                    
-                    if not best_params:
-                        print(f"    WARNING: No HPO found for {name} on {env_key}. Skipping!")
+                # Special Handling for Legacy
+                if hpo_key == "LEGACY":
+                    # Only run legacy on MT4 & MT10
+                    if env_key not in ["MT4", "MT10"]:
                         continue
+                    # Hardcoded legacy hyperparams. Legacy uses its original un-constrained 2.0 max grad norm implicitly (we don't pass the new 1.0)
+                    hpo_args = ["--kl-beta", "0.00043", "--lr-actor", "0.000117", "--lr-critic", "0.000259", "--rho-init", "-5.0", "--prior-scale", "1.0"]
+                    hidden_dim_to_use = 64 # Special 64x64 backbone
+                    grad_clip_arg = [] # Fallback to whatever defaults existed
+                else:
+                    hidden_dim_to_use = env_config["hidden_dim"]
+                    grad_clip_arg = ["--max-grad-norm", "1.0"] # Conservative empirical clipping
+                    # Extract HPOs
+                    try:
+                        # MT10 natively uses MT4 params due to extraction parsing logic (we copied it over)
+                        best_params = hparams_db[hpo_version][env_key].get(hpo_key, None)
                         
-                    hpo_args = construct_hparam_args(best_params)
-                except KeyError:
-                    print(f"    WARNING: HPO path missing for {name} on {env_key}. Skipping!")
-                    continue
-            
-            base_args_with_clip = base_args + grad_clip_arg
-            
-            # Dispatch
-            submit_job(
-                phase=phase,
-                env_key=env_key,
-                name=name,
-                script=script,
-                base_args=base_args_with_clip,
-                hpo_args=hpo_args,
-                hidden_dim=hidden_dim_to_use,
-                steps=env_config["steps"],
-                n_steps=env_config["n_steps"],
-                eval_freq=env_config["eval_freq"]
-            )
+                        if not best_params:
+                            print(f"    WARNING: No HPO found for {name} on {env_key}. Skipping!")
+                            continue
+                            
+                        hpo_args = construct_hparam_args(best_params)
+                    except KeyError:
+                        print(f"    WARNING: HPO path missing for {name} on {env_key}. Skipping!")
+                        continue
+                
+                base_args_with_clip = base_args + grad_clip_arg
+                
+                # Dispatch
+                submit_job(
+                    phase=phase,
+                    env_key=env_key,
+                    name=name,
+                    script=script,
+                    base_args=base_args_with_clip,
+                    hpo_args=hpo_args,
+                    hidden_dim=hidden_dim_to_use,
+                    steps=env_config["steps"],
+                    n_steps=env_config["n_steps"],
+                    eval_freq=env_config["eval_freq"]
+                )
 
 if __name__ == "__main__":
     main()
