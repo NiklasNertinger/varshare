@@ -24,7 +24,7 @@ BATCH_SIZE = 64
 # Tuple: (Phase, Name, Base Script, Base Args, HPO Key to Look Up, HPO Db Version)
 VARIANTS = [
     # --- PHASE 1 ---
-    (1, "soft_mod", "scripts/train_baseline_ppo.py", ["--algo", "soft_mod", "--num-modules", "4"], "soft_modularization", "v5"),
+    (1, "soft_mod", "scripts/train_baseline_ppo.py", ["--algo", "soft_mod", "--num-modules", "4"], "soft_mod", "v5"),
     (1, "shared_embedding", "scripts/train_baseline_ppo.py", ["--algo", "shared"], "shared_embedding", "v5"),
     (1, "paco", "scripts/train_baseline_ppo.py", ["--algo", "paco", "--num-experts", "4"], "paco", "v5"),
     (1, "shared_embedding_pcgrad", "scripts/train_baseline_ppo.py", ["--algo", "pcgrad"], "shared_embedding_pcgrad", "v5"),
