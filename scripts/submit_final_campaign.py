@@ -75,7 +75,7 @@ def submit_job(phase, env_key, name, script, base_args, hpo_args, hidden_dim, st
         "--eval-freq", str(eval_freq),
         "--env-type", ENV_SETTINGS[env_key]["env_type"],
         "--hidden-dim", str(hidden_dim),
-        "--analysis-dir", f"/netscratch/$USER/varshare/analysis/final_eval/phase{phase}/{env_key}/{name}"
+        "--analysis-dir", f"/netscratch/{os.environ.get('USER', 'nertinger')}/varshare/analysis/final_eval/phase{phase}/{env_key}/{name}"
     ]
     
     if "mt_setting" in ENV_SETTINGS[env_key]:
@@ -86,7 +86,8 @@ def submit_job(phase, env_key, name, script, base_args, hpo_args, hidden_dim, st
     full_cmd += " ".join(all_args)
     
     # Setup Slurm output structure
-    log_dir = f"/netscratch/$USER/varshare/logs/final_eval/phase{phase}/{env_key}/{name}"
+    user = os.environ.get('USER', 'nertinger')
+    log_dir = f"/netscratch/{user}/varshare/logs/final_eval/phase{phase}/{env_key}/{name}"
     os.makedirs(log_dir, exist_ok=True)
     
     # Slurm Time Dynamic
