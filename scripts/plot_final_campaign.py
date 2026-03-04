@@ -1,4 +1,5 @@
 import os
+import argparse
 import pathlib
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -47,8 +48,11 @@ def generate_seed_plots(df, seed_dir):
         plt.savefig(os.path.join(tasks_dir, "all_tasks_reward.png"))
         plt.close()
 
-def plot_final_campaign():
-    base_dir = pathlib.Path("/netscratch") / os.environ.get("USER", "default_user") / "varshare" / "analysis" / "final_eval"
+def plot_final_campaign(base_dir_str=None):
+    if base_dir_str:
+        base_dir = pathlib.Path(base_dir_str)
+    else:
+        base_dir = pathlib.Path("/netscratch") / os.environ.get("USER", "default_user") / "varshare" / "analysis" / "final_eval"
     
     if not base_dir.exists():
         print(f"Directory {base_dir} not found. Ensure experiments have run.")
@@ -65,15 +69,22 @@ def plot_final_campaign():
             # Smooth by 10 as requested
             df = smooth_data(df, window=10)
             
-            parts = csv_file.parts
-            seed = parts[-2]
-            algo_run_name = parts[-3]
-            algo_base = parts[-4]
-            env = parts[-5]
-            phase = parts[-6] # "phase1" or "phase2"
-            
-            # Identify variant name clean
-            variant_name = algo_base
+            # Identify hierarchy based on relative path to base_dir
+            try:
+                rel_parts = csv_file.relative_to(base_dir).parts
+                if len(rel_parts) >= 5:
+                    phase = rel_parts[-5]
+                    env = rel_parts[-4]
+                    variant_name = rel_parts[-3]
+                    seed = rel_parts[-2]
+                else:
+                    # Fallback for local testing arrays
+                    phase = "test_phase"
+                    env = "TEST_ENV"
+                    variant_name = rel_parts[-3] if len(rel_parts) >= 3 else "unknown"
+                    seed = rel_parts[-2] if len(rel_parts) >= 2 else "seed_1"
+            except ValueError:
+                continue
             
             # Plot individual seed details
             seed_dir = csv_file.parent
@@ -167,4 +178,8 @@ def plot_final_campaign():
     print(f"Plotting complete. Outputs located in {base_dir}")
 
 if __name__ == "__main__":
-    plot_final_campaign()
+    parser = argparse.ArgumentParser(description="Generate plots for VarShare evaluation campaigns.")
+    parser.add_argument("--dir", type=str, default=None, help="Base directory to scan for heartbeat.csv files.")
+    args = parser.parse_args()
+    
+    plot_final_campaign(args.dir)
