@@ -5,11 +5,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def smooth_data(df, window=10):
-    """Applies a smooth rolling average over the last 10 measurements, as requested."""
-    numeric_cols = df.select_dtypes(include='number').columns
+def smooth_data(df, window=50):
+    """Applies a smooth rolling average over the last X measurements, as requested."""
+    # Only smooth training curves to preserve exact evaluation data resolution
+    train_cols = [c for c in df.columns if 'train' in c]
     df_smoothed = df.copy()
-    df_smoothed[numeric_cols] = df[numeric_cols].rolling(window=window, min_periods=1).mean()
+    if train_cols:
+        df_smoothed[train_cols] = df[train_cols].rolling(window=window, min_periods=1).mean()
     return df_smoothed
 
 def generate_seed_plots(df, seed_dir):
@@ -66,16 +68,16 @@ def plot_final_campaign(base_dir_str=None):
             df = pd.read_csv(csv_file)
             if df.empty: continue
             
-            # Smooth by 10 as requested
-            df = smooth_data(df, window=10)
+            # Smooth by 50 for training curves as requested
+            df = smooth_data(df, window=50)
             
             # Identify hierarchy based on relative path to base_dir
             try:
                 rel_parts = csv_file.relative_to(base_dir).parts
-                if len(rel_parts) >= 5:
-                    phase = rel_parts[-5]
-                    env = rel_parts[-4]
-                    variant_name = rel_parts[-3]
+                if len(rel_parts) >= 6:
+                    phase = rel_parts[-6]
+                    env = rel_parts[-5]
+                    variant_name = rel_parts[-4]
                     seed = rel_parts[-2]
                 else:
                     # Fallback for local testing arrays
