@@ -37,7 +37,8 @@ def monitor_runs():
                 
             data = dict(zip(header, last_line))
             
-            # Extract path details: phaseX / ENV / ALGO / seed_Y
+            # Extract path details
+            # path: .../phaseX/ENV/ALGO/seed_Y/heartbeat.csv
             parts = csv_file.parts
             seed = parts[-2]
             algo = parts[-3]
@@ -45,17 +46,21 @@ def monitor_runs():
             phase = parts[-5]
             
             # Math
-            step = int(float(data.get("TOTAL_ENV_STEPS", 0)))
-            target = t_steps.get(env, 1)
+            step = float(data.get("TOTAL_ENV_STEPS", 0))
+            target = float(t_steps.get(env, 1)) # Defaults to 1 if env not found to avoid ZeroDivisionError
             pct = (step / target) * 100
             
             reward = float(data.get("eval/mean_reward", 0.0))
-            sps = int(float(data.get("SPS", 0)))
+            sps = float(data.get("SPS", 0.0))
             
             # Hours remaining approx
             rem_steps = target - step
             rem_hours = (rem_steps / sps) / 3600 if sps > 0 else 0
             
+            # Formatting
+            if rem_hours < 0:
+                rem_hours = 0.0
+                
             runs.append({
                 "Env": env,
                 "Alg": algo,
@@ -63,7 +68,7 @@ def monitor_runs():
                 "Pct": pct,
                 "Step": f"{step/1000000:.2f}M",
                 "Rew": reward,
-                "SPS": sps,
+                "SPS": int(sps),
                 "ETA": f"{rem_hours:.1f}h"
             })
             
@@ -85,12 +90,17 @@ def monitor_runs():
     last_env = ""
     for r in runs:
         if r["Env"] != last_env and last_env != "":
-            print("-" * 95)
+            print("-" * 105)
         last_env = r["Env"]
         
-        print(f"{r['Env']:<12} | {r['Alg']:<30} | {r['Seed']:<6} | {r['Pct']:>5.1f}% | {r['Step']:>8} | {r['Rew']:>8.1f} | {r['SPS']:>6} | {r['ETA']:>8}")
+        # Format Algorithm name to fit the 30-char column cleanly without breaking alignment
+        disp_alg = r['Alg']
+        if len(disp_alg) > 30:
+            disp_alg = disp_alg[:27] + "..."
+            
+        print(f"{r['Env']:<12} | {disp_alg:<30} | {r['Seed']:<6} | {r['Pct']:>6.2f}% | {r['Step']:>8} | {r['Rew']:>8.1f} | {r['SPS']:>6} | {r['ETA']:>8}")
 
-    print("=" * 95)
+    print("=" * 105)
     print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 if __name__ == "__main__":
