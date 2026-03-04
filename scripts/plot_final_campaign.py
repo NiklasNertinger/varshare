@@ -118,8 +118,12 @@ def plot_final_campaign(base_dir_str=None):
             plt.figure(figsize=(10, 6))
             for col in cols:
                 if col in group.columns:
+                    # Drop NaNs before plotting to prevent seaborn hanging
+                    clean_group = group.dropna(subset=[col, "TOTAL_ENV_STEPS"])
+                    if clean_group.empty: continue
+                    
                     # Seaborn auto-aggregates across 'seed' with shaded standard deviation
-                    sns.lineplot(data=group, x="TOTAL_ENV_STEPS", y=col, label=col.split('/')[-1], errorbar="sd")
+                    sns.lineplot(data=clean_group, x="TOTAL_ENV_STEPS", y=col, label=col.split('/')[-1], errorbar="sd")
             plt.title(f"Aggregated {name.capitalize()} - {algo} ({env})")
             plt.grid(True, alpha=0.3)
             plt.savefig(os.path.join(algo_out_dir, f"aggregated_{name}.png"))
@@ -132,7 +136,9 @@ def plot_final_campaign(base_dir_str=None):
         if task_cols:
             plt.figure(figsize=(12, 8))
             for col in task_cols:
-                sns.lineplot(data=group, x="TOTAL_ENV_STEPS", y=col, label=col.split('_')[-1], errorbar="sd")
+                clean_task_group = group.dropna(subset=[col, "TOTAL_ENV_STEPS"])
+                if clean_task_group.empty: continue
+                sns.lineplot(data=clean_task_group, x="TOTAL_ENV_STEPS", y=col, label=col.split('_')[-1], errorbar="sd")
             plt.title(f"Aggregated Task-Specific Rewards - {algo}")
             plt.grid(True, alpha=0.3)
             plt.savefig(os.path.join(task_out_dir, "aggregated_tasks_reward.png"))
@@ -159,7 +165,11 @@ def plot_final_campaign(base_dir_str=None):
                 if data_group[col].max() == 0.0: continue
                 
                 plt.figure(figsize=(14, 8))
-                sns.lineplot(data=data_group, x="TOTAL_ENV_STEPS", y=col, hue="algo", errorbar="sd", palette="tab20")
+                
+                clean_data = data_group.dropna(subset=[col, "TOTAL_ENV_STEPS"])
+                if clean_data.empty: continue
+                
+                sns.lineplot(data=clean_data, x="TOTAL_ENV_STEPS", y=col, hue="algo", errorbar="sd", palette="tab20")
                 plt.title(f"{title_prefix} - {plot_name} ({env})")
                 plt.grid(True, alpha=0.3)
                 plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
