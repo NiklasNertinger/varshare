@@ -19,7 +19,7 @@
 \maketitle
 
 \section*{Overview}
-\textbf{Very Brief \& concise summary:} This document outlines the status of the VarShare multi-task reinforcement learning project. We summarize the theoretical foundation of our original probabilistic approach, review our recent experimental results on harder benchmarks (which prompted a pivot), and finally detail our new focus on the highly successful \textit{deterministic} residual architecture, including our search for novel extensions.
+\textbf{Brief summary:} This document outlines the status of the VarShare multi-task reinforcement learning project. We summarize the theoretical foundation of our original probabilistic approach and review our recent experimental results which prompted a pivot. Finally, we detail our new focus on the more successful \textit{deterministic} residual architecture, concluding with a formal analysis of its remaining structural flaws and our proposed architectural extensions designed to overcome them.
 
 
 
@@ -91,22 +91,22 @@ While the theoretical advantages of the variational approach proved unviable in 
 However, a fundamental challenge remains: \textbf{novelty}. 
 Similar parameter-efficient learning algorithms already exist for standard Multi-Task Learning (e.g., MTLoRA: \url{https://arxiv.org/abs/2403.20320}). That said, I have yet to find this specific, additive mechanistic structure applied natively to Multi-Task \textbf{RL}. 
 
-To bridge this novelty gap and unlock the architecture's true potential, I have formally analyzed its strengths and weaknesses. Guided by this analysis, I have designed several tailored architectural improvements intended to either maximize its structural strengths or mitigate its existing flaws.
+To bridge this novelty gap and unlock the architecture's true potential, I have formally analyzed its strengths and weaknesses. Guided by this analysis, I have designed several tailored architectural improvements intended to either maximize its structural strengths or mitigate its existing flaws (or also other possible improvements, orthogonal to strengths and weaknesses).
 
 \subsection*{Remaining Structural Disadvantages}
 \begin{itemize}
     \item \textbf{Feature Interference:} Because every task mathematically passes through exactly the same shared backbone, fundamentally contradictory tasks force the shared features into an unaligned middle ground. The affected task residual $\mu_t$ must then grow massive (and pay a heavy regularization penalty) simply to "undo" the shared feature.
     \item \textbf{Hyper-Sensitivity to Regularization:} The entire architecture hinges on the delicate balancing of the residual penalty coefficient constraint. If it is too high, it collapses into a rigid shared network (negative transfer); if too low, the tasks memorize independently without sharing.
     \item \textbf{Forced Late-Stage Sharing:} Standard execution forces the network to maintain the shared bottleneck even at the deepest layers. Forcing tasks to share deep, high-level logic when they only agree on low-level visual/state features is computationally wasteful.
-    \item \textbf{Limited Geometric Expressivity:} Treating the residual strictly as a linear, additive weight shift ($w_t = \theta + \mu_t$) severely limits how efficiently the module can represent complex geometric transformations like rotating or scaling a feature space.
+    \item \textbf{Limited Geometric Expressivity:} Treating the residual strictly as a linear, additive weight shift ($w_t = \theta + \mu_t$) severely limits how efficiently the module can represent complex geometric transformations like rotating or scaling a feature space without paying a high regularization penalty.
 \end{itemize}
 
-Here are some of the concepts I have come up with thus far, most of which are currently being tested in experiments. Additional suggestions or directions for improvements on the algorithm are very welcome during the meeting:
+Here are some of the concepts I have come up with thus far, most of which are currently being tested in experiments. Additional suggestions or directions for improvements on the algorithm are very welcome during the meeting (or after! :) )
 
-\subsection*{Proposed Novel Extensions}
+\subsection*{Proposed Extensions}
 \begin{itemize}
     \item \textbf{Progressive Regularization Depth Decay:} To solve the "Late-Stage Sharing" flaw, we can apply a decay schedule to the regularization coefficient based on network depth (e.g., strong sharing penalty early in the network, zero penalty at the output decoders to allow complete task independence). Further research will investigate if this per-layer regularization strength can be actively \textit{learned} dynamically, similar to calculating a ``Hypergradient'' in SGD.
-    \item \textbf{Multiplicative Modulation (Geometric Expressivity):} Instead of purely relying on additive weights mapped to the shared backbone, we can introduce multiplicative modules that allow for complex spatial operations (e.g., rotation) with extremely small parameter magnitudes. This transforms the effective weight equation to $w_t = (\theta \odot R_t) + \mu_t$, where $R_t = I + \delta_t$ and $\delta_t$ represents a learned, low-parameter scaling vector.
+    \item \textbf{Multiplicative Modulation (Geometric Expressivity):} Instead of purely relying on additive weights mapped to the shared backbone, we can introduce multiplicative modules that allow for complex spatial operations (e.g., rotation) with extremely small parameter magnitudes. This transforms the effective weight equation to $w_t = (\theta \odot R_t) + \mu_t$, where $R_t = I + \delta_t$ and $\delta_t$ represents a learned, low-parameter scaling matrix (probably handled with LoRA to reduce dimensionality).
     \item \textbf{Elastic Net Constraints:} To improve general convergence and stability, we are testing a transition from a standard L2 penalty to Elastic Net (balancing L1 sparsity and L2 shrinkage) on $\mu_t$.
     \item \textbf{VarShare-LoRA (Low-Rank Factorization):} An obvious structural candidate to test for massive feature spaces. Factoring the additive residual into two heavily restricted matrices explicitly reduces the raw parameter count and forces aggressive generalization.
     \item \textbf{Soft Muting / Selective Gating:} To solve "Feature Interference", we can introduce a task-specific vector of learned gates $g_t$ at \textbf{every shared layer} (e.g., each Linear or Conv layer). The dimension of $g_t$ maps 1-to-1 with the \textbf{output dimension} of that specific layer (i.e., one scalar gate per outgoing feature/neuron). These gates are passed through a Sigmoid function, keeping them continuous between 0 and 1. The effective weight becomes $w_t = \text{sigmoid}(g_t) \odot \theta + \mu_t$ (using broadcasting along the input dimension). If a task fundamentally disagrees with a specific shared feature in $\theta$, it simply learns to push that feature's specific gate $g_{t,i}$ towards $0.0$. This multiplicatively silences the conflicting feature \textit{without} forcing the network to learn a massive, heavily regularized negative number in $\mu_t$ to manually subtract it, elegantly disentangling the task.
