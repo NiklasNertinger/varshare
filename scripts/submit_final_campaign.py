@@ -1,6 +1,7 @@
 import os
 import json
 import subprocess
+import argparse
 
 # --- Configuration ---
 ENV_SETTINGS = {
@@ -91,7 +92,7 @@ def submit_job(phase, env_key, name, script, base_args, hpo_args, hidden_dim, st
     os.makedirs(log_dir, exist_ok=True)
     
     # Slurm Time Dynamic
-    slurm_time = "168:00:00" if env_key == "MT10" else ("72:00:00" if env_key == "MT4" else "24:00:00")
+    slurm_time = "72:00:00" if env_key in ["MT10", "MT4"] else "24:00:00"
     
     # Write the sbatch script
     sbatch_script = f"""#!/bin/bash
@@ -123,6 +124,10 @@ echo "Starting Seed $SLURM_ARRAY_TASK_ID"
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--envs", nargs="+", default=list(ENV_SETTINGS.keys()), help="Environments to submit")
+    args = parser.parse_args()
+    
     hparams_db = load_hparams()
     
     print("==================================================")
@@ -134,7 +139,7 @@ def main():
         print(f"   SUBMITTING PHASE {target_phase} ALGORITHMS ")
         print(f"{'='*50}")
         
-        for env_key in ENV_SETTINGS.keys():
+        for env_key in args.envs:
             print(f"\n>>> Preparing Environment: {env_key}")
             env_config = ENV_SETTINGS[env_key]
             
