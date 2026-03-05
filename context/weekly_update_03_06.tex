@@ -1,0 +1,96 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\geometry{margin=1in}
+
+\title{Weekly Meeting Update: VarShare Status and Pivot}
+\author{Niklas}
+\date{March 6, 2026}
+
+\begin{document}
+
+\maketitle
+
+\section*{Overview}
+\textbf{Very Brief \& concise summary:} This document outlines the status of the VarShare multi-task reinforcement learning project. We summarize the theoretical foundation of our original probabilistic approach, review our recent experimental results on harder benchmarks (which prompted a pivot), and finally detail our new focus on the highly successful \textit{deterministic} residual architecture, including our search for novel extensions.
+
+\section*{Quick Talking Points}
+\begin{itemize}
+    \item \textbf{Organization Tool:} Transitioned to tracking the project on Docmost.
+    \item \textbf{Simulator:} Make it ready-to-use \& offer further development to HiWi or as Guided-Research/Project.
+\end{itemize}
+
+\section*{Updates on VarShare}
+
+\subsection*{The Original Approach: Probabilistic VarShare}
+At its core, VarShare was designed to solve negative transfer and model bloat in Multi-Task Reinforcement Learning (MTRL). The original, fully probabilistic approach modeled network weights not as fixed numbers, but as probability distributions. The architecture tackled MTRL using two core ideas:
+\begin{enumerate}
+    \item \textbf{Variational Weights:} A shared, probabilistic ``Base'' network (the prior) designed to capture generalized knowledge across all environments via Variational Bayesian sampling.
+    \item \textbf{Task-Specific Residuals:} Lightweight, localized distribution shifts (the posterior) learned specifically for each task, allowing the model to adapt without overwriting the core generalized features.
+\end{enumerate}
+
+Now, experiments on harder benchmarks exhibit that the variational (probabilistic) formulation of VarShare does not perform well enough or computationally converge efficiently on massive state-spaces. I have tried many different variations or fixes to improve performance (such as continuous KL-schedules, learned hyperpriors, and consistent noise sampling), but none gave a significant enough improvement to justify continuing on this road.
+
+Now, what are the potential advantages of VarShare? Why would we try this approach? Let's categorize by the two aspects of VarShare described above.
+
+\subsection*{Training and Evaluation on Harder Benchmarks}
+
+The following figures illustrate the Training and Evaluation return curves for our Phase 1 runs across the LunarLander (LL), MetaWorld MT4, and MetaWorld MT10 environments. 
+\textit{Note: The MT10 jobs and some MT4 arrays are still actively running on the SLURM cluster and rendering partial data. Baseline algorithms shown include standard Soft Modularization (\texttt{soft\_mod}), Parameter-Compositional MTRL (\texttt{paco}), Multi-Task PCGrad (\texttt{pcgrad}), and standard Shared Embeddings (\texttt{shared\_embedding}).}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.48\textwidth]{context/final_eval/phase1_comparison_plots/LL/train_reward.png}
+    \includegraphics[width=0.48\textwidth]{context/final_eval/phase1_comparison_plots/LL/eval_reward.png}
+    \caption{Phase 1: LunarLander (LL) Training vs Evaluation Reward}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.48\textwidth]{context/final_eval/phase1_comparison_plots/MT4/train_reward.png}
+    \includegraphics[width=0.48\textwidth]{context/final_eval/phase1_comparison_plots/MT4/eval_reward.png}
+    \caption{Phase 1: MetaWorld MT4 Training vs Evaluation Reward}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.48\textwidth]{context/final_eval/phase1_comparison_plots/MT10/train_reward.png}
+    \includegraphics[width=0.48\textwidth]{context/final_eval/phase1_comparison_plots/MT10/eval_reward.png}
+    \caption{Phase 1: MetaWorld MT10 Training vs Evaluation Reward (In Progress)}
+\end{figure}
+
+
+\subsection*{Variational Weights (The Failed Components)}
+\begin{itemize}
+    \item \textbf{Weight-space targeted exploration:} Stemming from the idea of Variational Continual Learning, where the weight-specific variance encodes how certain the algorithm is about a specific weight, the idea was that the algorithm improves its certainty on specific weights with training (decreasing the weight's variance), and thus exploring more for uncertain weights. However, this has shown difficult - per-weight ``uncertainty''/variance updates did not work as intended.
+    \item \textbf{Noise leading to more wide minima:} Theoretically, the noise should lead the algorithm to find more stable and less brittle / narrow minima. While this might be true, I believe that this becomes too restrictive. While it is good to find wide minima, some minima, especially in RL with complicated loss landscapes, simply might be more narrow and cannot be reached with this additional noise. Experiments support this: VarShare quickly achieves an acceptable reward (i.e. quickly finding wide minima region) but then stops learning.
+\end{itemize}
+
+\subsection*{Task-Specific Residuals (The Strengths We Keep)}
+A purely \textit{deterministic} version of VarShare operates heavily on the secondary mechanic: task-specific residuals mapping away from a shared core. This yields mathematical advantages that we confirmed hold true:
+\begin{itemize}
+    \item \textbf{Accelerated Optimization via Constructive Interference:} The shared backbone receives gradient updates from all tasks simultaneously. Early feature extractors converge on general, universal features orders of magnitude faster than independent networks, drastically improving sample efficiency.
+    \item \textbf{Mitigation of Negative Transfer (The ``Pressure Valve''):} In fully shared networks, conflicting task gradients cancel each other out, leading to ``Negative Transfer''. The regularized residuals act as structural shock absorbers. If tasks agree, gradients sum into the backbone. If tasks disagree violently, the gradients flow directly into the task-specific residuals.
+    \item \textbf{Information Bottlenecks and Improved Generalization:} Tasks are strongly penalized from growing large residuals, heavily incentivizing them to reuse the shared logic rather than memorizing noise independently. This acts as an implicit regularizer against overfitting on individual tasks.
+\end{itemize}
+
+\section*{The Pivot and Remaining Challenges}
+
+Now, while the advantages of the variational approach seem ``disproven'' in our specific setting, all advantages of the task-specific residuals still hold. Therefore, I have decided to focus my efforts on working with and improving this approach. Experiments so far confirm that this is a good route to follow (for example, as seen in the figures above, but also in our CartPole baselines).
+
+There is one problem with this: \textbf{novelty}. 
+Similar parameter-efficient adaptation approaches have been taken in the past for Multi-Task Learning, such as MTLoRA (\url{https://arxiv.org/abs/2403.20320}). However, I was not able to find this exact mechanism structurally applied directly to Multi-Task \textbf{RL} yet. Additionally, there might be significant room to improve the method. 
+
+Thus, I have tried listing both the strengths and weaknesses of the task-specific regularized residuals for our setting, and based on these (but also generally) tried to come up with improvements (utilizing the strengths even more) or fixes (mitigating the weaknesses) for these. 
+
+Here are the ideas I have come up with so far, and experiments on these are running at the moment:
+
+[This, we will populate later. For now, let's only get everything up until here Ready.]
+
+\end{document}
