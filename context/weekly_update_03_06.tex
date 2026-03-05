@@ -32,12 +32,13 @@
 \section*{Updates on VarShare}
 
 \subsection*{The Original Approach: Probabilistic VarShare}
-At its core, VarShare was designed to solve negative transfer and model bloat in Multi-Task Reinforcement Learning (MTRL). The original approach calculated effective task weights $w_t$ as the sum of a deterministic shared backbone $\theta$ and probabilistic task-specific residuals $\mu_t$, sampled from a learned distribution $\mathcal{N}(\mu_t, \sigma_t^2)$. The architecture relied on two core concepts:
+At its core, VarShare was designed to solve negative transfer and model bloat in Multi-Task Reinforcement Learning (MTRL). The original approach calculated effective task weights $w_t$ as the sum of a deterministic shared backbone $\theta$ and probabilistic task-specific residuals:
+\[ w_t = \theta + \mu_t \]
+where $\mu_t$ is sampled from a learned distribution $\mathcal{N}(\mu_t, \sigma_t^2)$. The architecture fundamentally relied on two core characteristics:
 \begin{enumerate}
-    \item \textbf{Deterministic Shared Base:} A rigid, shared backbone ($\theta$) optimized across all tasks to extract general, universal features.
-    \item \textbf{Variational Task-Specific Residuals:} Probabilistic distribution shifts ($\sim \mathcal{N}(\mu_t, \sigma_t^2)$) learned exclusively for each task, allowing the model to safely adapt independent task logic.
+    \item \textbf{Task-Specific Additive Residuals:} Rather than forcing tasks to perfectly share all parameters, each task maintains its own additive, regularized residuals to map away from the shared base. This isolates logic and physically protects against negative transfer.
+    \item \textbf{Variational Weights:} Those task-specific residuals are handled in a probabilistic way. By encoding weights as probability distributions and natively updating them via Variational Inference, the network can explicitly encode uncertainty.
 \end{enumerate}
-
 Now, experiments on harder benchmarks exhibit that the variational (probabilistic) formulation of VarShare does not perform well enough or computationally converge efficiently. I have tried many different variations or fixes to improve performance. Since this is old news, I won't go into detail here now, but it can be discussed further if anyone is interested. None of these fixes gave a significant enough improvement to justify continuing on this road.
 
 Now, what are the potential advantages of VarShare? Why would we try this approach? Let's categorize by the two aspects of VarShare described above.
