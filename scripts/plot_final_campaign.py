@@ -71,6 +71,12 @@ def plot_final_campaign(base_dir_str=None):
             # Smooth by 50 for training curves as requested
             df = smooth_data(df, window=50)
             
+            # Aggressively downsample array to max 600 points to prevent OOM & Seaborn hangs
+            max_points = 600
+            if len(df) > max_points:
+                chunk_size = len(df) // max_points
+                df = df.groupby(df.index // chunk_size).mean(numeric_only=True)
+            
             # Identify hierarchy based on relative path to base_dir
             try:
                 rel_parts = csv_file.relative_to(base_dir).parts
