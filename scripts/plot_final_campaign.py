@@ -137,6 +137,12 @@ def plot_final_campaign(base_dir_str=None):
                     clean_group = group.dropna(subset=[col, "TOTAL_ENV_STEPS"])
                     if clean_group.empty: continue
                     
+                    if "eval" in col:
+                        # Extract only points where the evaluation value literally changed to defeat 
+                        # forward-filled CSV plateaus and enforce smooth straight-line interpolation
+                        clean_group = clean_group.sort_values(["seed", "TOTAL_ENV_STEPS"])
+                        clean_group = clean_group[clean_group[col] != clean_group.groupby("seed")[col].shift(1)]
+                    
                     # Seaborn auto-aggregates across 'seed' with shaded standard deviation
                     sns.lineplot(data=clean_group, x="TOTAL_ENV_STEPS", y=col, label=col.split('/')[-1], errorbar="sd")
             plt.title(f"Aggregated {name.capitalize()} - {algo} ({env})")
@@ -153,6 +159,11 @@ def plot_final_campaign(base_dir_str=None):
             for col in task_cols:
                 clean_task_group = group.dropna(subset=[col, "TOTAL_ENV_STEPS"])
                 if clean_task_group.empty: continue
+                
+                # All task cols are eval
+                clean_task_group = clean_task_group.sort_values(["seed", "TOTAL_ENV_STEPS"])
+                clean_task_group = clean_task_group[clean_task_group[col] != clean_task_group.groupby("seed")[col].shift(1)]
+                
                 sns.lineplot(data=clean_task_group, x="TOTAL_ENV_STEPS", y=col, label=col.split('_')[-1], errorbar="sd")
             plt.title(f"Aggregated Task-Specific Rewards - {algo}")
             plt.grid(True, alpha=0.3)
@@ -197,6 +208,10 @@ def plot_final_campaign(base_dir_str=None):
                 
                 clean_data = data_group.dropna(subset=[col, "TOTAL_ENV_STEPS"])
                 if clean_data.empty: continue
+                
+                if "eval" in col:
+                    clean_data = clean_data.sort_values(["algo", "seed", "TOTAL_ENV_STEPS"])
+                    clean_data = clean_data[clean_data[col] != clean_data.groupby(["algo", "seed"])[col].shift(1)]
                 
                 err_val = "sd" if enable_errorbars else None
                 sns.lineplot(data=clean_data, x="TOTAL_ENV_STEPS", y=col, hue="algo", style="algo", dashes=dashes_dict, errorbar=err_val, palette="tab20")

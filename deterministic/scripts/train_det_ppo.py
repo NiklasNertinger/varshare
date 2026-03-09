@@ -675,28 +675,48 @@ def train(report_callback=None):
 
     # Stacked Loss Plot (Total, L2, Value, Policy, Entropy)
     try:
-        plt.figure(figsize=(10, 6))
+        import pandas as pd
+        def smooth(arr):
+            return pd.Series(arr).rolling(window=50, min_periods=1).mean().tolist()
+            
+        plt.figure(figsize=(12, 10))
         steps = [h["step"] for h in history]
         
-        plt.plot(steps, [h["loss_total"] for h in history], label="Total Loss", linewidth=2, color="black")
-        plt.plot(steps, [h["loss_reg_penalty"] for h in history], label="Reg Penalty", alpha=0.7)
-        if any(h["loss_ara"] > 0 for h in history):
-            plt.plot(steps, [h["loss_ara"] for h in history], label="ARA Loss", alpha=0.7)
-        plt.plot(steps, [h["loss_value"] for h in history], label="Value Loss", alpha=0.7)
-        plt.plot(steps, [h["loss_policy"] for h in history], label="Policy Loss", alpha=0.7)
-        plt.plot(steps, [h["loss_entropy"] for h in history], label="Entropy Loss", alpha=0.7)
-        
-        plt.xlabel("Total Environment Steps")
-        plt.ylabel("Loss Value")
-        plt.title(f"Optimization Landscape ({args.exp_name})")
-        plt.legend()
+        plt.subplot(2, 2, 1)
+        plt.plot(steps, smooth([h["loss_total"] for h in history]), label="Total Loss", color="black")
+        plt.title("Total Loss")
         plt.grid(True, alpha=0.3)
+        plt.legend()
+        
+        plt.subplot(2, 2, 2)
+        plt.plot(steps, smooth([h["loss_entropy"] for h in history]), label="Entropy Loss", color="red")
+        plt.title("Entropy / Exploration")
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        
+        plt.subplot(2, 2, 3)
+        plt.plot(steps, smooth([h["loss_value"] for h in history]), label="Value Loss", color="orange")
+        plt.plot(steps, smooth([h["loss_policy"] for h in history]), label="Policy Loss", color="green")
+        plt.title("RL Objectives")
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        
+        plt.subplot(2, 2, 4)
+        plt.plot(steps, smooth([h["loss_reg_penalty"] for h in history]), label="Reg Penalty", color="blue")
+        if any(h["loss_ara"] > 0 for h in history):
+            plt.plot(steps, smooth([h["loss_ara"] for h in history]), label="ARA Loss", color="purple")
+        plt.title("Structural / Regularization Loss")
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        
+        plt.suptitle(f"Optimization Landscape ({args.exp_name})")
+        plt.tight_layout()
         plt.savefig(os.path.join(seed_dir, "loss_breakdown.png"))
         plt.close()
     except Exception as e:
         print(f"Failed to plot loss breakdown: {e}")
 
-    # Layer-wise Dynamics Plots (Stacked)
+    # Layer-wise Dynamics Plots
     try:
         # Identify dynamic layer keys
         layer_mu_keys = sorted([k for k in history[0].keys() if "norm_mu" in k and k.startswith("layer")])
@@ -704,38 +724,30 @@ def train(report_callback=None):
         
         steps = [h["step"] for h in history]
 
-        # 1. Stacked plot for Mu
+        # 1. Standard plot for Mu
         if layer_mu_keys:
             plt.figure(figsize=(10, 6))
-            mu_values = []
-            labels = []
             for key in layer_mu_keys:
                 layer_idx = key.split("_")[0].replace("layer", "")
-                mu_values.append([h[key] for h in history])
-                labels.append(f"Layer {layer_idx} (Mu)")
+                plt.plot(steps, [h[key] for h in history], label=f"Layer {layer_idx} (Mu)")
                 
-            plt.stackplot(steps, mu_values, labels=labels, alpha=0.8)
             plt.xlabel("Total Environment Steps")
-            plt.ylabel("Cumulative Mu Norm")
+            plt.ylabel("Mu Norm Magnitude")
             plt.title(f"Layer-wise Structural Evolution: Mu ({args.exp_name})")
             plt.legend(loc='upper left')
             plt.grid(True, alpha=0.3)
             plt.savefig(os.path.join(seed_dir, "layerwise_mu_norms.png"))
             plt.close()
 
-        # 2. Stacked plot for Theta
+        # 2. Standard plot for Theta
         if layer_theta_keys:
             plt.figure(figsize=(10, 6))
-            theta_values = []
-            labels = []
             for key in layer_theta_keys:
                 layer_idx = key.split("_")[0].replace("layer", "")
-                theta_values.append([h[key] for h in history])
-                labels.append(f"Layer {layer_idx} (Theta)")
+                plt.plot(steps, [h[key] for h in history], label=f"Layer {layer_idx} (Theta)")
                 
-            plt.stackplot(steps, theta_values, labels=labels, alpha=0.8)
             plt.xlabel("Total Environment Steps")
-            plt.ylabel("Cumulative Theta Norm")
+            plt.ylabel("Theta Norm Magnitude")
             plt.title(f"Layer-wise Structural Evolution: Theta ({args.exp_name})")
             plt.legend(loc='upper left')
             plt.grid(True, alpha=0.3)
