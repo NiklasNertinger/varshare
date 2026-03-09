@@ -167,6 +167,20 @@ def plot_final_campaign(base_dir_str=None):
             out_path = base_dir / out_folder / env
             os.makedirs(out_path, exist_ok=True)
             
+            # Dynamically assign line styles: phase 1 = solid, phase 2 = varying dashes
+            algo_phases = data_group[['algo', 'phase']].drop_duplicates().sort_values('algo')
+            dash_styles = [(2, 2), (4, 4), (6, 2), (10, 4), (4, 1, 1, 1), (4, 2, 1, 2)]
+            dashes_dict = {}
+            dash_idx = 0
+            for _, row in algo_phases.iterrows():
+                alg = row['algo']
+                ph = row['phase']
+                if ph == "phase1":
+                    dashes_dict[alg] = "" # Solid line
+                else:
+                    dashes_dict[alg] = dash_styles[dash_idx % len(dash_styles)]
+                    dash_idx += 1
+            
             targets = [
                 ("eval_reward", "eval/mean_reward"),
                 ("train_reward", "performance/train_reward_50"),
@@ -185,7 +199,7 @@ def plot_final_campaign(base_dir_str=None):
                 if clean_data.empty: continue
                 
                 err_val = "sd" if enable_errorbars else None
-                sns.lineplot(data=clean_data, x="TOTAL_ENV_STEPS", y=col, hue="algo", errorbar=err_val, palette="tab20")
+                sns.lineplot(data=clean_data, x="TOTAL_ENV_STEPS", y=col, hue="algo", style="algo", dashes=dashes_dict, errorbar=err_val, palette="tab20")
                 plt.title(f"{title_prefix} - {plot_name} ({env})")
                 plt.grid(True, alpha=0.3)
                 plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
