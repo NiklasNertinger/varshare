@@ -71,12 +71,6 @@ def plot_final_campaign(base_dir_str=None):
             # Smooth by 50 for training curves as requested
             df = smooth_data(df, window=50)
             
-            # Aggressively downsample array to max 600 points to prevent OOM & Seaborn hangs
-            max_points = 600
-            if len(df) > max_points:
-                chunk_size = len(df) // max_points
-                df = df.groupby(df.index // chunk_size).mean(numeric_only=True)
-            
             # Identify hierarchy based on relative path to base_dir
             try:
                 rel_parts = csv_file.relative_to(base_dir).parts
@@ -93,6 +87,19 @@ def plot_final_campaign(base_dir_str=None):
                     seed = rel_parts[-2] if len(rel_parts) >= 2 else "seed_1"
             except ValueError:
                 continue
+
+            # Aggressively downsample array using static geometric bins aligned across all seeds
+            if "TOTAL_ENV_STEPS" in df.columns:
+                target_max = 50_000_000
+                if env == "CP": target_max = 2_000_000
+                elif env == "LL": target_max = 10_000_000
+                elif env == "MT4": target_max = 25_000_000
+                elif env == "MT10": target_max = 50_000_000
+                
+                bin_size = max(1, target_max // 600)
+                df["bin_step"] = (df["TOTAL_ENV_STEPS"] // bin_size) * bin_size
+                df = df.groupby("bin_step", as_index=False).mean(numeric_only=True)
+                df["TOTAL_ENV_STEPS"] = df["bin_step"]
             
             # Plot individual seed details
             seed_dir = csv_file.parent
@@ -156,7 +163,7 @@ def plot_final_campaign(base_dir_str=None):
     for env, env_group in full_df.groupby("env"):
         phase1_group = env_group[env_group["phase"] == "phase1"]
         
-        def plot_stacked(data_group, title_prefix, out_folder):
+        def plot_stacked(data_group, title_prefix, out_folder, enable_errorbars=True):
             out_path = base_dir / out_folder / env
             os.makedirs(out_path, exist_ok=True)
             
@@ -177,7 +184,8 @@ def plot_final_campaign(base_dir_str=None):
                 clean_data = data_group.dropna(subset=[col, "TOTAL_ENV_STEPS"])
                 if clean_data.empty: continue
                 
-                sns.lineplot(data=clean_data, x="TOTAL_ENV_STEPS", y=col, hue="algo", errorbar="sd", palette="tab20")
+                err_val = "sd" if enable_errorbars else None
+                sns.lineplot(data=clean_data, x="TOTAL_ENV_STEPS", y=col, hue="algo", errorbar=err_val, palette="tab20")
                 plt.title(f"{title_prefix} - {plot_name} ({env})")
                 plt.grid(True, alpha=0.3)
                 plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
@@ -185,13 +193,13 @@ def plot_final_campaign(base_dir_str=None):
                 plt.savefig(os.path.join(out_path, f"{plot_name}.png"))
                 plt.close()
 
-        # Phase 1 plots
+        # Phase 1 plots (Keep shading)
         if not phase1_group.empty:
-            plot_stacked(phase1_group, "Phase 1 Comparison", "phase1_comparison_plots")
+            plot_stacked(phase1_group, "Phase 1 Comparison", "phase1_comparison_plots", enable_errorbars=True)
         
-        # Phase 1+2 (All algos) plots
+        # Phase 1+2 (All algos) plots (Remove shading)
         if not env_group.empty:
-            plot_stacked(env_group, "Final Comparison (All Algorithms)", "final_comparison_plots")
+            plot_stacked(env_group, "Final Comparison (All Algorithms)", "final_comparison_plots", enable_errorbars=False)
 
     print(f"Plotting complete. Outputs located in {base_dir}")
 
