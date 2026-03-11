@@ -68,8 +68,8 @@ def plot_final_campaign(base_dir_str=None):
             df = pd.read_csv(csv_file)
             if df.empty: continue
             
-            # Smooth by 50 for training curves as requested
-            df = smooth_data(df, window=50)
+            # Smooth by 250 for training curves as requested for heavy smoothing
+            df = smooth_data(df, window=250)
             
             # Identify hierarchy based on relative path to base_dir
             try:
