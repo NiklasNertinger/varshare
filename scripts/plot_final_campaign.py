@@ -143,7 +143,7 @@ def plot_final_campaign(base_dir_str=None):
                         clean_group = clean_group.sort_values(["seed", "TOTAL_ENV_STEPS"])
                         clean_group = clean_group[clean_group[col] != clean_group.groupby("seed")[col].shift(1)]
                         # Apply light rolling smooth to reduce visual noise on sparse eval points
-                        clean_group[col] = clean_group.groupby("seed")[col].transform(lambda x: x.rolling(window=5, min_periods=1).mean())
+                        clean_group[col] = clean_group.groupby("seed")[col].transform(lambda x: x.rolling(window=25, min_periods=1).mean())
                     
                     # Seaborn auto-aggregates across 'seed' with shaded standard deviation
                     sns.lineplot(data=clean_group, x="TOTAL_ENV_STEPS", y=col, label=col.split('/')[-1], errorbar="sd")
@@ -165,7 +165,7 @@ def plot_final_campaign(base_dir_str=None):
                 # All task cols are eval
                 clean_task_group = clean_task_group.sort_values(["seed", "TOTAL_ENV_STEPS"])
                 clean_task_group = clean_task_group[clean_task_group[col] != clean_task_group.groupby("seed")[col].shift(1)]
-                clean_task_group[col] = clean_task_group.groupby("seed")[col].transform(lambda x: x.rolling(window=5, min_periods=1).mean())
+                clean_task_group[col] = clean_task_group.groupby("seed")[col].transform(lambda x: x.rolling(window=25, min_periods=1).mean())
                 
                 sns.lineplot(data=clean_task_group, x="TOTAL_ENV_STEPS", y=col, label=col.split('_')[-1], errorbar="sd")
             plt.title(f"Aggregated Task-Specific Rewards - {algo}")
@@ -215,7 +215,7 @@ def plot_final_campaign(base_dir_str=None):
                 if "eval" in col:
                     clean_data = clean_data.sort_values(["algo", "seed", "TOTAL_ENV_STEPS"])
                     clean_data = clean_data[clean_data[col] != clean_data.groupby(["algo", "seed"])[col].shift(1)]
-                    clean_data[col] = clean_data.groupby(["algo", "seed"])[col].transform(lambda x: x.rolling(window=5, min_periods=1).mean())
+                    clean_data[col] = clean_data.groupby(["algo", "seed"])[col].transform(lambda x: x.rolling(window=25, min_periods=1).mean())
                 
                 err_val = "sd" if enable_errorbars else None
                 sns.lineplot(data=clean_data, x="TOTAL_ENV_STEPS", y=col, hue="algo", style="algo", dashes=dashes_dict, errorbar=err_val, palette="tab20")
