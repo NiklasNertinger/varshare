@@ -55,9 +55,10 @@ def parse_args():
     parser.add_argument("--hidden-dim", type=int, default=64, help="Backbone hidden dimension")
     parser.add_argument("--num-layers", type=int, default=2, help="Number of hidden layers")
     parser.add_argument("--variant", type=str, default="base", 
-        choices=["base", "lora", "gated", "l1", "film", "pcgrad", "decay", "hyperprior", "ara"], 
+        choices=["base", "lora", "gated", "l1", "film", "pcgrad", "cagrad", "decay", "hyperprior", "ara"], 
         help="Deterministic Architectural Variant")
     parser.add_argument("--lora-rank", type=int, default=4, help="Rank for LoRA (only used if variant=lora)")
+    parser.add_argument("--cagrad-c", type=float, default=0.4, help="CAGrad neighborhood constant c")
     
     parser.add_argument("--cuda", type=lambda x: (str(x).lower() == 'true'), default=True, help="cuda toggle")
     
@@ -233,13 +234,14 @@ def train(report_callback=None):
     ], eps=1e-5)
     
     class DetVarSharePPO(PPO):
-        def __init__(self, *args, batch_size=64, max_grad_norm=2.0, mu_l2_coef=0.001, variant="base", ara_coef=0.1, **kwargs):
+        def __init__(self, *args, batch_size=64, max_grad_norm=2.0, mu_l2_coef=0.001, variant="base", ara_coef=0.1, cagrad_c=0.4, **kwargs):
             super().__init__(*args, **kwargs)
             self._batch_size = batch_size
             self.max_grad_norm = max_grad_norm
             self.mu_l2_coef = mu_l2_coef
             self.variant = variant
             self.ara_coef = ara_coef
+            self.cagrad_c = cagrad_c
 
         @property
         def batch_size(self):
@@ -387,6 +389,65 @@ def train(report_callback=None):
                         else:
                             # Fallback if only 1 task in mini-batch
                             loss.backward()
+                    elif self.variant == "cagrad" and mb_task_ids is not None:
+                        # CAGrad: Compute per-task gradients and project conflicts via dual solving
+                        unique_tasks = torch.unique(mb_task_ids)
+                        task_grads = []
+                        
+                        for t_id in unique_tasks:
+                            self.optimizer.zero_grad()
+                            t_mask = (mb_task_ids == t_id)
+                            t_pg_loss1 = -mb_advantages[t_mask] * ratio[t_mask]
+                            t_pg_loss2 = -mb_advantages[t_mask] * torch.clamp(ratio[t_mask], 1 - self.clip_coef, 1 + self.clip_coef)
+                            t_pg_loss = torch.max(t_pg_loss1, t_pg_loss2).mean()
+                            
+                            t_v_loss = 0.5 * ((newvalue[t_mask].view(-1) - mb_returns[t_mask]) ** 2).mean()
+                            t_entropy_loss = entropy[t_mask].mean()
+                            
+                            t_loss = t_pg_loss - self.ent_coef * t_entropy_loss + self.vf_coef * t_v_loss
+                            t_loss.backward(retain_graph=True)
+                            
+                            flat_grad = []
+                            for p in self.agent.parameters():
+                                if p.grad is not None:
+                                    flat_grad.append(p.grad.view(-1).clone())
+                                else:
+                                    flat_grad.append(torch.zeros_like(p.view(-1)))
+                            task_grads.append(torch.cat(flat_grad))
+                            
+                        self.optimizer.zero_grad()
+                        
+                        num_tasks = len(task_grads)
+                        if num_tasks > 1:
+                            grads = torch.stack(task_grads)
+                            g0 = grads.mean(dim=0)
+                            GG = torch.mm(grads, grads.t()).cpu().numpy()
+                            g0_norm = (g0.pow(2).sum() + 1e-8).sqrt().item()
+                            
+                            def obj(w):
+                                gw_norm_sq = w.T.dot(GG).dot(w) + 1e-8
+                                return w.T.dot(GG.sum(1) / num_tasks) + self.cagrad_c * g0_norm * np.sqrt(gw_norm_sq)
+                                
+                            from scipy.optimize import minimize
+                            w0 = np.ones(num_tasks) / num_tasks
+                            bnds = tuple((0.0, 1.0) for _ in w0)
+                            cons = ({'type': 'eq', 'fun': lambda w: w.sum() - 1.0})
+                            
+                            res = minimize(obj, w0, bounds=bnds, constraints=cons)
+                            w = res.x
+                            
+                            gw = (grads * torch.tensor(w, dtype=torch.float32, device=grads.device).view(-1, 1)).sum(dim=0)
+                            gw_norm = (gw.pow(2).sum() + 1e-8).sqrt()
+                            
+                            final_grad = g0 + self.cagrad_c * g0_norm * gw / gw_norm
+                            
+                            offset = 0
+                            for p in self.agent.parameters():
+                                numel = p.numel()
+                                p.grad = final_grad[offset:offset+numel].view_as(p).clone()
+                                offset += numel
+                        else:
+                            loss.backward()
                     else:
                         # Standard Backward
                         loss.backward()
@@ -426,7 +487,8 @@ def train(report_callback=None):
         device=device,
         max_grad_norm=args.max_grad_norm,
         mu_l2_coef=args.mu_l2_coef,
-        variant=args.variant
+        variant=args.variant,
+        cagrad_c=args.cagrad_c
     )
     
     n_steps = args.n_steps

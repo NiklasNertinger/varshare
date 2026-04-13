@@ -237,6 +237,12 @@ def get_trial_params(trial, algo):
          params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)
          params["ent_coef"] = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
 
+    elif algo == "cagrad" or algo == "det_cagrad":
+         params["learning_rate_actor"] = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
+         params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)
+         params["ent_coef"] = trial.suggest_categorical("ent_coef", [0.0, 0.001, 0.005])
+         params["cagrad_c"] = trial.suggest_categorical("cagrad_c", [0.2, 0.4, 0.6])
+
     elif algo == "paco":
          params["learning_rate_actor"] = trial.suggest_float("lr_actor", 1e-4, 3e-3, log=True)
          params["learning_rate_critic"] = trial.suggest_float("lr_critic", 1e-4, 3e-3, log=True)

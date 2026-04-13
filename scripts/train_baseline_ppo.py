@@ -19,10 +19,11 @@ from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
 from src.models import ActorCritic
 from src.algo.ppo import PPO
 from src.algo.pcgrad import PCGrad
+from src.algo.cagrad import CAGrad
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo", type=str, default="shared", choices=["shared", "oracle", "pcgrad", "paco", "soft_mod"], help="baseline algorithm")
+    parser.add_argument("--algo", type=str, default="shared", choices=["shared", "oracle", "pcgrad", "cagrad", "paco", "soft_mod"], help="baseline algorithm")
     parser.add_argument("--task-id", type=int, default=0, help="task id for oracle baseline")
     parser.add_argument("--num-experts", type=int, default=4, help="number of experts for paco")
     parser.add_argument("--num-modules", type=int, default=4, help="number of modules for soft_mod")
@@ -43,6 +44,7 @@ def parse_args():
     parser.add_argument("--ent-coef", type=float, default=0.01, help="entropy coefficient")
     parser.add_argument("--vf-coef", type=float, default=0.5, help="value function coefficient")
     parser.add_argument("--max-grad-norm", type=float, default=0.5, help="max gradient norm")
+    parser.add_argument("--cagrad-c", type=float, default=0.4, help="CAGrad neighborhood constant c")
     
     # Deprecated/Alias for backward compatibility if needed, but we'll use actor/critic
     parser.add_argument("--lr", type=float, default=0.0003, help="unified learning rate (unused if lr-actor/critic are set)")
@@ -376,6 +378,84 @@ def train(report_callback=None):
                         
                         self.pcgrad.step()
 
+    class CAGradPPO(PPO):
+        def __init__(self, c_val=0.4, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.cagrad = CAGrad(self.optimizer, c=c_val)
+
+        def update_from_storage(self, obs, actions, logprobs, returns, advantages, values, task_ids=None):
+            b_inds = np.arange(len(obs))
+            clipfracs = []
+            
+            for epoch in range(self.update_epochs):
+                np.random.shuffle(b_inds)
+                for start in range(0, len(obs), self.minibatch_size):
+                    end = start + self.minibatch_size
+                    mb_inds = b_inds[start:end]
+                    mb_task_ids = task_ids[mb_inds] if task_ids is not None else None
+                    
+                    # CAGrad needs per-task losses
+                    unique_tasks = torch.unique(mb_task_ids)
+                    task_losses = []
+                    
+                    # Shared logs for metrics
+                    total_pg_loss = 0
+                    total_v_loss = 0
+                    total_entropy = 0
+                    
+                    for t in unique_tasks:
+                        task_mask = (mb_task_ids == t)
+                        if not task_mask.any(): continue
+                        
+                        t_obs = obs[mb_inds][task_mask]
+                        t_actions = actions[mb_inds][task_mask]
+                        t_logprobs = logprobs[mb_inds][task_mask]
+                        t_returns = returns[mb_inds][task_mask]
+                        t_advantages = advantages[mb_inds][task_mask]
+                        
+                        _, newlogprob, entropy, newvalue = self.agent.get_action_and_value(
+                            t_obs, t_actions, task_idx=t
+                        )
+                        
+                        logratio = newlogprob - t_logprobs
+                        ratio = logratio.exp()
+                        
+                        # Policy loss
+                        pg_loss1 = -t_advantages * ratio
+                        pg_loss2 = -t_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
+                        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                        
+                        # Value loss
+                        newvalue = newvalue.view(-1)
+                        v_loss = 0.5 * ((newvalue - t_returns) ** 2).mean()
+                        
+                        entropy_loss = entropy.mean()
+                        
+                        task_loss = pg_loss - self.ent_coef * entropy_loss + self.vf_coef * v_loss
+                        task_losses.append(task_loss)
+                        
+                        total_pg_loss += pg_loss.item()
+                        total_v_loss += v_loss.item()
+                        total_entropy += entropy_loss.item()
+
+                        if t == unique_tasks[0]: # Sample for clipfrac
+                             with torch.no_grad():
+                                clipfracs += [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
+
+                    if task_losses:
+                        self.cagrad.zero_grad()
+                        self.cagrad.pc_backward(task_losses)
+                        
+                        # Get grad_norm for logging
+                        total_norm = 0.0
+                        for group in self.optimizer.param_groups:
+                            for p in group['params']:
+                                if p.grad is not None:
+                                    total_norm += p.grad.data.norm(2).item() ** 2
+                        total_norm = total_norm ** 0.5
+                        
+                        self.cagrad.step()
+
             return {
                 "loss": (total_pg_loss + total_v_loss), # Approximate
                 "policy_loss": total_pg_loss / len(unique_tasks),
@@ -399,6 +479,21 @@ def train(report_callback=None):
             device=device
         )
         ppo.norm_adv = False # Handled at rollout level
+    elif args.algo == "cagrad":
+        ppo = CAGradPPO(
+            c_val=args.cagrad_c,
+            agent=agent,
+            optimizer=optimizer,
+            lr=args.lr,
+            clip_coef=args.eps_clip,
+            ent_coef=args.ent_coef,
+            vf_coef=args.vf_coef,
+            update_epochs=args.k_epochs,
+            minibatch_size=args.batch_size,
+            max_grad_norm=args.max_grad_norm,
+            device=device
+        )
+        ppo.norm_adv = False
     else:
         ppo = PPO(
             agent=agent,
