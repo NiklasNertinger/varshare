@@ -55,10 +55,12 @@ def parse_args():
     parser.add_argument("--hidden-dim", type=int, default=64, help="Backbone hidden dimension")
     parser.add_argument("--num-layers", type=int, default=2, help="Number of hidden layers")
     parser.add_argument("--variant", type=str, default="base", 
-        choices=["base", "lora", "gated", "l1", "film", "pcgrad", "cagrad", "decay", "hyperprior", "ara"], 
+        choices=["base", "lora", "gated", "l1", "film", "pcgrad", "cagrad", "decay", "hyperprior", "ara", "routing"], 
         help="Deterministic Architectural Variant")
     parser.add_argument("--lora-rank", type=int, default=4, help="Rank for LoRA (only used if variant=lora)")
     parser.add_argument("--cagrad-c", type=float, default=0.4, help="CAGrad neighborhood constant c")
+    parser.add_argument("--routing-alpha", type=float, default=0.1, help="Routing strength")
+    parser.add_argument("--routing-lambda", type=float, default=0.001, help="Routing adapter shrinkage")
     
     parser.add_argument("--cuda", type=lambda x: (str(x).lower() == 'true'), default=True, help="cuda toggle")
     
@@ -234,7 +236,7 @@ def train(report_callback=None):
     ], eps=1e-5)
     
     class DetVarSharePPO(PPO):
-        def __init__(self, *args, batch_size=64, max_grad_norm=2.0, mu_l2_coef=0.001, variant="base", ara_coef=0.1, cagrad_c=0.4, **kwargs):
+        def __init__(self, *args, batch_size=64, max_grad_norm=2.0, mu_l2_coef=0.001, variant="base", ara_coef=0.1, cagrad_c=0.4, routing_alpha=0.1, routing_lambda=0.001, **kwargs):
             super().__init__(*args, **kwargs)
             self._batch_size = batch_size
             self.max_grad_norm = max_grad_norm
@@ -242,6 +244,8 @@ def train(report_callback=None):
             self.variant = variant
             self.ara_coef = ara_coef
             self.cagrad_c = cagrad_c
+            self.routing_alpha = routing_alpha
+            self.routing_lambda = routing_lambda
 
         @property
         def batch_size(self):
@@ -448,6 +452,89 @@ def train(report_callback=None):
                                 offset += numel
                         else:
                             loss.backward()
+                    elif self.variant == "routing" and mb_task_ids is not None:
+                        unique_tasks = torch.unique(mb_task_ids)
+                        
+                        # Identify strict backbone parameters
+                        shared_params = []
+                        for name, p in self.agent.named_parameters():
+                            if ".mus." not in name:
+                                shared_params.append(p)
+                                
+                        task_shared_grads_list = []
+                        
+                        for t_id in unique_tasks:
+                            self.optimizer.zero_grad()
+                            t_mask = (mb_task_ids == t_id)
+                            t_pg_loss1 = -mb_advantages[t_mask] * ratio[t_mask]
+                            t_pg_loss2 = -mb_advantages[t_mask] * torch.clamp(ratio[t_mask], 1 - self.clip_coef, 1 + self.clip_coef)
+                            t_pg_loss = torch.max(t_pg_loss1, t_pg_loss2).mean()
+                            
+                            t_v_loss = 0.5 * ((newvalue[t_mask].view(-1) - mb_returns[t_mask]) ** 2).mean()
+                            t_entropy_loss = entropy[t_mask].mean()
+                            
+                            t_loss = t_pg_loss - self.ent_coef * t_entropy_loss + self.vf_coef * t_v_loss
+                            t_loss.backward(retain_graph=True)
+                            
+                            grads_dict = {}
+                            for p in shared_params:
+                                if p.grad is not None:
+                                    grads_dict[p] = p.grad.clone()
+                                else:
+                                    grads_dict[p] = torch.zeros_like(p)
+                            task_shared_grads_list.append(grads_dict)
+                            
+                        self.optimizer.zero_grad()
+                        
+                        num_tasks = len(task_shared_grads_list)
+                        if num_tasks > 1:
+                            # Keep pristine copies for the residual r_t
+                            raw_shared_grads = [{p: g.clone() for p, g in d.items()} for d in task_shared_grads_list]
+                            
+                            def dot_prod_dict(d1, d2):
+                                return sum(torch.sum(d1[p] * d2[p]) for p in d1)
+                            def norm_sq_dict(d):
+                                return sum(torch.sum(d[p]**2) for p in d)
+                                
+                            indices = list(range(num_tasks))
+                            random.shuffle(indices)
+                            for i in indices:
+                                grad_i = task_shared_grads_list[i]
+                                for j in indices:
+                                    if i == j: continue
+                                    grad_j = task_shared_grads_list[j]
+                                    
+                                    dot_prod = dot_prod_dict(grad_i, grad_j)
+                                    if dot_prod < 0:
+                                        norm_j_sq = norm_sq_dict(grad_j) + 1e-8
+                                        scale = dot_prod / norm_j_sq
+                                        for p in grad_i:
+                                            grad_i[p] = grad_i[p] - scale * grad_j[p]
+                                task_shared_grads_list[i] = grad_i
+                                
+                            # Aggregate final shared \bar{g}_\theta
+                            bar_g_theta = {}
+                            for p in shared_params:
+                                bar_g_theta[p] = sum(d[p] for d in task_shared_grads_list) / num_tasks
+                                p.grad = bar_g_theta[p].clone()
+                                
+                            # Route Residuals down to adapter components
+                            for idx, t_id in enumerate(unique_tasks):
+                                t_key = str(t_id.item())
+                                raw_g_t = raw_shared_grads[idx]
+                                
+                                # Iterate over modules to find DetVarShareLayers
+                                from deterministic.src.models import DetVarShareLayer
+                                for m in self.agent.modules():
+                                    if isinstance(m, DetVarShareLayer):
+                                        if t_key in m.mus:
+                                            # Ensure theta participated in gradients
+                                            if m.theta in bar_g_theta:
+                                                r_t = raw_g_t[m.theta] - bar_g_theta[m.theta]
+                                                # \bar{g}_{\mu_t} = \alpha r_t + \lambda \mu_t
+                                                m.mus[t_key].grad = self.routing_alpha * r_t + self.routing_lambda * m.mus[t_key].data
+                        else:
+                            loss.backward()
                     else:
                         # Standard Backward
                         loss.backward()
@@ -488,7 +575,9 @@ def train(report_callback=None):
         max_grad_norm=args.max_grad_norm,
         mu_l2_coef=args.mu_l2_coef,
         variant=args.variant,
-        cagrad_c=args.cagrad_c
+        cagrad_c=args.cagrad_c,
+        routing_alpha=args.routing_alpha,
+        routing_lambda=args.routing_lambda
     )
     
     n_steps = args.n_steps
