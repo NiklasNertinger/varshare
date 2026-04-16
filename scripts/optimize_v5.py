@@ -39,11 +39,11 @@ ENV_SETTINGS = {
 
 DET_VARIANTS = [
     "det_base", "det_lora", "det_gated", "det_l1", "det_pcgrad", 
-    "det_decay", "det_film", "det_hyperprior", "det_ara"
+    "det_decay", "det_film", "det_hyperprior", "det_ara", "det_cagrad"
 ]
 BASELINES = [
     "shared_embedding", "shared_embedding_pcgrad", 
-    "paco", "soft_mod", "varshare_prior_opt"
+    "paco", "soft_mod", "varshare_prior_opt", "cagrad"
 ]
 
 METHODS = DET_VARIANTS + BASELINES
@@ -115,6 +115,9 @@ def run_trial(trial, args):
                 cmd += ["--algo", "shared"]
             elif args.method == "shared_embedding_pcgrad":
                 cmd += ["--algo", "pcgrad"]
+            elif args.method == "cagrad":
+                cagrad_c = trial.suggest_categorical("cagrad_c", [0.2, 0.4, 0.6])
+                cmd += ["--algo", "cagrad", "--cagrad-c", str(cagrad_c)]
                 
     else:
         # Deterministic VarShare Variants
@@ -133,6 +136,10 @@ def run_trial(trial, args):
             "--mu-l2-coef", str(mu_l2_coef),
             "--mu-init", str(mu_init)
         ]
+        
+        if args.method == "det_cagrad":
+            cagrad_c = trial.suggest_categorical("cagrad_c", [0.2, 0.4, 0.6])
+            cmd += ["--cagrad-c", str(cagrad_c)]
 
     print(f"Running Command: {' '.join(cmd)}")
     

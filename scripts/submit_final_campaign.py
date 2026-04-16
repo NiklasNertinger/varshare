@@ -29,6 +29,7 @@ VARIANTS = [
     (1, "shared_embedding", "scripts/train_baseline_ppo.py", ["--algo", "shared"], "shared_embedding", "v5"),
     (1, "paco", "scripts/train_baseline_ppo.py", ["--algo", "paco", "--num-experts", "4"], "paco", "v5"),
     (1, "shared_embedding_pcgrad", "scripts/train_baseline_ppo.py", ["--algo", "pcgrad"], "shared_embedding_pcgrad", "v5"),
+    (1, "shared_embedding_cagrad", "scripts/train_baseline_ppo.py", ["--algo", "cagrad"], "cagrad", "v5"),
     (1, "varshare_prob_consistent", "scripts/train_varshare_ppo.py", ["--variant", "standard", "--consistent-noise", "true"], "varshare_standard_consistent", "v4"),
     (1, "det_base", "deterministic/scripts/train_det_ppo.py", ["--variant", "base"], "det_base", "v5"),
     
@@ -46,7 +47,8 @@ VARIANTS = [
     (2, "det_ara", "deterministic/scripts/train_det_ppo.py", ["--variant", "ara"], "det_ara", "v5"),
     (2, "det_l1", "deterministic/scripts/train_det_ppo.py", ["--variant", "l1"], "det_l1", "v5"),
     (2, "det_gated", "deterministic/scripts/train_det_ppo.py", ["--variant", "gated"], "det_gated", "v5"),
-    (2, "det_pcgrad", "deterministic/scripts/train_det_ppo.py", ["--variant", "pcgrad"], "det_pcgrad", "v5")
+    (2, "det_pcgrad", "deterministic/scripts/train_det_ppo.py", ["--variant", "pcgrad"], "det_pcgrad", "v5"),
+    (2, "det_cagrad", "deterministic/scripts/train_det_ppo.py", ["--variant", "cagrad"], "det_cagrad", "v5")
 ]
 
 def load_hparams():
