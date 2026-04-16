@@ -32,6 +32,7 @@ VARIANTS = [
     (1, "shared_embedding_cagrad", "scripts/train_baseline_ppo.py", ["--algo", "cagrad"], "cagrad", "v5"),
     (1, "varshare_prob_consistent", "scripts/train_varshare_ppo.py", ["--variant", "standard", "--consistent-noise", "true"], "varshare_standard_consistent", "v4"),
     (1, "det_base", "deterministic/scripts/train_det_ppo.py", ["--variant", "base"], "det_base", "v5"),
+    (1, "det_routing", "deterministic/scripts/train_det_ppo.py", ["--variant", "routing"], "det_routing", "v5"),
     
     # --- PHASE 2 ---
     (2, "varshare_prob_inconsistent", "scripts/train_varshare_ppo.py", ["--variant", "standard", "--consistent-noise", "false"], "varshare_standard", "v4"),
@@ -128,6 +129,7 @@ echo "Starting Seed $SLURM_ARRAY_TASK_ID"
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--envs", nargs="+", default=list(ENV_SETTINGS.keys()), help="Environments to submit")
+    parser.add_argument("--algo-filter", type=str, default=None, help="Filter to only run a specific variant name")
     args = parser.parse_args()
     
     hparams_db = load_hparams()
@@ -150,6 +152,9 @@ def main():
                 
                 # Enforce precise Phase 1 -> Phase 2 sequencing
                 if phase != target_phase:
+                    continue
+                    
+                if args.algo_filter and name != args.algo_filter:
                     continue
             
                 # Special Handling for Legacy

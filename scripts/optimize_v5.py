@@ -34,12 +34,22 @@ ENV_SETTINGS = {
         "num_envs": 1,
         "eval_freq": 50000,
         "hidden_dim": 256
+    },
+    "MT10": {
+        "env_type": "metaworld",
+        "mt_setting": "MT10",
+        "total_timesteps": 5000000,
+        "n_steps": 512,
+        "num_envs": 1,
+        "eval_freq": 100000,
+        "hidden_dim": 256
     }
 }
 
 DET_VARIANTS = [
     "det_base", "det_lora", "det_gated", "det_l1", "det_pcgrad", 
-    "det_decay", "det_film", "det_hyperprior", "det_ara", "det_cagrad"
+    "det_decay", "det_film", "det_hyperprior", "det_ara", "det_cagrad",
+    "det_routing"
 ]
 BASELINES = [
     "shared_embedding", "shared_embedding_pcgrad", 
@@ -140,6 +150,13 @@ def run_trial(trial, args):
         if args.method == "det_cagrad":
             cagrad_c = trial.suggest_categorical("cagrad_c", [0.2, 0.4, 0.6])
             cmd += ["--cagrad-c", str(cagrad_c)]
+        elif args.method == "det_routing":
+            routing_alpha = trial.suggest_float("routing_alpha", 0.01, 1.0, log=True)
+            routing_lambda = trial.suggest_float("routing_lambda", 1e-4, 1e-1, log=True)
+            cmd += [
+                "--routing-alpha", str(routing_alpha),
+                "--routing-lambda", str(routing_lambda)
+            ]
 
     print(f"Running Command: {' '.join(cmd)}")
     
