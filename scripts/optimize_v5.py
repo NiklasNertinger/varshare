@@ -232,7 +232,7 @@ def main():
         storage=storage,
         direction="maximize",
         load_if_exists=True,
-        sampler=optuna.samplers.TPESampler(seed=42) # Bayesian Optimization TPE
+        sampler=optuna.samplers.TPESampler() # Removed seed=42 for parallel arrays
     )
     
     study.optimize(lambda trial: run_trial(trial, args), n_trials=args.n_trials)
