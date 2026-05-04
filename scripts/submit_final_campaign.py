@@ -99,6 +99,7 @@ def submit_job(phase, env_key, name, script, base_args, hpo_args, hidden_dim, st
 #SBATCH --cpus-per-task={CPUS}
 #SBATCH --mem={MEM}
 #SBATCH --time={slurm_time}
+#SBATCH --signal=B:USR1@120
 #SBATCH --array=1-3 # 3 seeds
 
 source /netscratch/$USER/varshare/venv/bin/activate
@@ -107,6 +108,12 @@ export PYTHONPATH=$PYTHONPATH:$HOME/varshare
 echo "Starting Seed $SLURM_ARRAY_TASK_ID"
 
 {full_cmd} --seed $SLURM_ARRAY_TASK_ID
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 99 ]; then
+    echo "Job caught SIGUSR1 and checkpointed safely. Requeueing..."
+    scontrol requeue $SLURM_JOB_ID
+fi
 """
 
     script_path = f"logs/temp_submit_{phase}_{env_key}_{name}.sh"

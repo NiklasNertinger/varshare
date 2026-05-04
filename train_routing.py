@@ -15,6 +15,16 @@ import csv
 import json
 import matplotlib.pyplot as plt
 import wandb
+import signal
+
+shutdown_requested = False
+def sigusr1_handler(signum, frame):
+    global shutdown_requested
+    print("\n[WARNING] Caught SIGUSR1 from SLURM! Will checkpoint and exit after current update.", flush=True)
+    shutdown_requested = True
+
+if hasattr(signal, "SIGUSR1"):
+    signal.signal(signal.SIGUSR1, sigusr1_handler)
 
 from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
 from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
@@ -619,8 +629,36 @@ def train(report_callback=None):
     eval_metrics = {}
     
     last_k_rewards = deque(maxlen=3)
+    start_update = 0
     
-    for update in range(n_updates):
+    checkpoint_path = os.path.join(seed_dir, "checkpoint.pt")
+    if os.path.exists(checkpoint_path):
+        print(f"Loading checkpoint from {checkpoint_path}...")
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        agent.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        start_update = checkpoint["update"] + 1
+        global_step = checkpoint["global_step"]
+        num_episodes_finished = checkpoint["num_episodes_finished"]
+        next_eval_step = checkpoint["next_eval_step"]
+        eval_reward_current = checkpoint["eval_reward_current"]
+        eval_metrics = checkpoint.get("eval_metrics", {})
+        if "reward_window" in checkpoint:
+            reward_window.extend(checkpoint["reward_window"])
+        if "success_window" in checkpoint:
+            success_window.extend(checkpoint["success_window"])
+        if "time_window" in checkpoint:
+            time_window.extend(checkpoint["time_window"])
+        if "last_k_rewards" in checkpoint:
+            last_k_rewards.extend(checkpoint["last_k_rewards"])
+        
+        # Load history json if it exists to append to it
+        hist_path = os.path.join(seed_dir, "history.json")
+        if os.path.exists(hist_path):
+            with open(hist_path, "r") as f:
+                history = json.load(f)
+    
+    for update in range(start_update, n_updates):
         mb_obs = torch.zeros((n_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
         mb_actions = torch.zeros((n_steps, args.num_envs) + envs.single_action_space.shape).to(device)
         mb_logprobs = torch.zeros((n_steps, args.num_envs)).to(device)
@@ -816,6 +854,31 @@ def train(report_callback=None):
         step_increment = n_steps * args.num_envs
         if global_step // print_freq > (global_step - step_increment) // print_freq:
              print(f"Step {global_step:>7d} | Eps {num_episodes_finished:>4d} | Rew {avg_reward:>6.1f} | SPS {sps:>4d} | Loss {metrics['loss']:>7.3f} | Ent {metrics['entropy']:>5.3f}")
+
+        if shutdown_requested:
+            print(f"\n[CHECKPOINT] Saving state at update {update} (Step {global_step})...")
+            checkpoint = {
+                "update": update,
+                "global_step": global_step,
+                "num_episodes_finished": num_episodes_finished,
+                "next_eval_step": next_eval_step,
+                "eval_reward_current": eval_reward_current,
+                "eval_metrics": eval_metrics,
+                "reward_window": list(reward_window),
+                "success_window": list(success_window),
+                "time_window": list(time_window),
+                "last_k_rewards": list(last_k_rewards),
+                "model_state_dict": agent.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict()
+            }
+            torch.save(checkpoint, checkpoint_path)
+            
+            # Save history incrementally
+            with open(os.path.join(seed_dir, "history.json"), "w") as f:
+                json.dump(history, f, cls=NumpyEncoder)
+                
+            print("[CHECKPOINT] Safe shutdown complete. Exiting with code 99.")
+            sys.exit(99)
 
     total_duration = time.time() - start_time
     print(f"\nFinal Average Reward: {avg_reward:.2f}")
