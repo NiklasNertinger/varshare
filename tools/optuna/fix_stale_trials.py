@@ -1,7 +1,7 @@
 import optuna
 import os
 import argparse
-from hpo_utils import get_hpo_storage
+from src.utils.hpo_utils import get_hpo_storage
 
 def fix_stale_trials(journal_path):
     if not os.path.exists(journal_path):

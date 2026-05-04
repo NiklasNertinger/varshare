@@ -6,6 +6,9 @@ import subprocess
 import signal
 import re
 
+# --- Internal Imports ---
+import src.utils.hpo_utils as hpo_utilse
+
 # --- Configuration ---
 ENV_SETTINGS = {
     "CP": {
@@ -222,7 +225,7 @@ def main():
     # Use hpo_utils for robust setup if available, else standard Optuna
     try:
         sys.path.append("scripts")
-        from hpo_utils import get_hpo_storage
+        from src.utils.hpo_utils import get_hpo_storage
         storage = get_hpo_storage(args.storage)
     except ImportError:
         storage = args.storage

@@ -13,9 +13,9 @@ def check_hpo(env_key, method="det_routing"):
         return
 
     print(f"Loading Study: {study_name} from {storage_path}")
-    sys.path.append("scripts") # Ensure we can import hpo_utils
+     # Ensure we can import hpo_utils
     try:
-        from hpo_utils import get_hpo_storage
+        from src.utils.hpo_utils import get_hpo_storage
         storage = get_hpo_storage(storage_path)
         study = optuna.load_study(study_name=study_name, storage=storage)
     except Exception as e:

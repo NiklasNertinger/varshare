@@ -1,7 +1,7 @@
 import optuna
 import os
 import argparse
-from hpo_utils import get_hpo_storage
+from src.utils.hpo_utils import get_hpo_storage
 
 def clear_studies(analysis_dir):
     storage = get_hpo_storage(base_dir=analysis_dir)
