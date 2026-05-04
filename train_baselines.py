@@ -403,6 +403,15 @@ def train(report_callback=None):
                         total_norm = total_norm ** 0.5
                         
                         self.pcgrad.step()
+                        
+            return {
+                "loss": (total_pg_loss + total_v_loss) / len(unique_tasks) if len(unique_tasks) > 0 else 0.0,
+                "policy_loss": total_pg_loss / len(unique_tasks) if len(unique_tasks) > 0 else 0.0,
+                "value_loss": total_v_loss / len(unique_tasks) if len(unique_tasks) > 0 else 0.0,
+                "entropy": total_entropy / len(unique_tasks) if len(unique_tasks) > 0 else 0.0,
+                "clipfrac": np.mean(clipfracs) if clipfracs else 0.0,
+                "grad_norm": total_norm
+            }
 
     class CAGradPPO(PPO):
         def __init__(self, c_val=0.4, *args, **kwargs):

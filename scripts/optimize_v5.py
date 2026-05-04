@@ -7,7 +7,7 @@ import signal
 import re
 
 # --- Internal Imports ---
-import src.utils.hpo_utils as hpo_utilse
+import src.utils.hpo_utils as hpo_utils
 
 # --- Configuration ---
 ENV_SETTINGS = {
