@@ -13,6 +13,7 @@ from collections import deque
 import csv
 import json
 import matplotlib.pyplot as plt
+import wandb
 
 from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
 from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
@@ -118,6 +119,21 @@ def train(report_callback=None):
     exp_dir = os.path.join(args.analysis_dir, args.exp_name)
     seed_dir = os.path.join(exp_dir, f"seed_{args.seed}")
     os.makedirs(seed_dir, exist_ok=True)
+    
+    # W&B Initialization
+    use_wandb = False
+    try:
+        wandb.init(
+            project="varshare",
+            entity="niklas-nertinger-university-of-oxford",
+            name=run_name,
+            config=vars(args),
+            group=args.env_type,
+            tags=[args.algo, args.env_type]
+        )
+        use_wandb = True
+    except Exception as e:
+        print(f"W&B Initialization Failed: {e}. Running without W&B.")
     
     heartbeat_path = os.path.join(seed_dir, "heartbeat.csv")
     heartbeat_file = open(heartbeat_path, "w", newline="")
@@ -704,6 +720,13 @@ def train(report_callback=None):
             
         heartbeat_writer.writerow(full_metrics)
         heartbeat_file.flush()
+        
+        if use_wandb:
+            try:
+                wandb.log(full_metrics, step=global_step)
+            except Exception as e:
+                print(f"W&B Log Failed: {e}. Disabling W&B for remainder of run.")
+                use_wandb = False
         
         if global_step % 2500 < args.num_envs * n_steps:
              print(f"Step {global_step:>7d} | Eps {num_episodes_finished:>4d} | Rew {avg_reward:>6.1f} | SPS {sps:>4d} | Loss {metrics['loss']:>7.3f}")
