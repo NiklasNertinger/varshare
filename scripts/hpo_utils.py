@@ -97,7 +97,7 @@ def run_trial(trial, study_name, config, n_envs=8, n_steps=512):
     n_steps_arg = os.environ.get("HPO_N_STEPS", str(n_steps))
     
     cmd = [
-        sys.executable, "scripts/train_varshare_ppo.py",
+        sys.executable, "train_routing.py",
         "--env-type", "metaworld",
         "--mt-setting", os.environ.get("HPO_MT_SETTING", "MT10"),
         "--total-timesteps", str(total_timesteps),

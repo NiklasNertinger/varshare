@@ -95,7 +95,7 @@ def run_trial(trial, args):
     
     if args.method in BASELINES:
         if args.method == "varshare_prior_opt":
-            script = "scripts/train_varshare_ppo.py"
+            script = "train_routing.py"
             cmd = cmd_base[:]
             cmd[1] = script
             rho_init = trial.suggest_float("rho_init", -6.0, -2.0)
@@ -110,7 +110,7 @@ def run_trial(trial, args):
                 "--exp-name", f"{study_name}_trial{trial.number}"
             ]
         else:
-            script = "scripts/train_baseline_ppo.py"
+            script = "train_baselines.py"
             cmd = cmd_base[:]
             cmd[1] = script
             cmd += ["--exp-name", f"{study_name}_trial{trial.number}"]
@@ -131,7 +131,7 @@ def run_trial(trial, args):
                 
     else:
         # Deterministic VarShare Variants
-        script = "deterministic/scripts/train_det_ppo.py"
+        script = "train_routing.py"
         cmd = cmd_base[:]
         cmd[1] = script
         cmd += ["--exp-name", f"{study_name}_trial{trial.number}"]

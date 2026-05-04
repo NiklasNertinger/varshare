@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 
 from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
 from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
-from src.models import ActorCritic
+from src.models_baselines import ActorCritic
 from src.algo.ppo import PPO
 from src.algo.pcgrad import PCGrad
 from src.algo.cagrad import CAGrad
@@ -221,7 +221,7 @@ def train(report_callback=None):
     
     # Model Setup
     if args.algo == "paco":
-        from src.models import PaCoActorCritic
+        from src.models_baselines import PaCoActorCritic
         agent = PaCoActorCritic(
             envs.single_observation_space,
             envs.single_action_space,
@@ -240,7 +240,7 @@ def train(report_callback=None):
         weight_params = [agent.actor_weights, agent.critic_weights]
 
     elif args.algo == "soft_mod":
-        from src.models import SoftModularActorCritic
+        from src.models_baselines import SoftModularActorCritic
         agent = SoftModularActorCritic(
             envs.single_observation_space,
             envs.single_action_space,

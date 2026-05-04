@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
 from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
-from deterministic.src.models import DetActorCritic
+from src.models_routing import DetActorCritic
 from src.algo.ppo import PPO
 
 class NumpyEncoder(json.JSONEncoder):
@@ -67,7 +67,7 @@ def parse_args():
     parser.add_argument("--eval-mode", type=bool, default=True, help="Run periodic evaluations")
     parser.add_argument("--eval-freq", type=int, default=5000, help="Eval every N steps")
     parser.add_argument("--eval-episodes", type=int, default=5, help="Episodes per task during eval")
-    parser.add_argument("--analysis-dir", type=str, default="deterministic/analysis", help="Root analysis directory")
+    parser.add_argument("--analysis-dir", type=str, default="analysis", help="Root analysis directory")
     
     # Environment selection
     parser.add_argument("--env-type", type=str, default="ComplexCartPole", 
@@ -524,7 +524,7 @@ def train(report_callback=None):
                                 raw_g_t = raw_shared_grads[idx]
                                 
                                 # Iterate over modules to find DetVarShareLayers
-                                from deterministic.src.models import DetVarShareLayer
+                                from src.models_routing import DetVarShareLayer
                                 for m in self.agent.modules():
                                     if isinstance(m, DetVarShareLayer):
                                         if t_key in m.mus:
