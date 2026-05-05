@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.optim as optim
 import gymnasium as gym
 from collections import deque
+import collections
 import csv
 import json
 import matplotlib.pyplot as plt
@@ -74,6 +75,7 @@ def parse_args():
     parser.add_argument("--routing-lambda", type=float, default=0.001, help="Routing adapter shrinkage")
     
     parser.add_argument("--cuda", type=lambda x: (str(x).lower() == 'true'), default=True, help="cuda toggle")
+    parser.add_argument("--compile", type=lambda x: (str(x).lower() == 'true'), default=False, help="Use torch.compile to optimize PyTorch execution")
     
     parser.add_argument("--eval-mode", type=bool, default=True, help="Run periodic evaluations")
     parser.add_argument("--eval-freq", type=int, default=5000, help="Eval every N steps")
@@ -85,6 +87,7 @@ def parse_args():
         choices=["ComplexCartPole", "IdenticalCartPole", "metaworld", "MultiTaskLunarLander", "IdenticalLunarLander"], 
         help="Environment type")
     parser.add_argument("--mt-setting", type=str, default="MT10", choices=["MT1", "MT3", "MT4", "MT10", "MT50", "None"], help="Meta-World setting")
+    parser.add_argument("--wandb-project", type=str, default="varshare-bench-mt10", help="W&B project name")
     
     args = parser.parse_args()
     return args
@@ -134,11 +137,11 @@ def train(report_callback=None):
     use_wandb = False
     try:
         wandb.init(
-            project="varshare",
+            project=args.wandb_project,
             entity="niklas-nertinger-university-of-oxford",
             name=run_name,
             config=vars(args),
-            group=args.env_type,
+            group=args.variant,
             tags=[args.variant, args.env_type]
         )
         use_wandb = True
@@ -147,31 +150,14 @@ def train(report_callback=None):
     
     heartbeat_path = os.path.join(seed_dir, "heartbeat.csv")
     heartbeat_file = open(heartbeat_path, "w", newline="")
-    
-    fieldnames = [
-        "TOTAL_ENV_STEPS", "EPISODES_COMPLETED", "TOTAL_GRAD_STEPS",
-        "WALL_CLOCK_TIME", "SPS",
-        "loss/total", "loss/policy", "loss/value", "loss/entropy", "loss/reg_penalty", "loss/ara",
-        "diagnostics/grad_norm", "diagnostics/clip_fraction", "diagnostics/explained_variance",
-        "detvarshare/mean_norm_mu", "detvarshare/mean_norm_theta",
-        "detvarshare/sharing_ratio",
-        "performance/train_reward_50", "performance/train_success_50",
-        "eval/mean_reward", "eval/mean_success"
-    ]
-    
+    heartbeat_writer = None
+
     if args.env_type == "metaworld":
         temp_env = MetaWorldWrapper(benchmark=args.mt_setting, seed=args.seed)
         num_tasks = temp_env.num_tasks
         temp_env.close()
     else:
         num_tasks = 5
-        
-    for t in range(num_tasks):
-        fieldnames.append(f"eval/reward_task_{t}")
-        fieldnames.append(f"eval/success_task_{t}")
-        
-    heartbeat_writer = csv.DictWriter(heartbeat_file, fieldnames=fieldnames)
-    heartbeat_writer.writeheader()
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -242,6 +228,11 @@ def train(report_callback=None):
         is_continuous=not isinstance(envs.single_action_space, gym.spaces.Discrete),
         use_task_embedding=False
     ).to(device)
+
+    if args.compile:
+        # Wrap strictly the VarShare backbone to minimize kernel launch overhead
+        print("Compiling agent.actor_backbone via Torch 2.0 Triton...")
+        agent.actor_backbone = torch.compile(agent.actor_backbone, mode="reduce-overhead")
     
     # Register Tasks
     for t_idx in range(num_tasks):
@@ -281,6 +272,7 @@ def train(report_callback=None):
             self.agent.train()
             inds = np.arange(len(obs))
             clipfracs = []
+            td_vars = []
             
             for epoch in range(self.update_epochs):
                 np.random.shuffle(inds)
@@ -311,6 +303,7 @@ def train(report_callback=None):
 
                     newvalue = newvalue.view(-1)
                     v_loss = 0.5 * ((newvalue - mb_returns) ** 2).mean()
+                    td_vars.append((mb_returns - newvalue).var().item())
 
                     entropy_loss = entropy.mean()
                     
@@ -584,6 +577,7 @@ def train(report_callback=None):
                 "ara_loss": ara_loss_val,
                 "grad_norm": total_norm,
                 "clip_fraction": np.mean(clipfracs),
+                "td_error_variance": np.mean(td_vars) if td_vars else 0.0,
                 "rollout_len": len(obs)
             }
 
@@ -615,8 +609,8 @@ def train(report_callback=None):
 
     obs, _ = envs.reset(seed=args.seed)
     
-    reward_window = deque(maxlen=25)
-    success_window = deque(maxlen=25)
+    task_reward_window = {t: deque(maxlen=25) for t in range(num_tasks)}
+    task_success_window = {t: deque(maxlen=25) for t in range(num_tasks)}
     time_window = deque(maxlen=25)
     
     num_episodes_finished = 0
@@ -643,10 +637,10 @@ def train(report_callback=None):
         next_eval_step = checkpoint["next_eval_step"]
         eval_reward_current = checkpoint["eval_reward_current"]
         eval_metrics = checkpoint.get("eval_metrics", {})
-        if "reward_window" in checkpoint:
-            reward_window.extend(checkpoint["reward_window"])
-        if "success_window" in checkpoint:
-            success_window.extend(checkpoint["success_window"])
+        if "task_reward_window" in checkpoint:
+            task_reward_window = checkpoint["task_reward_window"]
+        if "task_success_window" in checkpoint:
+            task_success_window = checkpoint["task_success_window"]
         if "time_window" in checkpoint:
             time_window.extend(checkpoint["time_window"])
         if "last_k_rewards" in checkpoint:
@@ -671,7 +665,7 @@ def train(report_callback=None):
             global_step += 1 * args.num_envs
             
             with torch.no_grad():
-                task_ids_tensor = torch.full((args.num_envs,), task_idx, dtype=torch.long).to(device)
+                task_ids_tensor = torch.tensor([i % num_tasks for i in range(args.num_envs)], dtype=torch.long).to(device)
                 action, logprob, _, value, _ = agent.get_action_and_value(
                     torch.tensor(obs).float().to(device), 
                     task_idx=task_ids_tensor
@@ -695,21 +689,23 @@ def train(report_callback=None):
                     for i, has_ep in enumerate(infos["_episode"]):
                         if has_ep:
                             num_episodes_finished += 1
-                            reward_window.append(infos["episode"]["r"][i])
+                            t = i % num_tasks
+                            task_reward_window[t].append(infos["episode"]["r"][i])
                             time_window.append(infos["episode"]["l"][i])
                             if "success" in infos:
-                                success_window.append(infos["success"][i])
+                                task_success_window[t].append(infos["success"][i])
             elif "final_info" in infos:
-                for info in infos["final_info"]:
+                for i, info in enumerate(infos["final_info"]):
                     if info and "episode" in info:
                         num_episodes_finished += 1
-                        reward_window.append(info["episode"]["r"])
+                        t = i % num_tasks
+                        task_reward_window[t].append(info["episode"]["r"])
                         time_window.append(info["episode"]["l"])
                         if "success" in info:
-                            success_window.append(info["success"])
+                            task_success_window[t].append(info["success"])
 
         with torch.no_grad():
-            task_ids_tensor = torch.full((args.num_envs,), task_idx, dtype=torch.long).to(device)
+            task_ids_tensor = torch.tensor([i % num_tasks for i in range(args.num_envs)], dtype=torch.long).to(device)
             _, _, _, next_value, _ = agent.get_action_and_value(
                 torch.tensor(obs).float().to(device), 
                 task_idx=task_ids_tensor
@@ -748,15 +744,51 @@ def train(report_callback=None):
         
         explained_var = calculate_explained_variance(b_returns.cpu().numpy(), b_values.cpu().numpy())
         
-        # Aggregate Architecture metrics
-        arch_data = agent.actor_backbone.get_metrics(task_idx)
-        # Average these out:
-        mean_norm_mu = np.mean([v for k,v in arch_data.items() if "norm_mu" in k]) if arch_data else 0.0
-        mean_norm_theta = np.mean([v for k,v in arch_data.items() if "norm_theta" in k]) if arch_data else 0.0
-        sharing_ratio = mean_norm_theta / (mean_norm_theta + mean_norm_mu + 1e-8)
+        # Aggregate Architecture metrics per-task
+        arch_data = {}
+        layer_mu_sums = collections.defaultdict(float)
         
-        avg_reward = np.mean(reward_window) if reward_window else 0.0
-        avg_success = np.mean(success_window) if success_window else 0.0
+        for t in range(num_tasks):
+            t_data = agent.actor_backbone.get_metrics(t)
+            if t_data:
+                for k, v in t_data.items():
+                    # k is like "layer0_norm_mu"
+                    if "norm_mu" in k:
+                        arch_data[f"task_{t}_{k}"] = v  # e.g. task_0_layer0_norm_mu
+                        layer_mu_sums[k] += v
+                    elif "norm_theta" in k:
+                        if t == 0:
+                            arch_data[k] = v  # e.g. layer0_norm_theta
+        
+        # Per layer averages across tasks
+        for k, v_sum in layer_mu_sums.items():
+            arch_data[k] = v_sum / num_tasks  # e.g. layer0_norm_mu
+            layer_name = k.split("_")[0]
+            layer_theta = arch_data.get(f"{layer_name}_norm_theta", 0.0)
+            layer_mu_avg = arch_data[k]
+            arch_data[f"{layer_name}_sharing_ratio"] = layer_theta / (layer_theta + layer_mu_avg + 1e-8)
+                    
+        # Add global structural metrics (variance and sparsity)
+        global_arch_data = agent.actor_backbone.get_global_metrics()
+        for k, v in global_arch_data.items():
+            arch_data[k] = v
+        
+        # Average these out globally for history:
+        mean_norm_mu = np.mean([v for k,v in arch_data.items() if "norm_mu" in k and "task_" not in k]) if arch_data else 0.0
+        mean_norm_theta = np.mean([v for k,v in arch_data.items() if "norm_theta" in k and "task_" not in k]) if arch_data else 0.0
+        sharing_ratio = mean_norm_theta / (mean_norm_theta + mean_norm_mu + 1e-8)
+        mean_adapter_sparsity = np.mean([v for k,v in arch_data.items() if "adapter_sparsity" in k]) if arch_data else 0.0
+        mean_adapter_variance = np.mean([v for k,v in arch_data.items() if "adapter_variance" in k]) if arch_data else 0.0
+        
+        # Average per-task train rewards
+        for t in range(num_tasks):
+            eval_metrics[f"performance/train_reward_task_{t}"] = np.mean(task_reward_window[t]) if task_reward_window[t] else 0.0
+            eval_metrics[f"performance/train_success_task_{t}"] = np.mean(task_success_window[t]) if task_success_window[t] else 0.0
+            
+        all_train_rewards = [r for d in task_reward_window.values() for r in d]
+        all_train_successes = [s for d in task_success_window.values() for s in d]
+        avg_reward = np.mean(all_train_rewards) if all_train_rewards else 0.0
+        avg_success = np.mean(all_train_successes) if all_train_successes else 0.0
         
         hist_entry = {
             "step": global_step,
@@ -797,6 +829,22 @@ def train(report_callback=None):
             eval_metrics["eval/mean_success"] = eval_success_mean
             eval_reward_current = eval_reward_mean
             
+            # Ablation: Evaluate using Shared Backbone Only (zero out adapters)
+            print(">>> Running Ablation: Shared-Backbone Only Evaluation...")
+            original_state = {k: v.clone() for k, v in agent.state_dict().items()}
+            # Zero out adapter parameters
+            for name, param in agent.named_parameters():
+                if "mus" in name or "betas" in name or "gammas" in name or "mus_A" in name or "mus_B" in name:
+                    param.data.zero_()
+            
+            ablation_stats = evaluate(agent, eval_env, device, num_episodes=args.eval_episodes, num_tasks=num_tasks)
+            eval_metrics["eval/shared_backbone_only_reward"] = np.mean([s["reward"] for s in ablation_stats.values()])
+            eval_metrics["eval/shared_backbone_only_success"] = np.mean([s["success"] for s in ablation_stats.values()])
+            print(f"Shared-Backbone Reward: {eval_metrics['eval/shared_backbone_only_reward']:.2f} | Success: {eval_metrics['eval/shared_backbone_only_success']:.2f}")
+            
+            # Restore model
+            agent.load_state_dict(original_state)
+            
             last_k_rewards.append(eval_reward_mean)
             avg_last_k = np.mean(last_k_rewards)
             
@@ -828,18 +876,30 @@ def train(report_callback=None):
             "diagnostics/grad_norm": metrics["grad_norm"],
             "diagnostics/clip_fraction": metrics["clip_fraction"],
             "diagnostics/explained_variance": explained_var,
+            "diagnostics/td_error_variance": metrics.get("td_error_variance", 0.0),
             "detvarshare/mean_norm_mu": mean_norm_mu,
             "detvarshare/mean_norm_theta": mean_norm_theta,
             "detvarshare/sharing_ratio": sharing_ratio,
-            "performance/train_reward_50": avg_reward,
-            "performance/train_success_50": avg_success,
+            "detvarshare/adapter_sparsity": mean_adapter_sparsity,
+            "detvarshare/adapter_variance": mean_adapter_variance,
+            "performance/train_mean_reward": avg_reward,
+            "performance/train_mean_success": avg_success,
         }
         for t in range(num_tasks):
+            eval_metrics[f"performance/train_reward_task_{t}"] = eval_metrics.get(f"performance/train_reward_task_{t}", 0.0)
+            eval_metrics[f"performance/train_success_task_{t}"] = eval_metrics.get(f"performance/train_success_task_{t}", 0.0)
             eval_metrics[f"eval/reward_task_{t}"] = eval_metrics.get(f"eval/reward_task_{t}", 0.0)
             eval_metrics[f"eval/success_task_{t}"] = eval_metrics.get(f"eval/success_task_{t}", 0.0)
         
         full_metrics.update(eval_metrics)
+        # Flatten arch_data into full_metrics
+        for k, v in arch_data.items():
+            full_metrics[f"arch/{k}"] = v
         
+        if heartbeat_writer is None:
+            heartbeat_writer = csv.DictWriter(heartbeat_file, fieldnames=list(full_metrics.keys()))
+            heartbeat_writer.writeheader()
+            
         heartbeat_writer.writerow(full_metrics)
         heartbeat_file.flush()
         
@@ -855,6 +915,19 @@ def train(report_callback=None):
         if global_step // print_freq > (global_step - step_increment) // print_freq:
              print(f"Step {global_step:>7d} | Eps {num_episodes_finished:>4d} | Rew {avg_reward:>6.1f} | SPS {sps:>4d} | Loss {metrics['loss']:>7.3f} | Ent {metrics['entropy']:>5.3f}")
 
+        # Periodic State-Saving
+        if args.eval_mode:
+            checkpoint_interval = max(1, n_updates // 25)
+            if update > 0 and update % checkpoint_interval == 0:
+                print(f"[CHECKPOINT] Saving periodic state at Step {global_step}...")
+                chkpt = {
+                    "update": update,
+                    "global_step": global_step,
+                    "model_state_dict": agent.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict()
+                }
+                torch.save(chkpt, os.path.join(seed_dir, f"checkpoint_step_{global_step}.pt"))
+
         if shutdown_requested:
             print(f"\n[CHECKPOINT] Saving state at update {update} (Step {global_step})...")
             checkpoint = {
@@ -864,8 +937,8 @@ def train(report_callback=None):
                 "next_eval_step": next_eval_step,
                 "eval_reward_current": eval_reward_current,
                 "eval_metrics": eval_metrics,
-                "reward_window": list(reward_window),
-                "success_window": list(success_window),
+                "task_reward_window": task_reward_window,
+                "task_success_window": task_success_window,
                 "time_window": list(time_window),
                 "last_k_rewards": list(last_k_rewards),
                 "model_state_dict": agent.state_dict(),

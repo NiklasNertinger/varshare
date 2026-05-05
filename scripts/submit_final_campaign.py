@@ -5,10 +5,10 @@ import argparse
 
 # --- Configuration ---
 ENV_SETTINGS = {
-    "CP": {"env_type": "IdenticalCartPole", "steps": 2000000, "eval_freq": 20000, "n_steps": 256, "hidden_dim": 64},
-    "LL": {"env_type": "MultiTaskLunarLander", "steps": 10000000, "eval_freq": 100000, "n_steps": 256, "hidden_dim": 64},
-    "MT4": {"env_type": "metaworld", "mt_setting": "MT4", "steps": 25000000, "eval_freq": 250000, "n_steps": 512, "hidden_dim": 256},
-    "MT10": {"env_type": "metaworld", "mt_setting": "MT10", "steps": 50000000, "eval_freq": 500000, "n_steps": 512, "hidden_dim": 256}
+    "CP": {"env_type": "IdenticalCartPole", "steps": 2000000, "eval_freq": 4000, "n_steps": 256, "hidden_dim": 64},
+    "LL": {"env_type": "MultiTaskLunarLander", "steps": 10000000, "eval_freq": 20000, "n_steps": 256, "hidden_dim": 64},
+    "MT4": {"env_type": "metaworld", "mt_setting": "MT4", "steps": 25000000, "eval_freq": 50000, "n_steps": 512, "hidden_dim": 256},
+    "MT10": {"env_type": "metaworld", "mt_setting": "MT10", "steps": 50000000, "eval_freq": 100000, "n_steps": 512, "hidden_dim": 256}
 }
 
 # Slurm Config
@@ -27,7 +27,10 @@ VARIANTS = [
     # --- PHASE 1 ---
     (1, "soft_mod", "train_baselines.py", ["--algo", "soft_mod", "--num-modules", "4"], "soft_mod", "v5"),
     (1, "shared_embedding", "train_baselines.py", ["--algo", "shared"], "shared_embedding", "v5"),
-    (1, "paco", "train_baselines.py", ["--algo", "paco", "--num-experts", "4"], "paco", "v5"),
+    (1, "paco", "train_baselines.py", ["--algo", "paco", "--num-experts", "5"], "paco", "v5"),
+    (1, "care", "train_baselines.py", ["--algo", "care", "--num-experts", "6"], "care", "v5"),
+    (1, "moore", "train_baselines.py", ["--algo", "moore", "--num-experts", "4"], "moore", "v5"),
+    (1, "oracle", "train_baselines.py", ["--algo", "oracle"], "oracle", "v5"),
     (1, "shared_embedding_pcgrad", "train_baselines.py", ["--algo", "pcgrad"], "shared_embedding_pcgrad", "v5"),
     (1, "shared_embedding_cagrad", "train_baselines.py", ["--algo", "cagrad"], "cagrad", "v5"),
     (1, "det_base", "train_routing.py", ["--variant", "base"], "det_base", "v5"),
@@ -90,6 +93,32 @@ def submit_job(phase, env_key, name, script, base_args, hpo_args, hidden_dim, st
     # Slurm Time Dynamic
     slurm_time = "72:00:00" if env_key in ["MT10", "MT4"] else "24:00:00"
     
+    # Oracle array math handling
+    if name == "oracle":
+        num_tasks = 10 if env_key == "MT10" else (4 if env_key == "MT4" else 1)
+        total_jobs = len(SEEDS) * num_tasks
+        array_str = f"0-{total_jobs - 1}"
+        # We also reduce steps for oracle since it's single task, e.g. 5M steps instead of 50M
+        # But we keep it as passed in, or maybe scale it? The script handles total_timesteps.
+        # We will override steps for oracle to be steps // num_tasks
+        steps = steps // num_tasks
+        full_cmd = full_cmd.replace(f"--total-timesteps {steps * num_tasks}", f"--total-timesteps {steps}")
+        
+        seed_logic = f"""
+SEED=$(($SLURM_ARRAY_TASK_ID / {num_tasks} + 1))
+TASK_ID=$(($SLURM_ARRAY_TASK_ID % {num_tasks}))
+echo "Starting Seed $SEED | Task $TASK_ID"
+{full_cmd} --seed $SEED --task-id $TASK_ID
+EXIT_CODE=$?
+"""
+    else:
+        array_str = f"1-{len(SEEDS)}"
+        seed_logic = f"""
+echo "Starting Seed $SLURM_ARRAY_TASK_ID"
+{full_cmd} --seed $SLURM_ARRAY_TASK_ID
+EXIT_CODE=$?
+"""
+    
     # Write the sbatch script
     sbatch_script = f"""#!/bin/bash
 #SBATCH --job-name=f{phase}_{env_key}_{name}
@@ -100,15 +129,12 @@ def submit_job(phase, env_key, name, script, base_args, hpo_args, hidden_dim, st
 #SBATCH --mem={MEM}
 #SBATCH --time={slurm_time}
 #SBATCH --signal=B:USR1@120
-#SBATCH --array=1-3 # 3 seeds
+#SBATCH --array={array_str}
 
 source /netscratch/$USER/varshare/venv/bin/activate
 export PYTHONPATH=$PYTHONPATH:$HOME/varshare
 
-echo "Starting Seed $SLURM_ARRAY_TASK_ID"
-
-{full_cmd} --seed $SLURM_ARRAY_TASK_ID
-EXIT_CODE=$?
+{seed_logic}
 
 if [ $EXIT_CODE -eq 99 ]; then
     echo "Job caught SIGUSR1 and checkpointed safely. Requeueing..."
@@ -169,19 +195,25 @@ def main():
                 else:
                     hidden_dim_to_use = env_config["hidden_dim"]
                     grad_clip_arg = ["--max-grad-norm", "1.0"] # Conservative empirical clipping
-                    # Extract HPOs
-                    try:
-                        # MT10 natively uses MT4 params due to extraction parsing logic (we copied it over)
-                        best_params = hparams_db[hpo_version][env_key].get(hpo_key, None)
-                        
-                        if not best_params:
-                            print(f"    WARNING: No HPO found for {name} on {env_key}. Skipping!")
-                            continue
+                    
+                    if name in ["oracle", "care", "moore"]:
+                        # No HPO yet for these, provide robust defaults
+                        hpo_args = ["--lr-actor", "3e-4", "--lr-critic", "3e-4"]
+                        print(f"    Using default LR for {name} on {env_key}.")
+                    else:
+                        # Extract HPOs
+                        try:
+                            # MT10 natively uses MT4 params due to extraction parsing logic (we copied it over)
+                            best_params = hparams_db[hpo_version][env_key].get(hpo_key, None)
                             
-                        hpo_args = construct_hparam_args(best_params)
-                    except KeyError:
-                        print(f"    WARNING: HPO path missing for {name} on {env_key}. Skipping!")
-                        continue
+                            if not best_params:
+                                print(f"    WARNING: No HPO found for {name} on {env_key}. Skipping!")
+                                continue
+                                
+                            hpo_args = construct_hparam_args(best_params)
+                        except KeyError:
+                            print(f"    WARNING: HPO path missing for {name} on {env_key}. Skipping!")
+                            continue
                 
                 base_args_with_clip = base_args + grad_clip_arg
                 

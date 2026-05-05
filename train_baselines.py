@@ -34,7 +34,7 @@ from src.algo.cagrad import CAGrad
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo", type=str, default="shared", choices=["shared", "oracle", "pcgrad", "cagrad", "paco", "soft_mod"], help="baseline algorithm")
+    parser.add_argument("--algo", type=str, default="shared", choices=["shared", "oracle", "independent", "pcgrad", "cagrad", "paco", "soft_mod", "care", "moore"], help="baseline algorithm")
     parser.add_argument("--task-id", type=int, default=0, help="task id for oracle baseline")
     parser.add_argument("--num-experts", type=int, default=4, help="number of experts for paco")
     parser.add_argument("--num-modules", type=int, default=4, help="number of modules for soft_mod")
@@ -75,7 +75,8 @@ def parse_args():
     parser.add_argument("--lr-routing", type=float, default=0.001, help="SoftMod routing learning rate")
     
     # Architecture
-    parser.add_argument("--hidden-dim", type=int, default=64, help="Network hidden dimension")
+    parser.add_argument("--hidden-dim", type=int, default=400, help="Network hidden dimension")
+    parser.add_argument("--wandb-project", type=str, default="varshare-bench-mt10", help="W&B project name")
 
     args = parser.parse_args()
     return args
@@ -124,21 +125,26 @@ def train(report_callback=None):
     args = parse_args()
     timestamp = int(time.time())
     run_name = f"{args.exp_name}_{args.algo}_s{args.seed}_{timestamp}"
+    if args.algo == "oracle":
+        run_name += f"_t{args.task_id}"
     
     # 1. Directory Structure
     exp_dir = os.path.join(args.analysis_dir, args.exp_name)
-    seed_dir = os.path.join(exp_dir, f"seed_{args.seed}")
+    seed_str = f"seed_{args.seed}"
+    if args.algo == "oracle":
+        seed_str += f"_task_{args.task_id}"
+    seed_dir = os.path.join(exp_dir, seed_str)
     os.makedirs(seed_dir, exist_ok=True)
     
     # W&B Initialization
     use_wandb = False
     try:
         wandb.init(
-            project="varshare",
+            project=args.wandb_project,
             entity="niklas-nertinger-university-of-oxford",
             name=run_name,
             config=vars(args),
-            group=args.env_type,
+            group=args.algo,
             tags=[args.algo, args.env_type]
         )
         use_wandb = True
@@ -147,15 +153,7 @@ def train(report_callback=None):
     
     heartbeat_path = os.path.join(seed_dir, "heartbeat.csv")
     heartbeat_file = open(heartbeat_path, "w", newline="")
-    
-    fieldnames = [
-        "TOTAL_ENV_STEPS", "EPISODES_COMPLETED", "TOTAL_GRAD_STEPS",
-        "WALL_CLOCK_TIME", "SPS",
-        "loss/total", "loss/policy", "loss/value", "loss/entropy",
-        "diagnostics/grad_norm", "diagnostics/clip_fraction", "diagnostics/explained_variance",
-        "performance/train_reward_50", "performance/train_success_50",
-        "eval/mean_reward", "eval/mean_success"
-    ]
+    heartbeat_writer = None
     
     # We'll determine num_tasks based on env_type
     if args.env_type == "metaworld":
@@ -165,20 +163,6 @@ def train(report_callback=None):
         temp_env.close()
     else:
         num_tasks = 5
-        
-    for t in range(num_tasks):
-        fieldnames.append(f"eval/reward_task_{t}")
-        fieldnames.append(f"eval/success_task_{t}")
-        
-    # Add Architecture Metrics Headers
-    if args.algo == "paco":
-        fieldnames.extend(["arch/weight_entropy_actor", "arch/weight_entropy_critic", "arch/max_weight_actor"])
-    # Future-proof for SoftMod if we add metrics there later
-    if args.algo == "soft_mod":
-        pass 
-        
-    heartbeat_writer = csv.DictWriter(heartbeat_file, fieldnames=fieldnames)
-    heartbeat_writer.writeheader()
     
     # Seeding
     random.seed(args.seed)
@@ -224,7 +208,7 @@ def train(report_callback=None):
                 args.seed + i, 
                 i, 
                 initial_task_idx=(args.task_id if args.algo == "oracle" else i % num_tasks),
-                auto_cycle_task=(args.algo in ["shared", "pcgrad", "paco", "soft_mod"])
+                auto_cycle_task=(args.algo in ["shared", "pcgrad", "paco", "soft_mod", "care", "moore", "independent"])
             ) 
             for i in range(args.num_envs)
         ]
@@ -246,55 +230,84 @@ def train(report_callback=None):
         eval_env.observation_space.seed(args.seed + 1000)
     
     # Model Setup
+    hdims = [args.hidden_dim] * 3
     if args.algo == "paco":
-        from src.models_baselines import PaCoActorCritic
+        from src.baselines import PaCoActorCritic
         agent = PaCoActorCritic(
             envs.single_observation_space,
             envs.single_action_space,
-            hidden_dim=64,
+            hidden_dims=hdims,
             num_tasks=num_tasks,
             num_experts=args.num_experts
         ).to(device)
         
-        actor_params = list(agent.actor_experts.parameters())
-        if hasattr(agent, 'actor_logstd'):
-            actor_params += [agent.actor_logstd]
-            
-        critic_params = list(agent.critic_experts.parameters())
+        actor_params = list(agent.actor_backbone.parameters()) + list(agent.actor_head.parameters()) + [agent.actor_logstd]
+        critic_params = list(agent.critic_backbone.parameters()) + list(agent.critic_head.parameters())
         
         # Specific Composition Weights
-        weight_params = [agent.actor_weights, agent.critic_weights]
+        weight_params = [agent.task_encoder.embedding.weight]
 
     elif args.algo == "soft_mod":
-        from src.models_baselines import SoftModularActorCritic
+        from src.baselines import SoftModularActorCritic
         agent = SoftModularActorCritic(
             envs.single_observation_space,
             envs.single_action_space,
-            hidden_dim=64,
+            hidden_dims=hdims,
             num_tasks=num_tasks,
-            num_modules=args.num_modules,
-            num_layers=2
+            num_modules=args.num_modules
         ).to(device)
         
         # Base Params
-        actor_params = list(agent.obs_encoder.parameters()) + \
-                       list(agent.task_embedding.parameters()) + \
-                       list(agent.actor_base.parameters())
-                       
-        if hasattr(agent, 'actor_logstd'):
-            actor_params += [agent.actor_logstd]
-            
-        critic_params = list(agent.critic_base.parameters())
+        actor_params = list(agent.actor.parameters()) + list(agent.state_encoder.parameters()) + [agent.actor_logstd]
+        critic_params = list(agent.critic.parameters())
         
-        # Routing Params
-        routing_params = list(agent.actor_routing_d.parameters()) + \
-                         list(agent.critic_routing_d.parameters())
+        routing_params = list(agent.task_encoder.parameters())
+
+    elif args.algo == "care":
+        from src.baselines import CAREActorCritic
+        agent = CAREActorCritic(
+            envs.single_observation_space,
+            envs.single_action_space,
+            hidden_dims=hdims,
+            num_tasks=num_tasks,
+            num_experts=args.num_experts
+        ).to(device)
+        
+        actor_params = list(agent.actor.parameters()) + [agent.actor_logstd]
+        critic_params = list(agent.critic.parameters())
+
+    elif args.algo == "moore":
+        from src.baselines import MOOREActorCritic
+        agent = MOOREActorCritic(
+            envs.single_observation_space,
+            envs.single_action_space,
+            hidden_dims=hdims,
+            num_tasks=num_tasks,
+            num_experts=args.num_experts
+        ).to(device)
+        
+        actor_params = list(agent.actor.parameters()) + [agent.actor_logstd]
+        critic_params = list(agent.critic.parameters())
+        
+    elif args.algo == "independent":
+        from src.baselines import IndependentActorCritic
+        agent = IndependentActorCritic(
+            envs.single_observation_space,
+            envs.single_action_space,
+            hidden_dims=hdims,
+            num_tasks=num_tasks
+        ).to(device)
+        
+        actor_params = list(agent.actors.parameters())
+        if hasattr(agent, 'actor_logstds'):
+            actor_params += [agent.actor_logstds]
+        critic_params = list(agent.critics.parameters())
         
     else:
         agent = ActorCritic(
             envs.single_observation_space,
             envs.single_action_space,
-            hidden_dim=64,
+            hidden_dim=args.hidden_dim,
             num_tasks=num_tasks if args.algo in ["shared", "pcgrad"] else 1,
             use_task_embedding=(args.algo in ["shared", "pcgrad"]),
             embedding_dim=10 if args.algo in ["shared", "pcgrad"] else 0,
@@ -334,6 +347,7 @@ def train(report_callback=None):
         def update_from_storage(self, obs, actions, logprobs, returns, advantages, values, task_ids=None):
             b_inds = np.arange(len(obs))
             clipfracs = []
+            td_vars = []
             
             for epoch in range(self.update_epochs):
                 np.random.shuffle(b_inds)
@@ -385,6 +399,7 @@ def train(report_callback=None):
                         total_pg_loss += pg_loss.item()
                         total_v_loss += v_loss.item()
                         total_entropy += entropy_loss.item()
+                        td_vars.append((t_returns - newvalue).var().item())
 
                         if t == unique_tasks[0]: # Sample for clipfrac
                              with torch.no_grad():
@@ -410,6 +425,7 @@ def train(report_callback=None):
                 "value_loss": total_v_loss / len(unique_tasks) if len(unique_tasks) > 0 else 0.0,
                 "entropy": total_entropy / len(unique_tasks) if len(unique_tasks) > 0 else 0.0,
                 "clipfrac": np.mean(clipfracs) if clipfracs else 0.0,
+                "td_error_variance": np.mean(td_vars) if td_vars else 0.0,
                 "grad_norm": total_norm
             }
 
@@ -421,6 +437,7 @@ def train(report_callback=None):
         def update_from_storage(self, obs, actions, logprobs, returns, advantages, values, task_ids=None):
             b_inds = np.arange(len(obs))
             clipfracs = []
+            td_vars = []
             
             for epoch in range(self.update_epochs):
                 np.random.shuffle(b_inds)
@@ -472,6 +489,7 @@ def train(report_callback=None):
                         total_pg_loss += pg_loss.item()
                         total_v_loss += v_loss.item()
                         total_entropy += entropy_loss.item()
+                        td_vars.append((t_returns - newvalue).var().item())
 
                         if t == unique_tasks[0]: # Sample for clipfrac
                              with torch.no_grad():
@@ -497,6 +515,7 @@ def train(report_callback=None):
                 "value_loss": total_v_loss / len(unique_tasks),
                 "entropy": total_entropy / len(unique_tasks),
                 "clipfrac": np.mean(clipfracs),
+                "td_error_variance": np.mean(td_vars) if td_vars else 0.0,
                 "grad_norm": total_norm
             }
 
@@ -555,8 +574,8 @@ def train(report_callback=None):
     obs, _ = envs.reset(seed=args.seed)
     
     # Metrics
-    reward_window = deque(maxlen=25)
-    success_window = deque(maxlen=25)
+    task_reward_window = {t: deque(maxlen=25) for t in range(num_tasks)}
+    task_success_window = {t: deque(maxlen=25) for t in range(num_tasks)}
     num_episodes_finished = 0
     history = []
     start_time = time.time()
@@ -570,7 +589,7 @@ def train(report_callback=None):
     checkpoint_path = os.path.join(seed_dir, "checkpoint.pt")
     if os.path.exists(checkpoint_path):
         print(f"Loading checkpoint from {checkpoint_path}...")
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         agent.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         start_update = checkpoint["update"] + 1
@@ -580,10 +599,10 @@ def train(report_callback=None):
         next_eval_step = checkpoint["next_eval_step"]
         eval_reward_current = checkpoint["eval_reward_current"]
         eval_metrics = checkpoint.get("eval_metrics", {})
-        if "reward_window" in checkpoint:
-            reward_window.extend(checkpoint["reward_window"])
-        if "success_window" in checkpoint:
-            success_window.extend(checkpoint["success_window"])
+        if "task_reward_window" in checkpoint:
+            task_reward_window = checkpoint["task_reward_window"]
+        if "task_success_window" in checkpoint:
+            task_success_window = checkpoint["task_success_window"]
         
         # Load history json if it exists to append to it
         hist_path = os.path.join(seed_dir, "history.json")
@@ -604,10 +623,12 @@ def train(report_callback=None):
             global_step += 1 * args.num_envs
             
             with torch.no_grad():
-                # For Oracle, task_idx=0 because the model is single-task
-                # For Shared, task_idx is the actual rotating task_id
-                t_idx_for_model = current_task_idx if args.algo in ["shared", "paco", "soft_mod"] else 0
-                task_ids_tensor = torch.full((args.num_envs,), t_idx_for_model, dtype=torch.long).to(device)
+                # For Oracle, task_idx is fixed
+                # For Shared/PaCo/SoftMod, task_idx maps to the env index
+                if args.algo == "oracle":
+                    task_ids_tensor = torch.full((args.num_envs,), args.task_id, dtype=torch.long).to(device)
+                else:
+                    task_ids_tensor = torch.tensor([i % num_tasks for i in range(args.num_envs)], dtype=torch.long).to(device)
                 
                 action, logprob, _, value = agent.get_action_and_value(
                     torch.tensor(obs).float().to(device), 
@@ -632,24 +653,28 @@ def train(report_callback=None):
                     for i, has_ep in enumerate(infos["_episode"]):
                         if has_ep:
                             num_episodes_finished += 1
-                            reward_window.append(infos["episode"]["r"][i])
+                            t = args.task_id if args.algo == "oracle" else (i % num_tasks)
+                            task_reward_window[t].append(infos["episode"]["r"][i])
                             if "success" in infos:
-                                success_window.append(infos["success"][i])
+                                task_success_window[t].append(infos["success"][i])
             elif "final_info" in infos:
-                for info in infos["final_info"]:
+                for i, info in enumerate(infos["final_info"]):
                     if info and "episode" in info:
                         num_episodes_finished += 1
-                        reward_window.append(info["episode"]["r"])
+                        t = args.task_id if args.algo == "oracle" else (i % num_tasks)
+                        task_reward_window[t].append(info["episode"]["r"])
                         if "success" in info:
-                            success_window.append(info["success"])
+                            task_success_window[t].append(info["success"])
             
             # Auto-cycling is now handled internally by MetaWorldWrapper.reset()
             # which is called automatically by VectorEnv when a rollout sub-env finishes.
 
         # GAE
         with torch.no_grad():
-            t_idx_for_model = current_task_idx if args.algo in ["shared", "paco", "soft_mod"] else 0
-            task_ids_tensor = torch.full((args.num_envs,), t_idx_for_model, dtype=torch.long).to(device)
+            if args.algo == "oracle":
+                task_ids_tensor = torch.full((args.num_envs,), args.task_id, dtype=torch.long).to(device)
+            else:
+                task_ids_tensor = torch.tensor([i % num_tasks for i in range(args.num_envs)], dtype=torch.long).to(device)
             _, _, _, next_value = agent.get_action_and_value(
                 torch.tensor(obs).float().to(device), 
                 task_idx=task_ids_tensor
@@ -699,8 +724,16 @@ def train(report_callback=None):
              m = agent.get_architectural_metrics(0)
              if m: arch_metrics = m
              
-        avg_reward = np.mean(reward_window) if reward_window else 0.0
-        avg_success = np.mean(success_window) if success_window else 0.0
+        # Average per-task train rewards
+        for t in range(num_tasks):
+            eval_metrics[f"performance/train_reward_task_{t}"] = np.mean(task_reward_window[t]) if task_reward_window[t] else 0.0
+            eval_metrics[f"performance/train_success_task_{t}"] = np.mean(task_success_window[t]) if task_success_window[t] else 0.0
+        
+        # Global averages
+        all_train_rewards = [r for d in task_reward_window.values() for r in d]
+        all_train_successes = [s for d in task_success_window.values() for s in d]
+        avg_reward = np.mean(all_train_rewards) if all_train_rewards else 0.0
+        avg_success = np.mean(all_train_successes) if all_train_successes else 0.0
         sps = int(global_step / (time.time() - start_time + 1e-8))
         
         # Eval
@@ -749,18 +782,25 @@ def train(report_callback=None):
             "loss/value": metrics["value_loss"],
             "loss/entropy": metrics["entropy"],
             "diagnostics/grad_norm": metrics.get("grad_norm", 0.0),
-            "diagnostics/clip_fraction": metrics.get("clipfrac", 0.0),
+            "diagnostics/clip_fraction": metrics.get("clip_fraction", metrics.get("clipfrac", 0.0)),
+            "diagnostics/td_error_variance": metrics.get("td_error_variance", 0.0),
             "diagnostics/explained_variance": explained_var,
-            "performance/train_reward_50": avg_reward,
-            "performance/train_success_50": avg_success,
+            "performance/train_mean_reward": avg_reward,
+            "performance/train_mean_success": avg_success,
             "eval/mean_reward": eval_metrics.get("eval/mean_reward", 0.0),
             "eval/mean_success": eval_metrics.get("eval/mean_success", 0.0),
             **{f"arch/{k}": v for k, v in arch_metrics.items()}
         }
-        # Add per-task eval metrics
+        # Add per-task eval metrics and train metrics
         for t in range(num_tasks):
+            full_metrics[f"performance/train_reward_task_{t}"] = eval_metrics.get(f"performance/train_reward_task_{t}", 0.0)
+            full_metrics[f"performance/train_success_task_{t}"] = eval_metrics.get(f"performance/train_success_task_{t}", 0.0)
             full_metrics[f"eval/reward_task_{t}"] = eval_metrics.get(f"eval/reward_task_{t}", 0.0)
             full_metrics[f"eval/success_task_{t}"] = eval_metrics.get(f"eval/success_task_{t}", 0.0)
+            
+        if heartbeat_writer is None:
+            heartbeat_writer = csv.DictWriter(heartbeat_file, fieldnames=list(full_metrics.keys()))
+            heartbeat_writer.writeheader()
             
         heartbeat_writer.writerow(full_metrics)
         heartbeat_file.flush()
@@ -775,6 +815,19 @@ def train(report_callback=None):
         if global_step % 2500 < args.num_envs * n_steps:
              print(f"Step {global_step:>7d} | Eps {num_episodes_finished:>4d} | Rew {avg_reward:>6.1f} | SPS {sps:>4d} | Loss {metrics['loss']:>7.3f}")
 
+        # Periodic State-Saving
+        if args.eval_mode:
+            checkpoint_interval = max(1, n_updates // 25)
+            if update > 0 and update % checkpoint_interval == 0:
+                print(f"[CHECKPOINT] Saving periodic state at Step {global_step}...")
+                chkpt = {
+                    "update": update,
+                    "global_step": global_step,
+                    "model_state_dict": agent.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict()
+                }
+                torch.save(chkpt, os.path.join(seed_dir, f"checkpoint_step_{global_step}.pt"))
+
         if shutdown_requested:
             print(f"\n[CHECKPOINT] Saving state at update {update} (Step {global_step})...")
             checkpoint = {
@@ -785,8 +838,8 @@ def train(report_callback=None):
                 "next_eval_step": next_eval_step,
                 "eval_reward_current": eval_reward_current,
                 "eval_metrics": eval_metrics,
-                "reward_window": list(reward_window),
-                "success_window": list(success_window),
+                "task_reward_window": task_reward_window,
+                "task_success_window": task_success_window,
                 "model_state_dict": agent.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict()
             }
@@ -801,7 +854,10 @@ def train(report_callback=None):
 
     # Final reports
     total_duration = time.time() - start_time
-    print(f"\nFinal Average Reward: {avg_reward:.2f}")
+    try:
+        print(f"\nFinal Average Reward: {avg_reward:.2f}")
+    except UnboundLocalError:
+        print("\nFinal Average Reward: N/A (no episodes finished)")
     
     # Plotting
     os.makedirs(seed_dir, exist_ok=True)
@@ -857,6 +913,23 @@ Final Eval Success: {eval_metrics.get("eval/mean_success", 0.0):.2f}
     print(summary_text)
     with open(os.path.join(seed_dir, "summary.txt"), "w") as f:
         f.write(summary_text)
+
+    # Save Final Checkpoint
+    print(f"\n[CHECKPOINT] Saving final state at update {update} (Step {global_step})...")
+    final_checkpoint = {
+        "update": update,
+        "global_step": global_step,
+        "total_grad_steps": total_grad_steps,
+        "num_episodes_finished": num_episodes_finished,
+        "next_eval_step": next_eval_step,
+        "eval_reward_current": eval_reward_current,
+        "eval_metrics": eval_metrics,
+        "task_reward_window": task_reward_window,
+        "task_success_window": task_success_window,
+        "model_state_dict": agent.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict()
+    }
+    torch.save(final_checkpoint, os.path.join(seed_dir, "checkpoint.pt"))
 
     heartbeat_file.close()
     envs.close()

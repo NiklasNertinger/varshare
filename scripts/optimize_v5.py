@@ -14,7 +14,7 @@ ENV_SETTINGS = {
     "CP": {
         "env_type": "IdenticalCartPole",
         "mt_setting": "None",
-        "total_timesteps": 800000,
+        "total_timesteps": 2000000,
         "n_steps": 256,
         "num_envs": 1, # Using 1 for stable evaluation unless vectorized
         "eval_freq": 10000,
@@ -23,28 +23,28 @@ ENV_SETTINGS = {
     "LL": {
         "env_type": "MultiTaskLunarLander",
         "mt_setting": "None",
-        "total_timesteps": 1500000,
+        "total_timesteps": 10000000,
         "n_steps": 256,
         "num_envs": 1,
-        "eval_freq": 25000,
+        "eval_freq": 50000,
         "hidden_dim": 64
     },
     "MT4": {
         "env_type": "metaworld",
         "mt_setting": "MT4",
-        "total_timesteps": 2500000,
+        "total_timesteps": 25000000,
         "n_steps": 512,
-        "num_envs": 1,
-        "eval_freq": 50000,
+        "num_envs": 4,
+        "eval_freq": 125000,
         "hidden_dim": 256
     },
     "MT10": {
         "env_type": "metaworld",
         "mt_setting": "MT10",
-        "total_timesteps": 5000000,
+        "total_timesteps": 50000000,
         "n_steps": 512,
-        "num_envs": 1,
-        "eval_freq": 100000,
+        "num_envs": 4,
+        "eval_freq": 250000,
         "hidden_dim": 256
     }
 }

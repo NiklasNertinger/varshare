@@ -154,6 +154,7 @@ class PPO:
 
         b_inds = np.arange(len(obs))
         clipfracs = []
+        td_vars = []
         approx_kl = 0 # fallback
         kl_loss = torch.tensor(0.0)
         grad_norm = 0.0
@@ -232,10 +233,13 @@ class PPO:
                                hyper_loss += (param - target) ** 2
                      loss += self.lambda_hyper * hyper_loss
 
-                self.optimizer.zero_grad()
-                loss.backward()
-                grad_norm = nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
-                self.optimizer.step()
+            self.optimizer.zero_grad()
+            loss.backward()
+            grad_norm = nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
+            self.optimizer.step()
+            
+            # Track TD Error Variance
+            td_vars.append((returns[mb_inds] - newvalue).var().item())
 
         return {
             "loss": loss.item(),
@@ -244,6 +248,7 @@ class PPO:
             "entropy": entropy_loss.item(),
             "approx_kl": approx_kl.item(),
             "clip_fraction": np.mean(clipfracs),
+            "td_error_variance": np.mean(td_vars) if td_vars else 0.0,
             "kl_penalty": kl_loss.item() if isinstance(kl_loss, torch.Tensor) else kl_loss,
             "raw_kl": ((kl_loss.item() if isinstance(kl_loss, torch.Tensor) else kl_loss) / self.kl_beta) if self.kl_beta > 0 else 0.0,
             "kl_beta": self.kl_beta,
