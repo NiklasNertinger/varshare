@@ -769,6 +769,9 @@ def train(report_callback=None):
             part_data = {}
             part_mu_sums = collections.defaultdict(float)
             
+            # Categories flat prefixes
+            overall_prefix = "detvarshare" if prefix == "actor" else "criticvarshare"
+            
             for t in range(num_tasks):
                 t_m = backbone.get_metrics(t)
                 head_stats = head.get_architectural_metrics(t)
@@ -784,43 +787,62 @@ def train(report_callback=None):
                         if t == 0:
                             part_data[k] = v
                             
+            # Process tasks and layers
+            for k, v in part_data.items():
+                if "task_" in k:
+                    # actor/critic by layer AND task: arch_actor_task_{t}/layer{l}_norm_mu
+                    parts = k.split("_")
+                    t_idx = parts[1]
+                    layer_name = parts[2]
+                    arch_data[f"arch_{prefix}_task_{t_idx}/{layer_name}_norm_mu"] = v
+                else:
+                    # k is like "layer0_norm_theta"
+                    layer_name = k.split("_")[0]
+                    arch_data[f"arch_{prefix}_layer/{layer_name}_norm_theta"] = v
+                    
             for k, v_sum in part_mu_sums.items():
-                part_data[k] = v_sum / num_tasks
                 layer_name = k.split("_")[0]
-                layer_theta = part_data.get(f"{layer_name}_norm_theta", 0.0)
-                layer_mu_avg = part_data[k]
-                part_data[f"{layer_name}_sharing_ratio"] = layer_theta / (layer_theta + layer_mu_avg + 1e-8)
+                layer_mu_avg = v_sum / num_tasks
+                arch_data[f"arch_{prefix}_layer/{layer_name}_norm_mu"] = layer_mu_avg
+                
+                layer_theta = arch_data.get(f"arch_{prefix}_layer/{layer_name}_norm_theta", 0.0)
+                layer_sharing_ratio = layer_theta / (layer_theta + layer_mu_avg + 1e-8)
+                arch_data[f"arch_{prefix}_layer/{layer_name}_sharing_ratio"] = layer_sharing_ratio
                 
             global_m = backbone.get_global_metrics()
             for k, v in global_m.items():
-                part_data[k] = v
+                # k is like "layer0_adapter_variance" or "layer0_adapter_sparsity"
+                layer_name = k.split("_")[0]
+                metric_name = k.replace(f"{layer_name}_", "")
+                arch_data[f"arch_{prefix}_layer/{layer_name}_{metric_name}"] = v
                 
             if hasattr(head, "mus") and len(head.mus) > 0:
                 with torch.no_grad():
                     all_mus = torch.stack(list(head.mus.values()))
                     mu_mean = all_mus.mean(dim=0)
-                    part_data["layer3_adapter_variance"] = torch.mean(torch.norm(all_mus - mu_mean, dim=1)**2).item()
-                    part_data["layer3_adapter_sparsity"] = (torch.abs(all_mus) < 1e-3).float().mean().item()
+                    layer3_var = torch.mean(torch.norm(all_mus - mu_mean, dim=1)**2).item()
+                    layer3_sp = (torch.abs(all_mus) < 1e-3).float().mean().item()
+                    arch_data[f"arch_{prefix}_layer/layer3_adapter_variance"] = layer3_var
+                    arch_data[f"arch_{prefix}_layer/layer3_adapter_sparsity"] = layer3_sp
                     
-            for k, v in part_data.items():
-                arch_data[f"arch/{prefix}/{k}"] = v
-                
-            m_mu = [v for k, v in part_data.items() if "norm_mu" in k and "task_" not in k]
-            m_theta = [v for k, v in part_data.items() if "norm_theta" in k and "task_" not in k]
+            # Compute path aggregates for overall
+            m_mu = [v for k, v in arch_data.items() if f"arch_{prefix}_layer/" in k and "_norm_mu" in k]
+            m_theta = [v for k, v in arch_data.items() if f"arch_{prefix}_layer/" in k and "_norm_theta" in k]
             mean_mu = np.mean(m_mu) if m_mu else 0.0
             mean_theta = np.mean(m_theta) if m_theta else 0.0
             sharing_ratio = mean_theta / (mean_theta + mean_mu + 1e-8)
             
-            m_sparsity = [v for k, v in part_data.items() if "adapter_sparsity" in k]
-            m_variance = [v for k, v in part_data.items() if "adapter_variance" in k]
+            m_sparsity = [v for k, v in arch_data.items() if f"arch_{prefix}_layer/" in k and "adapter_sparsity" in k]
+            m_variance = [v for k, v in arch_data.items() if f"arch_{prefix}_layer/" in k and "adapter_variance" in k]
             mean_sparsity = np.mean(m_sparsity) if m_sparsity else 0.0
             mean_variance = np.mean(m_variance) if m_variance else 0.0
             
-            arch_data[f"arch/{prefix}/mean_norm_mu"] = mean_mu
-            arch_data[f"arch/{prefix}/mean_norm_theta"] = mean_theta
-            arch_data[f"arch/{prefix}/sharing_ratio"] = sharing_ratio
-            arch_data[f"arch/{prefix}/mean_adapter_sparsity"] = mean_sparsity
-            arch_data[f"arch/{prefix}/mean_adapter_variance"] = mean_variance
+            # Actor/critic overall: detvarshare/mean_norm_mu, criticvarshare/mean_norm_mu, etc.
+            arch_data[f"{overall_prefix}/mean_norm_mu"] = mean_mu
+            arch_data[f"{overall_prefix}/mean_norm_theta"] = mean_theta
+            arch_data[f"{overall_prefix}/sharing_ratio"] = sharing_ratio
+            arch_data[f"{overall_prefix}/adapter_sparsity"] = mean_sparsity
+            arch_data[f"{overall_prefix}/adapter_variance"] = mean_variance
             
             return mean_mu, mean_theta, sharing_ratio, mean_sparsity, mean_variance
 
@@ -970,9 +992,13 @@ def train(report_callback=None):
             eval_metrics[f"eval/success_task_{t}"] = eval_metrics.get(f"eval/success_task_{t}", 0.0)
         
         full_metrics.update(eval_metrics)
-        # Flatten arch_data into full_metrics
+        # Flatten arch_data into full_metrics (Categorized and flattened directly for W&B)
         for k, v in arch_data.items():
-            full_metrics[f"arch/{k}"] = v
+            if k.startswith("arch_") or k.startswith("detvarshare/") or k.startswith("criticvarshare/"):
+                full_metrics[k] = v
+            else:
+                # Legacy keys get the 'arch/' prefix to maintain exact CSV/plot compatibility
+                full_metrics[f"arch/{k}"] = v
         
         if heartbeat_writer is None:
             heartbeat_writer = csv.DictWriter(heartbeat_file, fieldnames=list(full_metrics.keys()))
