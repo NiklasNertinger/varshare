@@ -762,41 +762,101 @@ def train(report_callback=None):
         
         explained_var = calculate_explained_variance(b_returns.cpu().numpy(), b_values.cpu().numpy())
         
-        # Aggregate Architecture metrics per-task
+        # Aggregate Architecture metrics per-task (separate for Actor and Critic)
         arch_data = {}
-        layer_mu_sums = collections.defaultdict(float)
         
+        def process_structural_part(prefix, backbone, head):
+            part_data = {}
+            part_mu_sums = collections.defaultdict(float)
+            
+            for t in range(num_tasks):
+                t_m = backbone.get_metrics(t)
+                head_stats = head.get_architectural_metrics(t)
+                if head_stats:
+                    for k, v in head_stats.items():
+                        t_m[f"layer3_{k}"] = v
+                        
+                for k, v in t_m.items():
+                    if "norm_mu" in k:
+                        part_data[f"task_{t}_{k}"] = v
+                        part_mu_sums[k] += v
+                    elif "norm_theta" in k:
+                        if t == 0:
+                            part_data[k] = v
+                            
+            for k, v_sum in part_mu_sums.items():
+                part_data[k] = v_sum / num_tasks
+                layer_name = k.split("_")[0]
+                layer_theta = part_data.get(f"{layer_name}_norm_theta", 0.0)
+                layer_mu_avg = part_data[k]
+                part_data[f"{layer_name}_sharing_ratio"] = layer_theta / (layer_theta + layer_mu_avg + 1e-8)
+                
+            global_m = backbone.get_global_metrics()
+            for k, v in global_m.items():
+                part_data[k] = v
+                
+            if hasattr(head, "mus") and len(head.mus) > 0:
+                with torch.no_grad():
+                    all_mus = torch.stack(list(head.mus.values()))
+                    mu_mean = all_mus.mean(dim=0)
+                    part_data["layer3_adapter_variance"] = torch.mean(torch.norm(all_mus - mu_mean, dim=1)**2).item()
+                    part_data["layer3_adapter_sparsity"] = (torch.abs(all_mus) < 1e-3).float().mean().item()
+                    
+            for k, v in part_data.items():
+                arch_data[f"arch/{prefix}/{k}"] = v
+                
+            m_mu = [v for k, v in part_data.items() if "norm_mu" in k and "task_" not in k]
+            m_theta = [v for k, v in part_data.items() if "norm_theta" in k and "task_" not in k]
+            mean_mu = np.mean(m_mu) if m_mu else 0.0
+            mean_theta = np.mean(m_theta) if m_theta else 0.0
+            sharing_ratio = mean_theta / (mean_theta + mean_mu + 1e-8)
+            
+            m_sparsity = [v for k, v in part_data.items() if "adapter_sparsity" in k]
+            m_variance = [v for k, v in part_data.items() if "adapter_variance" in k]
+            mean_sparsity = np.mean(m_sparsity) if m_sparsity else 0.0
+            mean_variance = np.mean(m_variance) if m_variance else 0.0
+            
+            arch_data[f"arch/{prefix}/mean_norm_mu"] = mean_mu
+            arch_data[f"arch/{prefix}/mean_norm_theta"] = mean_theta
+            arch_data[f"arch/{prefix}/sharing_ratio"] = sharing_ratio
+            arch_data[f"arch/{prefix}/mean_adapter_sparsity"] = mean_sparsity
+            arch_data[f"arch/{prefix}/mean_adapter_variance"] = mean_variance
+            
+            return mean_mu, mean_theta, sharing_ratio, mean_sparsity, mean_variance
+
+        act_mu, act_theta, act_sr, act_sp, act_var = process_structural_part("actor", agent.actor_backbone, agent.actor_head)
+        crit_mu, crit_theta, crit_sr, crit_sp, crit_var = process_structural_part("critic", agent.critic_backbone, agent.critic_head)
+        
+        # Legacy mappings for backward compatibility with local CSV logging and plotting (using Actor)
+        legacy_layer_mu_sums = collections.defaultdict(float)
         for t in range(num_tasks):
             t_data = agent.actor_backbone.get_metrics(t)
             if t_data:
                 for k, v in t_data.items():
-                    # k is like "layer0_norm_mu"
                     if "norm_mu" in k:
-                        arch_data[f"task_{t}_{k}"] = v  # e.g. task_0_layer0_norm_mu
-                        layer_mu_sums[k] += v
+                        arch_data[f"task_{t}_{k}"] = v
+                        legacy_layer_mu_sums[k] += v
                     elif "norm_theta" in k:
                         if t == 0:
-                            arch_data[k] = v  # e.g. layer0_norm_theta
-        
-        # Per layer averages across tasks
-        for k, v_sum in layer_mu_sums.items():
-            arch_data[k] = v_sum / num_tasks  # e.g. layer0_norm_mu
+                            arch_data[k] = v
+                            
+        for k, v_sum in legacy_layer_mu_sums.items():
+            arch_data[k] = v_sum / num_tasks
             layer_name = k.split("_")[0]
             layer_theta = arch_data.get(f"{layer_name}_norm_theta", 0.0)
             layer_mu_avg = arch_data[k]
             arch_data[f"{layer_name}_sharing_ratio"] = layer_theta / (layer_theta + layer_mu_avg + 1e-8)
-                    
-        # Add global structural metrics (variance and sparsity)
-        global_arch_data = agent.actor_backbone.get_global_metrics()
-        for k, v in global_arch_data.items():
+            
+        legacy_global = agent.actor_backbone.get_global_metrics()
+        for k, v in legacy_global.items():
             arch_data[k] = v
-        
-        # Average these out globally for history:
-        mean_norm_mu = np.mean([v for k,v in arch_data.items() if "norm_mu" in k and "task_" not in k]) if arch_data else 0.0
-        mean_norm_theta = np.mean([v for k,v in arch_data.items() if "norm_theta" in k and "task_" not in k]) if arch_data else 0.0
+
+        # Average these out globally for history (using unified Actor + Critic averages)
+        mean_norm_mu = 0.5 * (act_mu + crit_mu)
+        mean_norm_theta = 0.5 * (act_theta + crit_theta)
         sharing_ratio = mean_norm_theta / (mean_norm_theta + mean_norm_mu + 1e-8)
-        mean_adapter_sparsity = np.mean([v for k,v in arch_data.items() if "adapter_sparsity" in k]) if arch_data else 0.0
-        mean_adapter_variance = np.mean([v for k,v in arch_data.items() if "adapter_variance" in k]) if arch_data else 0.0
+        mean_adapter_sparsity = 0.5 * (act_sp + crit_sp)
+        mean_adapter_variance = 0.5 * (act_var + crit_var)
         
         # Average per-task train rewards
         for t in range(num_tasks):
