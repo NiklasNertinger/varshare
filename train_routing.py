@@ -849,29 +849,6 @@ def train(report_callback=None):
         act_mu, act_theta, act_sr, act_sp, act_var = process_structural_part("actor", agent.actor_backbone, agent.actor_head)
         crit_mu, crit_theta, crit_sr, crit_sp, crit_var = process_structural_part("critic", agent.critic_backbone, agent.critic_head)
         
-        # Legacy mappings for backward compatibility with local CSV logging and plotting (using Actor)
-        legacy_layer_mu_sums = collections.defaultdict(float)
-        for t in range(num_tasks):
-            t_data = agent.actor_backbone.get_metrics(t)
-            if t_data:
-                for k, v in t_data.items():
-                    if "norm_mu" in k:
-                        arch_data[f"task_{t}_{k}"] = v
-                        legacy_layer_mu_sums[k] += v
-                    elif "norm_theta" in k:
-                        if t == 0:
-                            arch_data[k] = v
-                            
-        for k, v_sum in legacy_layer_mu_sums.items():
-            arch_data[k] = v_sum / num_tasks
-            layer_name = k.split("_")[0]
-            layer_theta = arch_data.get(f"{layer_name}_norm_theta", 0.0)
-            layer_mu_avg = arch_data[k]
-            arch_data[f"{layer_name}_sharing_ratio"] = layer_theta / (layer_theta + layer_mu_avg + 1e-8)
-            
-        legacy_global = agent.actor_backbone.get_global_metrics()
-        for k, v in legacy_global.items():
-            arch_data[k] = v
 
         # Average these out globally for history (using unified Actor + Critic averages)
         mean_norm_mu = 0.5 * (act_mu + crit_mu)
@@ -994,11 +971,7 @@ def train(report_callback=None):
         full_metrics.update(eval_metrics)
         # Flatten arch_data into full_metrics (Categorized and flattened directly for W&B)
         for k, v in arch_data.items():
-            if k.startswith("arch_") or k.startswith("detvarshare/") or k.startswith("criticvarshare/"):
-                full_metrics[k] = v
-            else:
-                # Legacy keys get the 'arch/' prefix to maintain exact CSV/plot compatibility
-                full_metrics[f"arch/{k}"] = v
+            full_metrics[k] = v
         
         if heartbeat_writer is None:
             heartbeat_writer = csv.DictWriter(heartbeat_file, fieldnames=list(full_metrics.keys()))
