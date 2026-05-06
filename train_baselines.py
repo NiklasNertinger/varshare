@@ -585,6 +585,10 @@ def train(report_callback=None):
     eval_reward_current = 0.0
     eval_metrics = {}
     start_update = 0
+    avg_reward = 0.0
+    avg_success = 0.0
+    final_eval_reward = 0.0
+    update = 0
     
     checkpoint_path = os.path.join(seed_dir, "checkpoint.pt")
     if os.path.exists(checkpoint_path):
@@ -854,10 +858,7 @@ def train(report_callback=None):
 
     # Final reports
     total_duration = time.time() - start_time
-    try:
-        print(f"\nFinal Average Reward: {avg_reward:.2f}")
-    except UnboundLocalError:
-        print("\nFinal Average Reward: N/A (no episodes finished)")
+    print(f"\nFinal Average Reward: {avg_reward:.2f}")
     
     # Plotting
     os.makedirs(seed_dir, exist_ok=True)
