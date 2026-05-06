@@ -611,7 +611,7 @@ def train(report_callback=None):
     obs, info = envs.reset(seed=args.seed)
     
     # Track the active task ID for each environment
-    current_task_ids = np.array([args.task_id if args.algo == "oracle" else i % num_tasks for i in range(args.num_envs)], dtype=np.int64)
+    current_task_ids = np.array([i % num_tasks for i in range(args.num_envs)], dtype=np.int64)
     
     task_reward_window = {t: deque(maxlen=25) for t in range(num_tasks)}
     task_success_window = {t: deque(maxlen=25) for t in range(num_tasks)}
@@ -719,7 +719,7 @@ def train(report_callback=None):
                 if "_episode" in infos:
                     for i, has_ep in enumerate(infos["_episode"]):
                         if has_ep:
-                            if args.algo != "oracle" and args.env_type == "metaworld":
+                            if args.env_type == "metaworld":
                                 current_task_ids[i] = (current_task_ids[i] + 1) % num_tasks
 
         with torch.no_grad():
