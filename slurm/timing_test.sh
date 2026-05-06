@@ -15,7 +15,7 @@
 # ============================================================
 
 # Setup
-source ~/.venv/bin/activate
+source /netscratch/$USER/varshare/venv/bin/activate
 cd ~/varshare
 mkdir -p /netscratch/$USER/varshare/logs
 
