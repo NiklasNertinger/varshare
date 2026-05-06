@@ -226,7 +226,8 @@ def train(report_callback=None):
         variant=args.variant,
         lora_rank=args.lora_rank,
         is_continuous=not isinstance(envs.single_action_space, gym.spaces.Discrete),
-        use_task_embedding=False
+        use_task_embedding=False,
+        num_tasks=num_tasks
     ).to(device)
 
     if args.compile:
@@ -607,7 +608,10 @@ def train(report_callback=None):
     # eval_env doesn't auto-rotate so we set it
     eval_env.reset_task(task_idx)
 
-    obs, _ = envs.reset(seed=args.seed)
+    obs, info = envs.reset(seed=args.seed)
+    
+    # Track the active task ID for each environment
+    current_task_ids = np.array([args.task_id if args.algo == "oracle" else i % num_tasks for i in range(args.num_envs)], dtype=np.int64)
     
     task_reward_window = {t: deque(maxlen=25) for t in range(num_tasks)}
     task_success_window = {t: deque(maxlen=25) for t in range(num_tasks)}
@@ -641,6 +645,8 @@ def train(report_callback=None):
             task_reward_window = checkpoint["task_reward_window"]
         if "task_success_window" in checkpoint:
             task_success_window = checkpoint["task_success_window"]
+        if "current_task_ids" in checkpoint:
+            current_task_ids = checkpoint["current_task_ids"]
         if "time_window" in checkpoint:
             time_window.extend(checkpoint["time_window"])
         if "last_k_rewards" in checkpoint:
@@ -665,7 +671,7 @@ def train(report_callback=None):
             global_step += 1 * args.num_envs
             
             with torch.no_grad():
-                task_ids_tensor = torch.tensor([i % num_tasks for i in range(args.num_envs)], dtype=torch.long).to(device)
+                task_ids_tensor = torch.tensor(current_task_ids, dtype=torch.long).to(device)
                 action, logprob, _, value, _ = agent.get_action_and_value(
                     torch.tensor(obs).float().to(device), 
                     task_idx=task_ids_tensor
@@ -689,7 +695,7 @@ def train(report_callback=None):
                     for i, has_ep in enumerate(infos["_episode"]):
                         if has_ep:
                             num_episodes_finished += 1
-                            t = i % num_tasks
+                            t = current_task_ids[i]
                             task_reward_window[t].append(infos["episode"]["r"][i])
                             time_window.append(infos["episode"]["l"][i])
                             if "success" in infos:
@@ -698,14 +704,26 @@ def train(report_callback=None):
                 for i, info in enumerate(infos["final_info"]):
                     if info and "episode" in info:
                         num_episodes_finished += 1
-                        t = i % num_tasks
+                        t = info.get("task_idx", current_task_ids[i])
                         task_reward_window[t].append(info["episode"]["r"])
                         time_window.append(info["episode"]["l"])
                         if "success" in info:
                             task_success_window[t].append(info["success"])
+            
+            # Update current task IDs for any env that auto-cycled / reset
+            if "final_info" in infos:
+                for i, info in enumerate(infos["final_info"]):
+                    if info and "task_idx" in info:
+                        current_task_ids[i] = info["task_idx"]
+            elif "episode" in infos:
+                if "_episode" in infos:
+                    for i, has_ep in enumerate(infos["_episode"]):
+                        if has_ep:
+                            if args.algo != "oracle" and args.env_type == "metaworld":
+                                current_task_ids[i] = (current_task_ids[i] + 1) % num_tasks
 
         with torch.no_grad():
-            task_ids_tensor = torch.tensor([i % num_tasks for i in range(args.num_envs)], dtype=torch.long).to(device)
+            task_ids_tensor = torch.tensor(current_task_ids, dtype=torch.long).to(device)
             _, _, _, next_value, _ = agent.get_action_and_value(
                 torch.tensor(obs).float().to(device), 
                 task_idx=task_ids_tensor
@@ -941,6 +959,7 @@ def train(report_callback=None):
                 "task_success_window": task_success_window,
                 "time_window": list(time_window),
                 "last_k_rewards": list(last_k_rewards),
+                "current_task_ids": current_task_ids,
                 "model_state_dict": agent.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict()
             }

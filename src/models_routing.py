@@ -453,7 +453,8 @@ class DetActorCritic(nn.Module):
         variant="base",
         lora_rank=4,
         is_continuous=False,
-        use_task_embedding=False
+        use_task_embedding=False,
+        num_tasks=10
     ):
         super().__init__()
         self.is_continuous = is_continuous
@@ -497,9 +498,7 @@ class DetActorCritic(nn.Module):
             self.critic_head = LayerClass(hidden_dim, 1)
 
         # ARA (Adversarial Representation Alignment) Components
-        # We need to access the num_tasks dynamically, but in this setup num_tasks == envs.num_envs
         if variant == "ara":
-             num_tasks = envs.num_envs
              self.ara_discriminator = nn.Sequential(
                  GradientReversalLayer(alpha=1.0),
                  nn.Linear(hidden_dim, hidden_dim // 2),

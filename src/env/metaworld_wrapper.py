@@ -90,6 +90,7 @@ class MetaWorldWrapper(gym.Env):
         obs, info = self._env.reset(seed=seed, options=options)
         # Success tracking
         info["success"] = 0.0
+        info["task_idx"] = self.current_task_idx
         return obs, info
 
     def step(self, action):
@@ -104,6 +105,7 @@ class MetaWorldWrapper(gym.Env):
         else:
             info["success"] = 0.0
             
+        info["task_idx"] = self.current_task_idx
         return obs, reward, terminated, truncated, info
 
     def reset_task(self, task_idx):

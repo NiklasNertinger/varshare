@@ -571,7 +571,10 @@ def train(report_callback=None):
     current_task_idx = args.task_id if args.algo == "oracle" else 0
     # No manual reset needed now, handled by make_env and auto_cycle
 
-    obs, _ = envs.reset(seed=args.seed)
+    obs, info = envs.reset(seed=args.seed)
+    
+    # Track the active task ID for each environment
+    current_task_ids = np.array([args.task_id if args.algo == "oracle" else i % num_tasks for i in range(args.num_envs)], dtype=np.int64)
     
     # Metrics
     task_reward_window = {t: deque(maxlen=25) for t in range(num_tasks)}
@@ -607,6 +610,8 @@ def train(report_callback=None):
             task_reward_window = checkpoint["task_reward_window"]
         if "task_success_window" in checkpoint:
             task_success_window = checkpoint["task_success_window"]
+        if "current_task_ids" in checkpoint:
+            current_task_ids = checkpoint["current_task_ids"]
         
         # Load history json if it exists to append to it
         hist_path = os.path.join(seed_dir, "history.json")
@@ -627,13 +632,7 @@ def train(report_callback=None):
             global_step += 1 * args.num_envs
             
             with torch.no_grad():
-                # For Oracle, task_idx is fixed
-                # For Shared/PaCo/SoftMod, task_idx maps to the env index
-                if args.algo == "oracle":
-                    task_ids_tensor = torch.full((args.num_envs,), args.task_id, dtype=torch.long).to(device)
-                else:
-                    task_ids_tensor = torch.tensor([i % num_tasks for i in range(args.num_envs)], dtype=torch.long).to(device)
-                
+                task_ids_tensor = torch.tensor(current_task_ids, dtype=torch.long).to(device)
                 action, logprob, _, value = agent.get_action_and_value(
                     torch.tensor(obs).float().to(device), 
                     task_idx=task_ids_tensor
@@ -657,7 +656,7 @@ def train(report_callback=None):
                     for i, has_ep in enumerate(infos["_episode"]):
                         if has_ep:
                             num_episodes_finished += 1
-                            t = args.task_id if args.algo == "oracle" else (i % num_tasks)
+                            t = current_task_ids[i]
                             task_reward_window[t].append(infos["episode"]["r"][i])
                             if "success" in infos:
                                 task_success_window[t].append(infos["success"][i])
@@ -665,20 +664,29 @@ def train(report_callback=None):
                 for i, info in enumerate(infos["final_info"]):
                     if info and "episode" in info:
                         num_episodes_finished += 1
-                        t = args.task_id if args.algo == "oracle" else (i % num_tasks)
+                        t = info.get("task_idx", current_task_ids[i])
                         task_reward_window[t].append(info["episode"]["r"])
                         if "success" in info:
                             task_success_window[t].append(info["success"])
+            
+            # Update current task IDs for any env that auto-cycled / reset
+            if "final_info" in infos:
+                for i, info in enumerate(infos["final_info"]):
+                    if info and "task_idx" in info:
+                        current_task_ids[i] = info["task_idx"]
+            elif "episode" in infos:
+                if "_episode" in infos:
+                    for i, has_ep in enumerate(infos["_episode"]):
+                        if has_ep:
+                            if args.algo != "oracle" and args.env_type == "metaworld":
+                                current_task_ids[i] = (current_task_ids[i] + 1) % num_tasks
             
             # Auto-cycling is now handled internally by MetaWorldWrapper.reset()
             # which is called automatically by VectorEnv when a rollout sub-env finishes.
 
         # GAE
         with torch.no_grad():
-            if args.algo == "oracle":
-                task_ids_tensor = torch.full((args.num_envs,), args.task_id, dtype=torch.long).to(device)
-            else:
-                task_ids_tensor = torch.tensor([i % num_tasks for i in range(args.num_envs)], dtype=torch.long).to(device)
+            task_ids_tensor = torch.tensor(current_task_ids, dtype=torch.long).to(device)
             _, _, _, next_value = agent.get_action_and_value(
                 torch.tensor(obs).float().to(device), 
                 task_idx=task_ids_tensor
@@ -844,6 +852,7 @@ def train(report_callback=None):
                 "eval_metrics": eval_metrics,
                 "task_reward_window": task_reward_window,
                 "task_success_window": task_success_window,
+                "current_task_ids": current_task_ids,
                 "model_state_dict": agent.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict()
             }
@@ -927,6 +936,7 @@ Final Eval Success: {eval_metrics.get("eval/mean_success", 0.0):.2f}
         "eval_metrics": eval_metrics,
         "task_reward_window": task_reward_window,
         "task_success_window": task_success_window,
+        "current_task_ids": current_task_ids,
         "model_state_dict": agent.state_dict(),
         "optimizer_state_dict": optimizer.state_dict()
     }
