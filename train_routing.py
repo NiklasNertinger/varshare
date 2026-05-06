@@ -790,11 +790,11 @@ def train(report_callback=None):
             # Process tasks and layers
             for k, v in part_data.items():
                 if "task_" in k:
-                    # actor/critic by layer AND task: arch_actor_task_{t}/layer{l}_norm_mu
+                    # actor/critic by layer AND task: arch_actor_task/task_{t}_layer{l}_norm_mu
                     parts = k.split("_")
                     t_idx = parts[1]
                     layer_name = parts[2]
-                    arch_data[f"arch_{prefix}_task_{t_idx}/{layer_name}_norm_mu"] = v
+                    arch_data[f"arch_{prefix}_task/task_{t_idx}_{layer_name}_norm_mu"] = v
                 else:
                     # k is like "layer0_norm_theta"
                     layer_name = k.split("_")[0]
