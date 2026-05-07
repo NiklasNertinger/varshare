@@ -62,6 +62,7 @@ def parse_args():
     parser.add_argument("--max-grad-norm", type=float, default=2.0, help="Max gradient norm for clipping")
     
     # DetVarShare specific
+    parser.add_argument("--lr-task-scale", type=float, default=0.1, help="Scaling factor for task-specific parameters (e.g. mus, betas, gammas, gates)")
     parser.add_argument("--mu-l2-coef", type=float, default=0.001, help="L2 penalty coefficient for mu weights")
     parser.add_argument("--mu-init", type=float, default=0.0, help="Mu init")
     parser.add_argument("--hidden-dim", type=int, default=64, help="Backbone hidden dimension")
@@ -263,12 +264,12 @@ def train(report_callback=None):
             shared_critic_params.append(p)
 
     # Initialize Adam optimizer with 4 dedicated parameter groups
-    # Task specific parameters are updated with a scaled down learning rate to protect policy stability
+    # Task specific parameters are updated with a scaled down learning rate (args.lr_task_scale multiplier) to protect policy stability
     optimizer = optim.Adam([
         {'params': shared_actor_params, 'lr': args.lr_actor},
-        {'params': task_actor_params, 'lr': args.lr_actor * 0.1},
+        {'params': task_actor_params, 'lr': args.lr_actor * args.lr_task_scale},
         {'params': shared_critic_params, 'lr': args.lr_critic},
-        {'params': task_critic_params, 'lr': args.lr_critic * 0.1}
+        {'params': task_critic_params, 'lr': args.lr_critic * args.lr_task_scale}
     ], eps=1e-5)
     
     class DetVarSharePPO(PPO):
