@@ -90,36 +90,75 @@ def get_parameter_counts(model):
     total_params = sum(p.numel() for p in model.parameters())
     return total_params, total_params # No differentiation for standard models
 
-def evaluate(agent, env, device, num_episodes=5, num_tasks=5, algo="shared", oracle_task=0):
+def evaluate(agent, envs, device, num_episodes=5, num_tasks=5, algo="shared", oracle_task=0):
     agent.eval()
-    task_rewards = {}
     
-    # If oracle, only evaluate on the trained task
-    eval_tasks = [oracle_task] if algo == "oracle" else range(num_tasks)
+    # Identify which task indices we should evaluate
+    eval_tasks = [oracle_task] if algo == "oracle" else list(range(num_tasks))
     
-    for t_idx in eval_tasks:
-        rewards = []
-        successes = []
-        for _ in range(num_episodes):
-            env.reset_task(t_idx)
-            obs, _ = env.reset()
-            done = False
-            ep_reward = 0
-            ep_success = 0
-            while not done:
-                obs_t = torch.Tensor(obs).unsqueeze(0).to(device)
-                with torch.no_grad():
-                    action, _, _, _ = agent.get_action_and_value(obs_t, task_idx=t_idx, sample=False)
-                obs, reward, terminated, truncated, info = env.step(action.cpu().numpy()[0])
-                done = terminated or truncated
-                ep_reward += reward
-                if "success" in info:
-                    ep_success = max(ep_success, info["success"])
-            rewards.append(ep_reward)
-            successes.append(ep_success)
-        task_rewards[t_idx] = {"reward": np.mean(rewards), "success": np.mean(successes)}
+    # Track completed episode counts, rewards, and successes for each task idx
+    completed_rewards = {i: [] for i in eval_tasks}
+    completed_successes = {i: [] for i in eval_tasks}
+    
+    # Track episodic return and success accumulators
+    current_rewards = np.zeros(num_tasks)
+    current_successes = np.zeros(num_tasks)
+    
+    obs, info = envs.reset()
+    
+    # Continue until all environments we care about have completed exactly num_episodes episodes
+    while any(len(completed_rewards[i]) < num_episodes for i in eval_tasks):
+        obs_tensor = torch.Tensor(obs).to(device)
+        # Vectorized tasks: each environment slot i maps to task index i
+        task_ids = torch.arange(num_tasks, device=device)
+        
+        with torch.no_grad():
+            actions, _, _, _ = agent.get_action_and_value(obs_tensor, task_idx=task_ids, sample=False)
+            
+        obs, rewards, terminations, truncations, infos = envs.step(actions.cpu().numpy())
+        
+        current_rewards += rewards
+        
+        # Track success rates in info if present
+        if "success" in infos:
+            current_successes = np.maximum(current_successes, infos["success"])
+        
+        # Capture stats upon environment automatic reset
+        if "final_info" in infos:
+            for idx, f_info in enumerate(infos["final_info"]):
+                if f_info is not None:
+                    # If this is one of the tasks we are evaluating
+                    if idx in completed_rewards:
+                        success_val = f_info.get("success", current_successes[idx])
+                        if len(completed_rewards[idx]) < num_episodes:
+                            completed_rewards[idx].append(current_rewards[idx])
+                            completed_successes[idx].append(success_val)
+                    # Reset accumulators for this slot
+                    current_rewards[idx] = 0.0
+                    current_successes[idx] = 0.0
+                    
+        # Bulletproof fallback for manual done check in case final_info is missing/unpopulated
+        dones = terminations | truncations
+        for idx in range(num_tasks):
+            if dones[idx]:
+                if current_rewards[idx] != 0.0 or current_successes[idx] != 0.0:
+                    if idx in completed_rewards:
+                        if len(completed_rewards[idx]) < num_episodes:
+                            completed_rewards[idx].append(current_rewards[idx])
+                            completed_successes[idx].append(current_successes[idx])
+                    current_rewards[idx] = 0.0
+                    current_successes[idx] = 0.0
+                    
+    # Format and average results
+    task_stats = {}
+    for i in eval_tasks:
+        task_stats[i] = {
+            "reward": np.mean(completed_rewards[i]) if completed_rewards[i] else 0.0,
+            "success": np.mean(completed_successes[i]) if completed_successes[i] else 0.0
+        }
+        
     agent.train()
-    return task_rewards
+    return task_stats
 
 def train(report_callback=None):
     args = parse_args()
@@ -214,20 +253,17 @@ def train(report_callback=None):
         ]
     )
     
-    if args.env_type == "ComplexCartPole":
-        eval_env = ComplexCartPole()
-    elif args.env_type == "IdenticalCartPole":
-        eval_env = IdenticalCartPole()
-    elif args.env_type == "MultiTaskLunarLander":
-        eval_env = MultiTaskLunarLander(task_idx=args.task_id if args.algo == "oracle" else 0)
-    elif args.env_type == "IdenticalLunarLander":
-        eval_env = IdenticalLunarLander()
-    elif args.env_type == "metaworld":
-        eval_env = MetaWorldWrapper(benchmark=args.mt_setting, seed=args.seed + 1000)
-        
-    eval_env.action_space.seed(args.seed + 1000)
-    if hasattr(eval_env.observation_space, 'seed'):
-        eval_env.observation_space.seed(args.seed + 1000)
+    eval_envs = gym.vector.AsyncVectorEnv(
+        [
+            make_env(
+                args.seed + 1000 + i, 
+                i, 
+                initial_task_idx=(args.task_id if args.algo == "oracle" else i % num_tasks),
+                auto_cycle_task=False
+            ) 
+            for i in range(num_tasks)
+        ]
+    )
     
     # Model Setup
     hdims = [args.hidden_dim] * 3
@@ -753,7 +789,7 @@ def train(report_callback=None):
         if args.eval_mode and global_step >= next_eval_step:
             eval_start = time.time()
             print(f"\n>>> Running Evaluation at Step {global_step}...")
-            task_stats = evaluate(agent, eval_env, device, num_episodes=args.eval_episodes, num_tasks=num_tasks, algo=args.algo, oracle_task=args.task_id)
+            task_stats = evaluate(agent, eval_envs, device, num_episodes=args.eval_episodes, num_tasks=num_tasks, algo=args.algo, oracle_task=args.task_id)
             
             eval_reward_mean = np.mean([s["reward"] for s in task_stats.values()])
             eval_success_mean = np.mean([s["success"] for s in task_stats.values()])

@@ -98,32 +98,70 @@ def calculate_explained_variance(y_true, y_pred):
     if var_y == 0: return 0
     return 1 - np.var(y_true - y_pred) / var_y
 
-def evaluate(agent, env, device, num_episodes=5, num_tasks=5):
+def evaluate(agent, envs, device, num_episodes=5, num_tasks=5):
     agent.eval()
-    task_rewards = {}
-    for t_idx in range(num_tasks):
-        rewards = []
-        successes = []
-        for _ in range(num_episodes):
-            env.reset_task(t_idx)
-            obs, _ = env.reset()
-            done = False
-            ep_reward = 0
-            ep_success = 0
-            while not done:
-                obs_t = torch.Tensor(obs).unsqueeze(0).to(device)
-                with torch.no_grad():
-                    action, _, _, _, _ = agent.get_action_and_value(obs_t, task_idx=t_idx, deterministic=True)
-                obs, reward, terminated, truncated, info = env.step(action.cpu().numpy()[0])
-                done = terminated or truncated
-                ep_reward += reward
-                if "success" in info:
-                    ep_success = max(ep_success, info["success"])
-            rewards.append(ep_reward)
-            successes.append(ep_success)
-        task_rewards[t_idx] = {"reward": np.mean(rewards), "success": np.mean(successes)}
+    
+    # Track completed episode counts, rewards, and successes for each task idx
+    completed_rewards = {i: [] for i in range(num_tasks)}
+    completed_successes = {i: [] for i in range(num_tasks)}
+    
+    # Track episodic return and success accumulators
+    current_rewards = np.zeros(num_tasks)
+    current_successes = np.zeros(num_tasks)
+    
+    obs, info = envs.reset()
+    
+    # Continue until all environments have completed exactly num_episodes episodes
+    while any(len(completed_rewards[i]) < num_episodes for i in range(num_tasks)):
+        obs_tensor = torch.Tensor(obs).to(device)
+        # Vectorized tasks: each environment slot i maps to task index i
+        task_ids = torch.arange(num_tasks, device=device)
+        
+        with torch.no_grad():
+            actions, _, _, _, _ = agent.get_action_and_value(obs_tensor, task_idx=task_ids, deterministic=True)
+            
+        obs, rewards, terminations, truncations, infos = envs.step(actions.cpu().numpy())
+        
+        current_rewards += rewards
+        
+        # Track success rates in info if present
+        if "success" in infos:
+            current_successes = np.maximum(current_successes, infos["success"])
+        
+        # Capture stats upon environment automatic reset
+        if "final_info" in infos:
+            for idx, f_info in enumerate(infos["final_info"]):
+                if f_info is not None:
+                    # Save metrics for this completed episode
+                    success_val = f_info.get("success", current_successes[idx])
+                    if len(completed_rewards[idx]) < num_episodes:
+                        completed_rewards[idx].append(current_rewards[idx])
+                        completed_successes[idx].append(success_val)
+                    # Reset accumulators for the next episode starting in this slot
+                    current_rewards[idx] = 0.0
+                    current_successes[idx] = 0.0
+                    
+        # Bulletproof fallback for manual done check in case final_info is missing/unpopulated
+        dones = terminations | truncations
+        for idx in range(num_tasks):
+            if dones[idx]:
+                if current_rewards[idx] != 0.0 or current_successes[idx] != 0.0:
+                    if len(completed_rewards[idx]) < num_episodes:
+                        completed_rewards[idx].append(current_rewards[idx])
+                        completed_successes[idx].append(current_successes[idx])
+                    current_rewards[idx] = 0.0
+                    current_successes[idx] = 0.0
+                    
+    # Format and average results
+    task_stats = {}
+    for i in range(num_tasks):
+        task_stats[i] = {
+            "reward": np.mean(completed_rewards[i]) if completed_rewards[i] else 0.0,
+            "success": np.mean(completed_successes[i]) if completed_successes[i] else 0.0
+        }
+        
     agent.train()
-    return task_rewards
+    return task_stats
 
 def train(report_callback=None):
     args = parse_args()
@@ -205,20 +243,17 @@ def train(report_callback=None):
         ]
     )
     
-    if args.env_type == "ComplexCartPole":
-        eval_env = ComplexCartPole()
-    elif args.env_type == "IdenticalCartPole":
-        eval_env = IdenticalCartPole()
-    elif args.env_type == "metaworld":
-        eval_env = MetaWorldWrapper(benchmark=args.mt_setting, seed=args.seed + 1000)
-    elif args.env_type == "MultiTaskLunarLander":
-        eval_env = MultiTaskLunarLander()
-    elif args.env_type == "IdenticalLunarLander":
-        eval_env = IdenticalLunarLander()
-        
-    eval_env.action_space.seed(args.seed + 1000)
-    if hasattr(eval_env.observation_space, 'seed'):
-        eval_env.observation_space.seed(args.seed + 1000)
+    eval_envs = gym.vector.AsyncVectorEnv(
+        [
+            make_env(
+                args.seed + 1000 + i, 
+                i, 
+                initial_task_idx=i % num_tasks,
+                auto_cycle_task=False
+            ) 
+            for i in range(num_tasks)
+        ]
+    )
     
     agent = DetActorCritic(
         envs, 
@@ -628,8 +663,7 @@ def train(report_callback=None):
     n_updates = args.total_timesteps // (n_steps * args.num_envs)
     
     task_idx = 0
-    # eval_env doesn't auto-rotate so we set it
-    eval_env.reset_task(task_idx)
+    # eval_envs don't auto-rotate so no manual reset needed
 
     obs, info = envs.reset(seed=args.seed)
     
@@ -918,7 +952,7 @@ def train(report_callback=None):
         if args.eval_mode and global_step >= next_eval_step:
             eval_start = time.time()
             print(f"\n>>> Running Evaluation at Step {global_step}...")
-            task_stats = evaluate(agent, eval_env, device, num_episodes=args.eval_episodes, num_tasks=num_tasks)
+            task_stats = evaluate(agent, eval_envs, device, num_episodes=args.eval_episodes, num_tasks=num_tasks)
             
             eval_reward_mean = np.mean([s["reward"] for s in task_stats.values()])
             eval_success_mean = np.mean([s["success"] for s in task_stats.values()])
@@ -939,7 +973,7 @@ def train(report_callback=None):
                 if "mus" in name or "betas" in name or "gammas" in name or "mus_A" in name or "mus_B" in name:
                     param.data.zero_()
             
-            ablation_stats = evaluate(agent, eval_env, device, num_episodes=args.eval_episodes, num_tasks=num_tasks)
+            ablation_stats = evaluate(agent, eval_envs, device, num_episodes=args.eval_episodes, num_tasks=num_tasks)
             eval_metrics["eval/shared_backbone_only_reward"] = np.mean([s["reward"] for s in ablation_stats.values()])
             eval_metrics["eval/shared_backbone_only_success"] = np.mean([s["success"] for s in ablation_stats.values()])
             print(f"Shared-Backbone Reward: {eval_metrics['eval/shared_backbone_only_reward']:.2f} | Success: {eval_metrics['eval/shared_backbone_only_success']:.2f}")
