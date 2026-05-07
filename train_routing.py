@@ -242,15 +242,33 @@ def train(report_callback=None):
         agent.actor_head.add_task(t_idx, mu_init=args.mu_init)
         agent.critic_head.add_task(t_idx, mu_init=args.mu_init)
     
-    actor_params = list(agent.actor_backbone.parameters()) + list(agent.actor_head.parameters())
+    # Separate shared parameters from task-specific adapter parameters to stabilize learning and prevent overshooting
+    shared_actor_params = []
+    task_actor_params = []
+    for name, p in list(agent.actor_backbone.named_parameters()) + list(agent.actor_head.named_parameters()):
+        if any(keyword in name for keyword in ["mus", "betas", "gates", "gammas"]):
+            task_actor_params.append(p)
+        else:
+            shared_actor_params.append(p)
+            
     if hasattr(agent, 'actor_logstd'):
-        actor_params += [agent.actor_logstd]
-    critic_params = list(agent.critic_backbone.parameters()) + list(agent.critic_head.parameters())
-    
-    # We rely on explicit mu_l2_coef instead of optim weight_decay, to protect theta
+        shared_actor_params.append(agent.actor_logstd)
+
+    shared_critic_params = []
+    task_critic_params = []
+    for name, p in list(agent.critic_backbone.named_parameters()) + list(agent.critic_head.named_parameters()):
+        if any(keyword in name for keyword in ["mus", "betas", "gates", "gammas"]):
+            task_critic_params.append(p)
+        else:
+            shared_critic_params.append(p)
+
+    # Initialize Adam optimizer with 4 dedicated parameter groups
+    # Task specific parameters are updated with a scaled down learning rate to protect policy stability
     optimizer = optim.Adam([
-        {'params': actor_params, 'lr': args.lr_actor},
-        {'params': critic_params, 'lr': args.lr_critic}
+        {'params': shared_actor_params, 'lr': args.lr_actor},
+        {'params': task_actor_params, 'lr': args.lr_actor * 0.1},
+        {'params': shared_critic_params, 'lr': args.lr_critic},
+        {'params': task_critic_params, 'lr': args.lr_critic * 0.1}
     ], eps=1e-5)
     
     class DetVarSharePPO(PPO):

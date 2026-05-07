@@ -55,24 +55,25 @@ class DetVarShareLayer(nn.Module):
         self.mus[t_key] = nn.Parameter(torch.randn_like(self.theta, device=self.theta.device) * mu_init)
 
     def forward(self, x, task_id):
-        if isinstance(task_id, torch.Tensor) and task_id.numel() > 1:
-            out = torch.empty((x.shape[0], self.out_features), device=x.device, dtype=x.dtype)
-            for t in torch.unique(task_id):
-                t_key = str(t.item())
-                mask = (task_id == t).flatten()
-                if t_key not in self.mus:
-                    out[mask] = F.linear(x[mask], self.theta, self.bias)
-                else:
-                    weight_mean = self.theta + self.mus[t_key]
-                    out[mask] = F.linear(x[mask], weight_mean, self.bias)
+        if isinstance(task_id, int):
+            task_id = torch.tensor([task_id], device=x.device).expand(x.shape[0])
+        elif getattr(task_id, "dim", lambda: 0)() == 0:
+            task_id = task_id.expand(x.shape[0])
+        else:
+            task_id = task_id.flatten()
+
+        B = x.shape[0]
+        num_tasks = len(self.mus)
+        if num_tasks > 0:
+            keys = [str(i) for i in range(num_tasks)]
+            mu_stacked = torch.stack([self.mus[k] for k in keys]) # [num_tasks, out_features, in_features]
+            mu_batch = mu_stacked[task_id] # [B, out_features, in_features]
+            W_batch = self.theta.unsqueeze(0) + mu_batch # [B, out_features, in_features]
+            
+            out = torch.bmm(W_batch, x.unsqueeze(2)).squeeze(2) + self.bias
             return out
         else:
-            t_id = task_id.flatten()[0].item() if isinstance(task_id, torch.Tensor) else task_id
-            task_key = str(t_id)
-            if task_key not in self.mus:
-                return F.linear(x, self.theta, self.bias)
-            weight_mean = self.theta + self.mus[task_key]
-            return F.linear(x, weight_mean, self.bias)
+            return F.linear(x, self.theta, self.bias)
 
     def get_architectural_metrics(self, task_id):
         task_key = str(task_id)
@@ -125,26 +126,28 @@ class DetVarShareLoRALayer(nn.Module):
         nn.init.zeros_(self.mus_B[t_key])
 
     def forward(self, x, task_id):
-        if isinstance(task_id, torch.Tensor) and task_id.numel() > 1:
-            out = torch.empty((x.shape[0], self.out_features), device=x.device, dtype=x.dtype)
-            for t in torch.unique(task_id):
-                t_key = str(t.item())
-                mask = (task_id == t).flatten()
-                if t_key not in self.mus_A:
-                    out[mask] = F.linear(x[mask], self.theta, self.bias)
-                else:
-                    mu_matrix = torch.matmul(self.mus_A[t_key], self.mus_B[t_key])
-                    weight_mean = self.theta + mu_matrix
-                    out[mask] = F.linear(x[mask], weight_mean, self.bias)
+        if isinstance(task_id, int):
+            task_id = torch.tensor([task_id], device=x.device).expand(x.shape[0])
+        elif getattr(task_id, "dim", lambda: 0)() == 0:
+            task_id = task_id.expand(x.shape[0])
+        else:
+            task_id = task_id.flatten()
+
+        B = x.shape[0]
+        num_tasks = len(self.mus_A)
+        if num_tasks > 0:
+            keys = [str(i) for i in range(num_tasks)]
+            mu_A_stacked = torch.stack([self.mus_A[k] for k in keys]) # [num_tasks, out_features, rank]
+            mu_B_stacked = torch.stack([self.mus_B[k] for k in keys]) # [num_tasks, rank, in_features]
+            
+            mu_matrix_stacked = torch.bmm(mu_A_stacked, mu_B_stacked) # [num_tasks, out_features, in_features]
+            mu_batch = mu_matrix_stacked[task_id] # [B, out_features, in_features]
+            W_batch = self.theta.unsqueeze(0) + mu_batch # [B, out_features, in_features]
+            
+            out = torch.bmm(W_batch, x.unsqueeze(2)).squeeze(2) + self.bias
             return out
         else:
-            t_id = task_id.flatten()[0].item() if isinstance(task_id, torch.Tensor) else task_id
-            task_key = str(t_id)
-            if task_key not in self.mus_A:
-                return F.linear(x, self.theta, self.bias)
-            mu_matrix = torch.matmul(self.mus_A[task_key], self.mus_B[task_key])
-            weight_mean = self.theta + mu_matrix
-            return F.linear(x, weight_mean, self.bias)
+            return F.linear(x, self.theta, self.bias)
 
     def get_architectural_metrics(self, task_id):
         task_key = str(task_id)
@@ -199,26 +202,29 @@ class DetVarShareGatedLayer(nn.Module):
         self.gates[t_key] = nn.Parameter(torch.ones_like(self.theta, device=device) * 3.0)
 
     def forward(self, x, task_id):
-        if isinstance(task_id, torch.Tensor) and task_id.numel() > 1:
-            out = torch.empty((x.shape[0], self.out_features), device=x.device, dtype=x.dtype)
-            for t in torch.unique(task_id):
-                t_key = str(t.item())
-                mask = (task_id == t).flatten()
-                if t_key not in self.mus:
-                    out[mask] = F.linear(x[mask], self.theta, self.bias)
-                else:
-                    g_t = torch.sigmoid(self.gates[t_key])
-                    weight_mean = (self.theta * g_t) + self.mus[t_key]
-                    out[mask] = F.linear(x[mask], weight_mean, self.bias)
+        if isinstance(task_id, int):
+            task_id = torch.tensor([task_id], device=x.device).expand(x.shape[0])
+        elif getattr(task_id, "dim", lambda: 0)() == 0:
+            task_id = task_id.expand(x.shape[0])
+        else:
+            task_id = task_id.flatten()
+
+        B = x.shape[0]
+        num_tasks = len(self.mus)
+        if num_tasks > 0:
+            keys = [str(i) for i in range(num_tasks)]
+            mu_stacked = torch.stack([self.mus[k] for k in keys]) # [num_tasks, out_features, in_features]
+            gate_stacked = torch.stack([self.gates[k] for k in keys]) # [num_tasks, out_features, in_features]
+            
+            mu_batch = mu_stacked[task_id] # [B, out_features, in_features]
+            gate_batch = torch.sigmoid(gate_stacked[task_id]) # [B, out_features, in_features]
+            
+            W_batch = (self.theta.unsqueeze(0) * gate_batch) + mu_batch # [B, out_features, in_features]
+            
+            out = torch.bmm(W_batch, x.unsqueeze(2)).squeeze(2) + self.bias
             return out
         else:
-            t_id = task_id.flatten()[0].item() if isinstance(task_id, torch.Tensor) else task_id
-            task_key = str(t_id)
-            if task_key not in self.mus:
-                return F.linear(x, self.theta, self.bias)
-            g_t = torch.sigmoid(self.gates[task_key])
-            weight_mean = (self.theta * g_t) + self.mus[task_key]
-            return F.linear(x, weight_mean, self.bias)
+            return F.linear(x, self.theta, self.bias)
 
     def get_architectural_metrics(self, task_id):
         task_key = str(task_id)
@@ -272,28 +278,27 @@ class DetVarShareFiLMLayer(nn.Module):
         self.betas[t_key] = nn.Parameter(torch.randn(self.out_features, device=device) * mu_init)
 
     def forward(self, x, task_id):
-        if isinstance(task_id, torch.Tensor) and task_id.numel() > 1:
-            out = torch.empty((x.shape[0], self.out_features), device=x.device, dtype=x.dtype)
-            base_out = F.linear(x, self.theta, self.bias)
-            for t in torch.unique(task_id):
-                t_key = str(t.item())
-                mask = (task_id == t).flatten()
-                if t_key not in self.gammas:
-                    out[mask] = base_out[mask]
-                else:
-                    gamma_t = self.gammas[t_key]
-                    beta_t = self.betas[t_key]
-                    out[mask] = gamma_t * base_out[mask] + beta_t
+        if isinstance(task_id, int):
+            task_id = torch.tensor([task_id], device=x.device).expand(x.shape[0])
+        elif getattr(task_id, "dim", lambda: 0)() == 0:
+            task_id = task_id.expand(x.shape[0])
+        else:
+            task_id = task_id.flatten()
+
+        base_out = F.linear(x, self.theta, self.bias)
+        num_tasks = len(self.gammas)
+        if num_tasks > 0:
+            keys = [str(i) for i in range(num_tasks)]
+            gamma_stacked = torch.stack([self.gammas[k] for k in keys]) # [num_tasks, out_features]
+            beta_stacked = torch.stack([self.betas[k] for k in keys]) # [num_tasks, out_features]
+            
+            gamma_batch = gamma_stacked[task_id] # [B, out_features]
+            beta_batch = beta_stacked[task_id] # [B, out_features]
+            
+            out = gamma_batch * base_out + beta_batch
             return out
         else:
-            t_id = task_id.flatten()[0].item() if isinstance(task_id, torch.Tensor) else task_id
-            task_key = str(t_id)
-            base_out = F.linear(x, self.theta, self.bias)
-            if task_key not in self.gammas:
-                return base_out
-            gamma_t = self.gammas[task_key]
-            beta_t = self.betas[task_key]
-            return gamma_t * base_out + beta_t
+            return base_out
 
     def get_architectural_metrics(self, task_id):
         task_key = str(task_id)
@@ -344,26 +349,29 @@ class DetVarShareHyperpriorLayer(nn.Module):
         self.betas[t_key] = nn.Parameter(torch.tensor([0.5413], device=device))
 
     def forward(self, x, task_id):
-        if isinstance(task_id, torch.Tensor) and task_id.numel() > 1:
-            out = torch.empty((x.shape[0], self.out_features), device=x.device, dtype=x.dtype)
-            for t in torch.unique(task_id):
-                t_key = str(t.item())
-                mask = (task_id == t).flatten()
-                if t_key not in self.mus:
-                    out[mask] = F.linear(x[mask], self.theta, self.bias)
-                else:
-                    scale = F.softplus(self.betas[t_key])
-                    weight_mean = self.theta + (scale * self.mus[t_key])
-                    out[mask] = F.linear(x[mask], weight_mean, self.bias)
+        if isinstance(task_id, int):
+            task_id = torch.tensor([task_id], device=x.device).expand(x.shape[0])
+        elif getattr(task_id, "dim", lambda: 0)() == 0:
+            task_id = task_id.expand(x.shape[0])
+        else:
+            task_id = task_id.flatten()
+
+        B = x.shape[0]
+        num_tasks = len(self.mus)
+        if num_tasks > 0:
+            keys = [str(i) for i in range(num_tasks)]
+            mu_stacked = torch.stack([self.mus[k] for k in keys]) # [num_tasks, out_features, in_features]
+            beta_stacked = torch.stack([self.betas[k] for k in keys]) # [num_tasks, 1]
+            
+            mu_batch = mu_stacked[task_id] # [B, out_features, in_features]
+            scale_batch = F.softplus(beta_stacked[task_id]).unsqueeze(2) # [B, 1, 1]
+            
+            W_batch = self.theta.unsqueeze(0) + (scale_batch * mu_batch) # [B, out_features, in_features]
+            
+            out = torch.bmm(W_batch, x.unsqueeze(2)).squeeze(2) + self.bias
             return out
         else:
-            t_id = task_id.flatten()[0].item() if isinstance(task_id, torch.Tensor) else task_id
-            task_key = str(t_id)
-            if task_key not in self.mus:
-                return F.linear(x, self.theta, self.bias)
-            scale = F.softplus(self.betas[task_key])
-            weight_mean = self.theta + (scale * self.mus[task_key])
-            return F.linear(x, weight_mean, self.bias)
+            return F.linear(x, self.theta, self.bias)
 
     def get_architectural_metrics(self, task_id):
         task_key = str(task_id)
