@@ -387,6 +387,11 @@ def train(report_callback=None):
                     mb_task_ids = task_ids[mb_inds] if task_ids is not None else None
                     
                     # PCGrad needs per-task losses
+                    # Single batched forward pass for the entire minibatch
+                    _, mb_newlogprob, mb_entropy, mb_newvalue = self.agent.get_action_and_value(
+                        obs[mb_inds], actions[mb_inds], task_idx=mb_task_ids
+                    )
+
                     unique_tasks = torch.unique(mb_task_ids)
                     task_losses = []
                     
@@ -399,17 +404,16 @@ def train(report_callback=None):
                         task_mask = (mb_task_ids == t)
                         if not task_mask.any(): continue
                         
-                        t_obs = obs[mb_inds][task_mask]
-                        t_actions = actions[mb_inds][task_mask]
+                        # Slice precomputed predictions for this task
+                        t_newlogprob = mb_newlogprob[task_mask]
+                        t_entropy = mb_entropy[task_mask]
+                        t_newvalue = mb_newvalue[task_mask].view(-1)
+                        
                         t_logprobs = logprobs[mb_inds][task_mask]
                         t_returns = returns[mb_inds][task_mask]
                         t_advantages = advantages[mb_inds][task_mask]
                         
-                        _, newlogprob, entropy, newvalue = self.agent.get_action_and_value(
-                            t_obs, t_actions, task_idx=t
-                        )
-                        
-                        logratio = newlogprob - t_logprobs
+                        logratio = t_newlogprob - t_logprobs
                         ratio = logratio.exp()
                         
                         # Policy loss
@@ -418,10 +422,9 @@ def train(report_callback=None):
                         pg_loss = torch.max(pg_loss1, pg_loss2).mean()
                         
                         # Value loss
-                        newvalue = newvalue.view(-1)
-                        v_loss = 0.5 * ((newvalue - t_returns) ** 2).mean()
+                        v_loss = 0.5 * ((t_newvalue - t_returns) ** 2).mean()
                         
-                        entropy_loss = entropy.mean()
+                        entropy_loss = t_entropy.mean()
                         
                         task_loss = pg_loss - self.ent_coef * entropy_loss + self.vf_coef * v_loss
                         task_losses.append(task_loss)
@@ -429,7 +432,7 @@ def train(report_callback=None):
                         total_pg_loss += pg_loss.item()
                         total_v_loss += v_loss.item()
                         total_entropy += entropy_loss.item()
-                        td_vars.append((t_returns - newvalue).var().item())
+                        td_vars.append((t_returns - t_newvalue).var().item())
 
                         if t == unique_tasks[0]: # Sample for clipfrac
                              with torch.no_grad():
@@ -476,7 +479,11 @@ def train(report_callback=None):
                     mb_inds = b_inds[start:end]
                     mb_task_ids = task_ids[mb_inds] if task_ids is not None else None
                     
-                    # CAGrad needs per-task losses
+                    # Single batched forward pass for the entire minibatch
+                    _, mb_newlogprob, mb_entropy, mb_newvalue = self.agent.get_action_and_value(
+                        obs[mb_inds], actions[mb_inds], task_idx=mb_task_ids
+                    )
+
                     unique_tasks = torch.unique(mb_task_ids)
                     task_losses = []
                     
@@ -489,17 +496,16 @@ def train(report_callback=None):
                         task_mask = (mb_task_ids == t)
                         if not task_mask.any(): continue
                         
-                        t_obs = obs[mb_inds][task_mask]
-                        t_actions = actions[mb_inds][task_mask]
+                        # Slice precomputed predictions for this task
+                        t_newlogprob = mb_newlogprob[task_mask]
+                        t_entropy = mb_entropy[task_mask]
+                        t_newvalue = mb_newvalue[task_mask].view(-1)
+                        
                         t_logprobs = logprobs[mb_inds][task_mask]
                         t_returns = returns[mb_inds][task_mask]
                         t_advantages = advantages[mb_inds][task_mask]
                         
-                        _, newlogprob, entropy, newvalue = self.agent.get_action_and_value(
-                            t_obs, t_actions, task_idx=t
-                        )
-                        
-                        logratio = newlogprob - t_logprobs
+                        logratio = t_newlogprob - t_logprobs
                         ratio = logratio.exp()
                         
                         # Policy loss
@@ -508,10 +514,9 @@ def train(report_callback=None):
                         pg_loss = torch.max(pg_loss1, pg_loss2).mean()
                         
                         # Value loss
-                        newvalue = newvalue.view(-1)
-                        v_loss = 0.5 * ((newvalue - t_returns) ** 2).mean()
+                        v_loss = 0.5 * ((t_newvalue - t_returns) ** 2).mean()
                         
-                        entropy_loss = entropy.mean()
+                        entropy_loss = t_entropy.mean()
                         
                         task_loss = pg_loss - self.ent_coef * entropy_loss + self.vf_coef * v_loss
                         task_losses.append(task_loss)
@@ -519,7 +524,7 @@ def train(report_callback=None):
                         total_pg_loss += pg_loss.item()
                         total_v_loss += v_loss.item()
                         total_entropy += entropy_loss.item()
-                        td_vars.append((t_returns - newvalue).var().item())
+                        td_vars.append((t_returns - t_newvalue).var().item())
 
                         if t == unique_tasks[0]: # Sample for clipfrac
                              with torch.no_grad():
