@@ -27,7 +27,7 @@ if hasattr(signal, "SIGUSR1"):
 
 from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
 from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
-from src.models_baselines import ActorCritic
+from src.baselines import ActorCritic
 from src.algo.ppo import PPO
 from src.algo.pcgrad import PCGrad
 from src.algo.cagrad import CAGrad
@@ -217,9 +217,9 @@ def train(report_callback=None):
             elif args.env_type == "IdenticalCartPole":
                 env = IdenticalCartPole()
             elif args.env_type == "MultiTaskLunarLander":
-                env = MultiTaskLunarLander(task_idx=initial_task_idx)
+                env = MultiTaskLunarLander(task_idx=initial_task_idx, continuous=(args.algo in ["paco", "soft_mod", "care", "moore"]))
             elif args.env_type == "IdenticalLunarLander":
-                env = IdenticalLunarLander()
+                env = IdenticalLunarLander(continuous=(args.algo in ["paco", "soft_mod", "care", "moore"]))
             elif args.env_type == "metaworld":
                 env = MetaWorldWrapper(
                     benchmark=args.mt_setting, 

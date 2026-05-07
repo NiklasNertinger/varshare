@@ -559,18 +559,20 @@ class IndependentActorCritic(nn.Module):
             self.is_continuous = True
             self.action_dim = int(np.array(action_space.shape).prod())
             
-        def build_mlp(out_dim):
+        def build_mlp(out_dim, is_policy=False):
             layers = []
             curr_in = obs_shape
             for h in hidden_dims:
-                layers.append(nn.Linear(curr_in, h))
+                layers.append(layer_init(nn.Linear(curr_in, h)))
                 layers.append(nn.ReLU())
                 curr_in = h
-            layers.append(nn.Linear(curr_in, out_dim))
+            # Standard PPO initialization: policy head std=0.01, value head std=1.0
+            gain = 0.01 if is_policy else 1.0
+            layers.append(layer_init(nn.Linear(curr_in, out_dim), std=gain))
             return nn.Sequential(*layers)
             
-        self.actors = nn.ModuleList([build_mlp(self.action_dim) for _ in range(num_tasks)])
-        self.critics = nn.ModuleList([build_mlp(1) for _ in range(num_tasks)])
+        self.actors = nn.ModuleList([build_mlp(self.action_dim, is_policy=True) for _ in range(num_tasks)])
+        self.critics = nn.ModuleList([build_mlp(1, is_policy=False) for _ in range(num_tasks)])
         
         if self.is_continuous:
             self.actor_logstds = nn.Parameter(torch.zeros(num_tasks, 1, self.action_dim))
@@ -627,4 +629,141 @@ class IndependentActorCritic(nn.Module):
             if action is None:
                 action = probs.sample() if sample else torch.argmax(action_mean, dim=1)
             return action, probs.log_prob(action), probs.entropy(), value
+
+
+class ActorCritic(nn.Module):
+    """
+    Standard Multilayer Perceptron Actor-Critic network for PPO.
+    
+    Supports optional Task Embeddings for Multi-Task Reinforcement Learning (MTRL).
+    This architecture is used as the backbone for standard 'shared', 'pcgrad',
+    and 'cagrad' baselines.
+    """
+    def __init__(
+        self, 
+        observation_space, 
+        action_space, 
+        hidden_dim: int = 64, 
+        use_task_embedding: bool = False, 
+        embedding_dim: int = 10, 
+        num_tasks: int = 1,
+        num_layers: int = 2,
+        use_varshare: bool = False,
+        **kwargs
+    ):
+        super().__init__()
+        self.use_task_embedding = use_task_embedding
+        self.num_tasks = num_tasks
+        
+        obs_shape = int(np.array(observation_space.shape).prod())
+        
+        # Check Action Space Type (Discrete vs. Continuous)
+        if hasattr(action_space, 'n'):
+            self.is_continuous = False
+            self.action_dim = int(action_space.n)
+        else:
+            self.is_continuous = True
+            self.action_dim = int(np.array(action_space.shape).prod())
+        
+        input_dim = obs_shape
+        if use_task_embedding:
+            # Task Embedding lookup layer for multi-task sharing
+            self.task_embedding = nn.Embedding(num_tasks, embedding_dim)
+            # Initialize embedding orthogonally for stability
+            nn.init.orthogonal_(self.task_embedding.weight, gain=1.0)
+            input_dim += embedding_dim
+            
+        # Critic network definition
+        critic_layers = []
+        curr_in = input_dim
+        for _ in range(num_layers):
+            critic_layers.append(layer_init(nn.Linear(curr_in, hidden_dim)))
+            critic_layers.append(nn.Tanh())
+            curr_in = hidden_dim
+        critic_layers.append(layer_init(nn.Linear(hidden_dim, 1), std=1.0))
+        self.critic = nn.Sequential(*critic_layers)
+        
+        # Actor network definition
+        actor_layers = []
+        curr_in = input_dim
+        for _ in range(num_layers):
+            actor_layers.append(layer_init(nn.Linear(curr_in, hidden_dim)))
+            actor_layers.append(nn.Tanh())
+            curr_in = hidden_dim
+        # Policy head uses standard orthogonal initialization with a gain of 0.01
+        # to ensure initial action distributions are near-uniform.
+        actor_layers.append(layer_init(nn.Linear(hidden_dim, self.action_dim), std=0.01))
+        self.actor_mean = nn.Sequential(*actor_layers)
+        
+        if self.is_continuous:
+            # Shared log standard deviation for continuous Gaussian policies
+            self.actor_logstd = nn.Parameter(torch.zeros(1, self.action_dim))
+
+    def _get_input(self, x: torch.Tensor, task_idx: torch.Tensor) -> torch.Tensor:
+        """
+        Processes observation and optional task index to build the input vector.
+        """
+        if self.use_task_embedding:
+            if task_idx is None:
+                raise ValueError("task_idx is required when use_task_embedding is enabled")
+            
+            # Format and expand task index to match batch size
+            if isinstance(task_idx, int):
+                task_idx = torch.tensor([task_idx], device=x.device).expand(x.shape[0])
+            elif isinstance(task_idx, torch.Tensor):
+                if task_idx.dim() == 0:
+                    task_idx = task_idx.expand(x.shape[0])
+                elif len(task_idx) != x.shape[0]:
+                    if len(task_idx) == 1:
+                        task_idx = task_idx.expand(x.shape[0])
+            
+            embeds = self.task_embedding(task_idx.long())
+            return torch.cat([x, embeds], dim=1)
+        return x
+
+    def get_features(self, x: torch.Tensor, task_idx: torch.Tensor = None) -> torch.Tensor:
+        """
+        Extracts feature representations from input.
+        """
+        return self._get_input(x, task_idx)
+
+    def get_value(self, x: torch.Tensor, task_idx: torch.Tensor = None) -> torch.Tensor:
+        """
+        Computes the state-value estimate (Critic).
+        """
+        x_in = self._get_input(x, task_idx)
+        return self.critic(x_in)
+
+    def get_action_and_value(
+        self, 
+        x: torch.Tensor, 
+        action: torch.Tensor = None, 
+        task_idx: torch.Tensor = None, 
+        sample: bool = True
+    ):
+        """
+        Computes the policy distribution, action log probabilities, entropy, and values.
+        """
+        x_in = self._get_input(x, task_idx)
+        
+        if self.is_continuous:
+            action_mean = self.actor_mean(x_in)
+            action_logstd = self.actor_logstd.expand_as(action_mean)
+            action_std = torch.exp(action_logstd)
+            
+            probs = torch.distributions.Normal(action_mean, action_std)
+            if not sample:
+                action = action_mean
+            elif action is None:
+                action = probs.sample()
+            return action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x_in)
+        else:
+            logits = self.actor_mean(x_in)
+            probs = torch.distributions.Categorical(logits=logits)
+            if not sample:
+                action = torch.argmax(logits, dim=1)
+            elif action is None:
+                action = probs.sample()
+            return action, probs.log_prob(action), probs.entropy(), self.critic(x_in)
+
 

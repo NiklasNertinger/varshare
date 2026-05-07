@@ -226,13 +226,13 @@ class MultiTaskLunarLander(gym.Env):
     
     Tasks vary by gravity, wind, turbulence, and landing target.
     """
-    def __init__(self, task_idx: int = 0):
+    def __init__(self, task_idx: int = 0, continuous: bool = False):
         super().__init__()
         # Using LunarLander-v3 if available, else v2. Assuming Gymnasium is recent.
         try:
-            self.env = gym.make('LunarLander-v3')
+            self.env = gym.make('LunarLander-v3', continuous=continuous)
         except gym.error.Error:
-             self.env = gym.make('LunarLander-v2')
+             self.env = gym.make('LunarLander-v2', continuous=continuous)
              
         self.task_idx = task_idx
         
@@ -348,12 +348,12 @@ class IdenticalLunarLander(gym.Env):
     Identical Multi-Task LunarLander environment.
     7 tasks, all identical to Task 0 of MultiTaskLunarLander.
     """
-    def __init__(self, task_idx: int = 0):
+    def __init__(self, task_idx: int = 0, continuous: bool = False):
         super().__init__()
         try:
-            self.env = gym.make('LunarLander-v3')
+            self.env = gym.make('LunarLander-v3', continuous=continuous)
         except gym.error.Error:
-             self.env = gym.make('LunarLander-v2')
+             self.env = gym.make('LunarLander-v2', continuous=continuous)
              
         self.task_idx = task_idx
         
