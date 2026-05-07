@@ -128,29 +128,24 @@ def evaluate(agent, envs, device, num_episodes=5, num_tasks=5):
         if "success" in infos:
             current_successes = np.maximum(current_successes, infos["success"])
         
-        # Capture stats upon environment automatic reset
-        if "final_info" in infos:
-            for idx, f_info in enumerate(infos["final_info"]):
-                if f_info is not None:
-                    # Save metrics for this completed episode
-                    success_val = f_info.get("success", current_successes[idx])
-                    if len(completed_rewards[idx]) < num_episodes:
-                        completed_rewards[idx].append(current_rewards[idx])
-                        completed_successes[idx].append(success_val)
-                    # Reset accumulators for the next episode starting in this slot
-                    current_rewards[idx] = 0.0
-                    current_successes[idx] = 0.0
-                    
-        # Bulletproof fallback for manual done check in case final_info is missing/unpopulated
+        # Process completed episodes
         dones = terminations | truncations
         for idx in range(num_tasks):
             if dones[idx]:
-                if current_rewards[idx] != 0.0 or current_successes[idx] != 0.0:
-                    if len(completed_rewards[idx]) < num_episodes:
-                        completed_rewards[idx].append(current_rewards[idx])
-                        completed_successes[idx].append(current_successes[idx])
-                    current_rewards[idx] = 0.0
-                    current_successes[idx] = 0.0
+                if len(completed_rewards[idx]) < num_episodes:
+                    # Extract success if available in final_info
+                    success_val = current_successes[idx]
+                    if "final_info" in infos and infos["final_info"] is not None:
+                        f_info = infos["final_info"][idx]
+                        if f_info is not None and "success" in f_info:
+                            success_val = f_info["success"]
+                            
+                    completed_rewards[idx].append(current_rewards[idx])
+                    completed_successes[idx].append(success_val)
+                    
+                # Reset accumulators for the next episode
+                current_rewards[idx] = 0.0
+                current_successes[idx] = 0.0
                     
     # Format and average results
     task_stats = {}
