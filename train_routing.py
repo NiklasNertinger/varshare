@@ -644,6 +644,7 @@ def train(report_callback=None):
     
     history = []
     start_time = time.time()
+    eval_time_accumulated = 0.0
     global_step = 0
     next_eval_step = 0
     eval_reward_current = 0.0
@@ -912,9 +913,10 @@ def train(report_callback=None):
         
         history.append(hist_entry)
         
-        sps = int(global_step / (time.time() - start_time))
+        sps = int(global_step / max(1.0, (time.time() - start_time - eval_time_accumulated)))
         
         if args.eval_mode and global_step >= next_eval_step:
+            eval_start = time.time()
             print(f"\n>>> Running Evaluation at Step {global_step}...")
             task_stats = evaluate(agent, eval_env, device, num_episodes=args.eval_episodes, num_tasks=num_tasks)
             
@@ -945,6 +947,8 @@ def train(report_callback=None):
             # Restore model
             agent.load_state_dict(original_state)
             
+            eval_time_accumulated += (time.time() - eval_start)
+            
             last_k_rewards.append(eval_reward_mean)
             avg_last_k = np.mean(last_k_rewards)
             
@@ -966,7 +970,9 @@ def train(report_callback=None):
             "EPISODES_COMPLETED": num_episodes_finished,
             "TOTAL_GRAD_STEPS": (update + 1) * args.k_epochs * (n_steps * args.num_envs // args.batch_size),
             "WALL_CLOCK_TIME": time.time() - start_time,
+            "WALL_CLOCK_TIME_ADJUSTED": time.time() - start_time - eval_time_accumulated,
             "SPS": sps,
+            "SPS_ADJUSTED": int(global_step / max(1.0, (time.time() - start_time - eval_time_accumulated))),
             "loss/total": metrics["loss"],
             "loss/policy": metrics["policy_loss"],
             "loss/value": metrics["value_loss"],

@@ -582,6 +582,7 @@ def train(report_callback=None):
     num_episodes_finished = 0
     history = []
     start_time = time.time()
+    eval_time_accumulated = 0.0
     global_step = 0
     next_eval_step = 0
     total_grad_steps = 0
@@ -746,10 +747,11 @@ def train(report_callback=None):
         all_train_successes = [s for d in task_success_window.values() for s in d]
         avg_reward = np.mean(all_train_rewards) if all_train_rewards else 0.0
         avg_success = np.mean(all_train_successes) if all_train_successes else 0.0
-        sps = int(global_step / (time.time() - start_time + 1e-8))
+        sps = int(global_step / max(1.0, (time.time() - start_time - eval_time_accumulated)))
         
         # Eval
         if args.eval_mode and global_step >= next_eval_step:
+            eval_start = time.time()
             print(f"\n>>> Running Evaluation at Step {global_step}...")
             task_stats = evaluate(agent, eval_env, device, num_episodes=args.eval_episodes, num_tasks=num_tasks, algo=args.algo, oracle_task=args.task_id)
             
@@ -766,7 +768,8 @@ def train(report_callback=None):
             print(f"Eval Reward: {eval_reward_mean:.2f} | Eval Success: {eval_success_mean:.2f}\n")
             next_eval_step += args.eval_freq
             
-            # Report to Optuna/WandB if callback provided
+            eval_time_accumulated += (time.time() - eval_start)
+            
             # Report to Optuna/WandB if callback provided
             if report_callback:
                 report_callback(eval_reward_mean, global_step)
@@ -788,7 +791,9 @@ def train(report_callback=None):
             "EPISODES_COMPLETED": num_episodes_finished,
             "TOTAL_GRAD_STEPS": total_grad_steps,
             "WALL_CLOCK_TIME": time.time() - start_time,
+            "WALL_CLOCK_TIME_ADJUSTED": time.time() - start_time - eval_time_accumulated,
             "SPS": sps,
+            "SPS_ADJUSTED": int(global_step / max(1.0, (time.time() - start_time - eval_time_accumulated))),
             "loss/total": metrics["loss"],
             "loss/policy": metrics["policy_loss"],
             "loss/value": metrics["value_loss"],
