@@ -284,6 +284,11 @@ def train(report_callback=None):
             self.routing_alpha = routing_alpha
             self.routing_lambda = routing_lambda
 
+            # Cache shared parameters and VarShare layers once during initialization to avoid expensive Python search loops during updates
+            self.shared_params = [p for name, p in self.agent.named_parameters() if ".mus." not in name]
+            from src.models_routing import DetVarShareLayer
+            self.varshare_layers = [m for m in self.agent.modules() if isinstance(m, DetVarShareLayer)]
+
         @property
         def batch_size(self):
             return self._batch_size
@@ -494,13 +499,11 @@ def train(report_callback=None):
                     elif self.variant == "routing" and mb_task_ids is not None:
                         unique_tasks = torch.unique(mb_task_ids)
                         
-                        # Identify strict backbone parameters
-                        shared_params = []
-                        for name, p in self.agent.named_parameters():
-                            if ".mus." not in name:
-                                shared_params.append(p)
+                        # Use our pre-cached shared parameters
+                        shared_params = self.shared_params
                                 
-                        task_shared_grads_list = []
+                        # Collect flat unprojected task gradients
+                        task_grads_flat = []
                         
                         for t_id in unique_tasks:
                             self.optimizer.zero_grad()
@@ -515,63 +518,64 @@ def train(report_callback=None):
                             t_loss = t_pg_loss - self.ent_coef * t_entropy_loss + self.vf_coef * t_v_loss
                             t_loss.backward(retain_graph=True)
                             
-                            grads_dict = {}
+                            # Flatten task gradient into a single 1D tensor
+                            grad_list = []
                             for p in shared_params:
                                 if p.grad is not None:
-                                    grads_dict[p] = p.grad.clone()
+                                    grad_list.append(p.grad.view(-1))
                                 else:
-                                    grads_dict[p] = torch.zeros_like(p)
-                            task_shared_grads_list.append(grads_dict)
+                                    grad_list.append(torch.zeros(p.numel(), device=p.device))
+                            task_grads_flat.append(torch.cat(grad_list))
                             
                         self.optimizer.zero_grad()
                         
-                        num_tasks = len(task_shared_grads_list)
+                        num_tasks = len(task_grads_flat)
                         if num_tasks > 1:
-                            # Keep pristine copies for the residual r_t
-                            raw_shared_grads = [{p: g.clone() for p, g in d.items()} for d in task_shared_grads_list]
+                            # Keep pristine flat raw copies for computing task residuals r_t
+                            raw_grads_flat = [g.clone() for g in task_grads_flat]
                             
-                            def dot_prod_dict(d1, d2):
-                                return sum(torch.sum(d1[p] * d2[p]) for p in d1)
-                            def norm_sq_dict(d):
-                                return sum(torch.sum(d[p]**2) for p in d)
-                                
                             indices = list(range(num_tasks))
                             random.shuffle(indices)
                             for i in indices:
-                                grad_i = task_shared_grads_list[i]
                                 for j in indices:
                                     if i == j: continue
-                                    grad_j = task_shared_grads_list[j]
-                                    
-                                    dot_prod = dot_prod_dict(grad_i, grad_j)
+                                    dot_prod = torch.dot(task_grads_flat[i], task_grads_flat[j])
                                     if dot_prod < 0:
-                                        norm_j_sq = norm_sq_dict(grad_j) + 1e-8
-                                        scale = dot_prod / norm_j_sq
-                                        for p in grad_i:
-                                            grad_i[p] = grad_i[p] - scale * grad_j[p]
-                                task_shared_grads_list[i] = grad_i
-                                
-                            # Aggregate final shared \bar{g}_\theta
-                            bar_g_theta = {}
+                                        norm_j_sq = torch.dot(task_grads_flat[j], task_grads_flat[j]) + 1e-8
+                                        task_grads_flat[i] = task_grads_flat[i] - (dot_prod / norm_j_sq) * task_grads_flat[j]
+                                        
+                            # Aggregate final shared flat \bar{g}_\theta on GPU in parallel
+                            bar_g_theta_flat = torch.stack(task_grads_flat).mean(dim=0)
+                            
+                            # Write final aggregated gradient back to shared parameter grads
+                            offset = 0
                             for p in shared_params:
-                                bar_g_theta[p] = sum(d[p] for d in task_shared_grads_list) / num_tasks
-                                p.grad = bar_g_theta[p].clone()
+                                numel = p.numel()
+                                p.grad = bar_g_theta_flat[offset:offset+numel].view_as(p).clone()
+                                offset += numel
                                 
                             # Route Residuals down to adapter components
                             for idx, t_id in enumerate(unique_tasks):
                                 t_key = str(t_id.item())
-                                raw_g_t = raw_shared_grads[idx]
                                 
-                                # Iterate over modules to find DetVarShareLayers
-                                from src.models_routing import DetVarShareLayer
-                                for m in self.agent.modules():
-                                    if isinstance(m, DetVarShareLayer):
-                                        if t_key in m.mus:
-                                            # Ensure theta participated in gradients
-                                            if m.theta in bar_g_theta:
-                                                r_t = raw_g_t[m.theta] - bar_g_theta[m.theta]
-                                                # \bar{g}_{\mu_t} = \alpha r_t + \lambda \mu_t
-                                                m.mus[t_key].grad = self.routing_alpha * r_t + self.routing_lambda * m.mus[t_key].data
+                                # Unflatten raw unprojected gradient and bar_g_theta slice for this task's theta
+                                flat_r_t = raw_grads_flat[idx] - bar_g_theta_flat
+                                
+                                # Split flat residual tensor back into dict per parameter to map them instantly
+                                r_t_dict = {}
+                                offset = 0
+                                for p in shared_params:
+                                    numel = p.numel()
+                                    r_t_dict[p] = flat_r_t[offset:offset+numel].view_as(p)
+                                    offset += numel
+                                
+                                # Use cached VarShare layer modules for fast update (O(1) iterations)
+                                for m in self.varshare_layers:
+                                    if t_key in m.mus:
+                                        if m.theta in r_t_dict:
+                                            r_t_param = r_t_dict[m.theta]
+                                            # \bar{g}_{\mu_t} = \alpha r_t + \lambda \mu_t
+                                            m.mus[t_key].grad = self.routing_alpha * r_t_param + self.routing_lambda * m.mus[t_key].data
                         else:
                             loss.backward()
                     else:
