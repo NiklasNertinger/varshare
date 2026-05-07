@@ -193,15 +193,16 @@ class SoftModularizedMLP(nn.Module):
     def forward(self, f_obs: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         inp = f_obs * z
         probs = self.routing_network(inp) # (num_layers-1, B, E, E)
-        probs = probs.permute(0, 2, 3, 1) # (num_layers-1, E, E, B)
-        num_experts = probs.shape[1]
+        num_experts = probs.shape[2]
         
         x = f_obs.unsqueeze(0).expand(num_experts, -1, -1)  # (E, B, D)
         for index, layer in enumerate(self.layers[:-1]):
-            p = probs[index] # (E, E, B)
+            p = probs[index] # (B, E, E)
             x = layer(x) # (E, B, D)
-            _out = p.unsqueeze(-1) * x.unsqueeze(0).repeat(num_experts, 1, 1, 1) # (E, E, B, D)
-            x = _out.sum(dim=1) # (E, B, D)
+            
+            x_perm = x.permute(1, 0, 2) # (B, E, D)
+            x_new = torch.bmm(p, x_perm) # (B, E, D)
+            x = x_new.permute(1, 0, 2) # (E, B, D)
             
         out = self.layers[-1](x).sum(dim=0) # (B, out_dim)
         return out
@@ -583,33 +584,39 @@ class IndependentActorCritic(nn.Module):
                 task_idx = task_idx.expand(x.shape[0])
         return task_idx.long()
 
+    def _forward_mlp(self, x, task_idx, mlps):
+        first_mlp = mlps[0]
+        # Find linear layer indices dynamically
+        linear_indices = [i for i, layer in enumerate(first_mlp) if isinstance(layer, nn.Linear)]
+        
+        g = x
+        for step, l_idx in enumerate(linear_indices):
+            # Stack weights and biases across all independent task MLPs
+            weights = torch.stack([mlp[l_idx].weight for mlp in mlps])
+            biases = torch.stack([mlp[l_idx].bias for mlp in mlps])
+            
+            # Index task-specific parameters for this batch
+            w_b = weights[task_idx]
+            b_b = biases[task_idx]
+            
+            # Batched matrix multiplication: (B, out_features, in_features) x (B, in_features, 1) -> (B, out_features)
+            g = torch.bmm(w_b, g.unsqueeze(-1)).squeeze(-1) + b_b
+            if step < len(linear_indices) - 1:
+                g = F.relu(g)
+        return g
+
     def get_value(self, x, task_idx=None):
         task_idx = self._format_task_idx(x, task_idx)
-        out = torch.empty((x.shape[0], 1), device=x.device, dtype=x.dtype)
-        for t in torch.unique(task_idx):
-            t_val = t.item()
-            mask = (task_idx == t).flatten()
-            out[mask] = self.critics[t_val](x[mask])
-        return out
+        return self._forward_mlp(x, task_idx, self.critics)
 
     def get_action_and_value(self, x, action=None, task_idx=None, sample=True):
         task_idx = self._format_task_idx(x, task_idx)
         
-        action_mean = torch.empty((x.shape[0], self.action_dim), device=x.device, dtype=x.dtype)
-        value = torch.empty((x.shape[0], 1), device=x.device, dtype=x.dtype)
-        if self.is_continuous:
-            action_logstd = torch.empty((x.shape[0], self.action_dim), device=x.device, dtype=x.dtype)
+        action_mean = self._forward_mlp(x, task_idx, self.actors)
+        value = self._forward_mlp(x, task_idx, self.critics)
         
-        for t in torch.unique(task_idx):
-            t_val = t.item()
-            mask = (task_idx == t).flatten()
-            
-            action_mean[mask] = self.actors[t_val](x[mask])
-            value[mask] = self.critics[t_val](x[mask])
-            if self.is_continuous:
-                action_logstd[mask] = self.actor_logstds[t_val].expand(mask.sum().item(), self.action_dim)
-            
         if self.is_continuous:
+            action_logstd = self.actor_logstds[task_idx].squeeze(1)
             action_std = torch.exp(action_logstd)
             probs = torch.distributions.Normal(action_mean, action_std)
             if action is None:
