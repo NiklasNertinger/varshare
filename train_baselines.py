@@ -253,7 +253,7 @@ def train(report_callback=None):
         ]
     )
     
-    eval_envs = gym.vector.AsyncVectorEnv(
+    eval_envs = gym.vector.SyncVectorEnv(
         [
             make_env(
                 args.seed + 1000 + i, 
