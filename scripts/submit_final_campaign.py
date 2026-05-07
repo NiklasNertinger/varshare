@@ -8,14 +8,14 @@ ENV_SETTINGS = {
     "CP": {"env_type": "IdenticalCartPole", "steps": 2000000, "eval_freq": 4000, "n_steps": 256, "hidden_dim": 64},
     "LL": {"env_type": "MultiTaskLunarLander", "steps": 10000000, "eval_freq": 20000, "n_steps": 256, "hidden_dim": 64},
     "MT4": {"env_type": "metaworld", "mt_setting": "MT4", "steps": 25000000, "eval_freq": 50000, "n_steps": 512, "hidden_dim": 256},
-    "MT10": {"env_type": "metaworld", "mt_setting": "MT10", "steps": 50000000, "eval_freq": 100000, "n_steps": 512, "hidden_dim": 256}
+    "MT10": {"env_type": "metaworld", "mt_setting": "MT10", "steps": 5000000, "eval_freq": 50000, "n_steps": 512, "hidden_dim": 256}
 }
 
 # Slurm Config
 PARTITION = "batch"
 CPUS = 8
 MEM = "16G"
-SEEDS = [1, 2, 3]
+SEEDS = [1, 2]
 
 # Using num_envs 4 for all
 NUM_ENVS = 4

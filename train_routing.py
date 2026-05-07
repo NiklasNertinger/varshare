@@ -711,6 +711,8 @@ def train(report_callback=None):
             with open(hist_path, "r") as f:
                 history = json.load(f)
     
+    avg_reward = 0.0
+    avg_success = 0.0
     for update in range(start_update, n_updates):
         mb_obs = torch.zeros((n_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
         mb_actions = torch.zeros((n_steps, args.num_envs) + envs.single_action_space.shape).to(device)
