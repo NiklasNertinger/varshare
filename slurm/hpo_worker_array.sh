@@ -1,14 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=varshare-hpo
 #SBATCH --partition=batch
-#SBATCH --time=12:00:00
+#SBATCH --time=04:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --output=/netscratch/%u/varshare/logs/hpo_%A_%a.out
 #SBATCH --error=/netscratch/%u/varshare/logs/hpo_%A_%a.err
-#SBATCH --array=1-6
-
+#SBATCH --array=1-60
 # ==============================================================================
 # VarShare HPO Worker Array — 6 Parallel Workers, 60 Trials Total (10 per worker)
 # Uses SQLite in WAL (Write-Ahead Logging) mode with robust connection locks.
@@ -51,11 +50,12 @@ if [ ! -f "${DB_FILE}" ]; then
 fi
 
 # Run the Optuna Sweep Optimizer
-# Each of the 6 parallel workers executes 10 trials, aggregating to 60 total trials!
+# Each parallel array task index runs exactly 1 trial and exits immediately.
+# SLURM automatically rotates new trials through active slots up to 60 total trials!
 python optimize.py \
     --env-key MT10 \
     --method ${METHOD} \
-    --n-trials 10 \
+    --n-trials 1 \
     --storage ${STORAGE_URI} \
     --seed 1 \
     --analysis-dir "/netscratch/$USER/varshare/analysis_hpo"

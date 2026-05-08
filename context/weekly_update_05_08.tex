@@ -1,0 +1,104 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{parskip}
+\title{Weekly Meeting Update:\\ HPO Campaign, Benchmarking, and Gradient Routing (GR-Share)}
+\author{Niklas Nertinger}
+\date{May 8, 2026}
+\begin{document}
+\maketitle
+\section*{Overview}
+This document outlines the current status of the VarShare multi-task reinforcement learning project. We recap the mathematical formulation of our proposed \textit{Gradient Routing} method (working title: \textbf{GR-Share}) and describe the current large-scale cluster HPO campaign. We report empirical computational profiles, establish our design alignment with the MTBench benchmark, and outline our multi-task diagnostic metrics. Finally, we discuss our hyperparameter optimization (HPO) pruning strategy and our ongoing work extending GR-Share to the Soft Actor-Critic (SAC) framework.
+\section{Introduction to Gradient Routing (GR-Share)}
+The central challenge in Multi-Task Reinforcement Learning (MTRL) is balancing joint feature acquisition (\textit{constructive interference}) with task-specific conflict resolution (\textit{destructive interference} or \textit{gradient conflict}). 
+We introduce task-specific additive parameter adapters $\mu_t$ alongside a shared core backbone $\theta$, defining the effective parameters for task $t$ as:
+\begin{equation}
+    w_t = \theta + \mu_t
+\end{equation}
+Let $\ell_t(w_t)$ denote the task-$t$ loss. The raw task gradient is:
+\begin{equation}
+    g_t := \nabla_{w_t} \ell_t(w_t)
+\end{equation}
+To protect the shared backbone from destructive interference, we apply gradient surgery (e.g., PCGrad projection) to the raw task gradients $\{g_t\}_{t=1}^T$ to obtain conflict-resolved modified gradients $\tilde{g}_t$. The backbone update is formed by averaging:
+\begin{equation}
+    \bar{g}_{\theta} := \frac{1}{T}\sum_{t=1}^T \tilde{g}_t
+\end{equation}
+Rather than discarding the gradient components removed during surgery, GR-Share \textit{routes} this task-specific residual information back into the adapters. We define the routed residual as:
+\begin{equation}
+    r_t := g_t - \bar{g}_{\theta}
+\end{equation}
+The task-specific adapters are then updated using this residual scaled by routing strength $\alpha \ge 0$ and pulled back toward zero via explicit shrinkage coefficient $\lambda > 0$:
+\begin{equation}
+    \bar{g}_{\mu_t} := \alpha r_t + \lambda \mu_t
+\end{equation}
+Using standard gradient descent, the resulting updates are:
+\begin{align}
+    \theta^{+} &= \theta - \eta \bar{g}_{\theta} \\
+    \mu_t^{+}  &= (1 - \eta\lambda)\mu_t - \eta\alpha(g_t - \bar{g}_{\theta})
+\end{align}
+Under this update rule, the shared backbone absorbs joint generalist knowledge, while task-specific discrepancies that conflict with the consensus are safely diverted into explicitly regularized, task-specific pathways.
+\section{Cluster Campaign & Experimental Configuration}
+We are currently executing a comprehensive, fully parallel hyperparameter optimization (HPO) and benchmarking campaign on the cluster. The study consists of \textbf{7 distinct baseline methods} plus the Oracle upper bound (8 total baseline runs) along with GR-Share:
+\begin{itemize}
+    \item \textbf{Baselines:} \texttt{Shared}, \texttt{Independent}, \texttt{PCGrad}, \texttt{CAGrad}, \texttt{PaCo}, \texttt{Soft Modularization}, and \texttt{MOORE}.
+    \item \textbf{Standardized Capacity Constraints:} To ensure a scientifically rigorous and fair comparison, all modular/multi-expert baselines are constrained to match our standard 3-layer, 400-width backbone. For any method utilizing $K$ experts or modules, we dynamically scale its hidden dimension according to:
+    \begin{equation}
+        D = \text{int}\left(\frac{400}{\sqrt{K}}\right)
+    \end{equation}
+    This limits all models to approximately equal active parameter counts ($\sim$330k parameters), preventing larger baselines from succeeding purely due to capacity advantages.
+\end{itemize}
+\section{Computational Speed vs. Sample Efficiency}
+Empirical profiles from our cluster timing runs at the 100,000 environment step mark reveal the following computational footprint for GR-Share (Routing) relative to the baselines:
+\begin{itemize}
+    \item \textbf{Vs. Lightweight Baselines:} GR-Share (637.15s) is \textbf{$\sim$5.3 times slower} than basic architectures like \texttt{Shared} (111.64s), \texttt{Independent} (122.19s), and \texttt{MOORE} (129.68s).
+    \item \textbf{Vs. Gradient Surgery Baselines:} GR-Share is \textbf{$\sim$1.65 to 1.8 times slower} than standard PCGrad (386.95s) and CAGrad (356.79s).
+    \item \textbf{Vs. Base VarShare:} GR-Share is \textbf{$\sim$2.7 times slower} than the base deterministic formulation (\texttt{det\_base} at 238.03s).
+\end{itemize}
+\textit{Note: These ratios are achieved after bringing down the compute time of routing by a factor of $\sim$2.5 through aggressive code optimizations, including vectorizing pairwise projection operations, caching flattened tensors, and streamlining the gradient routing loops.}
+Importantly, our goal with GR-Share is not wall-clock execution speed, but \textbf{sample efficiency}. Preliminary learning curves are highly encouraging, indicating that the sample-efficiency gains from protecting the shared backbone substantially outweigh the computational overhead.
+\section{The MTBench Reference & PPO Rationale}
+While the vast majority of modern MTRL literature (such as Soft Modularization or PaCo) defaults to Soft Actor-Critic (SAC) as its underlying algorithm, we built our architecture natively on Proximal Policy Optimization (PPO). 
+To provide a peer-reviewed, defensible argument for this choice, we align our configuration with the recent \textbf{MTBench} paper. MTBench establishes a rigorous benchmarking suite using PPO on MetaWorld. Although direct numerical comparisons are limited due to their focus on massive parallel environments and wall-clock optimization, their repository provided a valuable resource for:
+\begin{enumerate}
+    \item Properly implementing and stabilizing multi-task PPO updates.
+    \item Selecting a defensible, standardized architecture (3 layers of 400 units).
+    \item Sourcing robust default hyperparameters, which we can reference in our work.
+\end{enumerate}
+\section{Metric Tracking \& The Generalist-Specialist Validation}
+
+To deeply probe the mechanics of joint training and capacity allocation, we track a suite of non-trivial diagnostic and structural metrics during our campaigns:
+\begin{itemize}
+    \item \textbf{Critic Temporal Difference (TD) Error Variance (\texttt{diagnostics/td\_error\_variance}):} Serves as a primary diagnostic for multi-task critic failure. When a shared critic is confused by competing reward scales across tasks, TD error variance spikes. Tracking this helps us identify if our architecture successfully stabilizes the critic.
+    \item \textbf{Critic Explained Variance (\texttt{diagnostics/explained\_variance}):} Measures the stability of the critic's value predictions relative to actual task returns.
+    \item \textbf{Gradient Norm (\texttt{diagnostics/grad\_norm}):} Tracks the pre-clipped $L_2$ norm of the gradients to directly quantify the extent of active gradient conflicts within the shared layers.
+    \item \textbf{Global Sharing Ratio:} Formally defined as:
+    \begin{equation}
+        \text{Sharing Ratio} := \frac{\|\theta\|_2}{\|\theta\|_2 + \frac{1}{T}\sum_{t=1}^T \|\mu_t\|_2}
+    \end{equation}
+    This metric provides a direct, continuous reading of the model's reliance on generalist versus task-specific pathways.
+    \item \textbf{High-Resolution Structural Mapping:} We track the $L_2$ norms and sharing ratios of task-specific adapters decomposed both \textit{per-task} and \textit{per-layer} simultaneously. This reveals whether specialization is localized in early state/visual layers or deeper policy layers.
+\end{itemize}
+
+Our core validation of the GR-Share architecture relies on a custom evaluation ablation: \textbf{The Generalist vs. Specialist Ablation}:
+\begin{itemize}
+    \item \textbf{Mechanism:} During evaluation rollouts, we artificially set all task-specific adapters to zero ($\mu_t = 0$) and evaluate the agent using \textit{strictly} the shared backbone weights $\theta$.
+    \item \textbf{Objective:} This ablation mathematically tests whether the shared backbone has successfully isolated and learned a generalist baseline policy (e.g., navigating toward target objects) while leaving the adapters to handle fine-grained, task-specific details (e.g., grasping and inserting). Successful demonstration of this behavior provides irrefutable proof of the intended weight-space separation.
+\end{itemize}
+
+\textbf{Open Question for the Team:} \textit{Beyond traditional metrics like task success or parameter norms, does anyone have experience tracking or designing specific metrics that effectively capture or reveal multi-task coordination bottlenecks, representation drift, or parameter alignment in deep RL?}
+\section{HPO Hyperparameter Search \& Pruning Strategy}
+To efficiently explore the joint hyperparameter space of the shared base and method-specific modules, we employ an automated Hyperparameter Optimization (HPO) campaign with active pruning:
+\begin{itemize}
+    \item \textbf{Pruning Methodology:} We utilize the Asynchronous Successive Halving Algorithm (ASHA) to dynamically terminate underperforming trials. Pruning decisions are based on intermediate rolling evaluation rewards rather than raw instantaneous rewards, protecting slow-starting but high-potential trials from premature termination.
+    \item \textbf{Exploration Efficiency:} This pruning framework allows us to allocate our cluster budget dynamically, focusing computational resources on the most promising parameter regions and significantly scaling the number of configurations we can explore.
+    \item \textbf{Open Question for the Team:} \textit{Given that RL training curves are notoriously non-monotonous and highly unpredictable during early exploration, has anyone had success tuning or overriding pruning thresholds in HPOs for RL without killing slow-starting but ultimately superior runs?}
+\end{itemize}
+\section{Next Step: Extending GR-Share to SAC}
+We are actively working on implementing and optimizing GR-Share natively within Soft Actor-Critic (SAC). Delivering robust empirical results across both PPO (on discrete and continuous setups) and SAC (on continuous setups) in the final paper will provide an exceptionally strong, framework-agnostic argument for the general utility of the Gradient Routing paradigm.
+\end{document}

@@ -90,8 +90,8 @@ def submit_job(phase, env_key, name, script, base_args, hpo_args, hidden_dim, st
     log_dir = f"/netscratch/{user}/varshare/logs/final_eval/phase{phase}/{env_key}/{name}"
     os.makedirs(log_dir, exist_ok=True)
     
-    # Slurm Time Dynamic
-    slurm_time = "72:00:00" if env_key in ["MT10", "MT4"] else "24:00:00"
+    # Slurm Time Limit (Requested 24 Hours for all benchmarking runs)
+    slurm_time = "24:00:00"
     
     # Oracle array math handling
     if name == "oracle":

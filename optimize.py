@@ -17,7 +17,7 @@ ENV_SETTINGS = {
         "total_timesteps": 1000000,
         "n_steps": 256,
         "num_envs": 10,
-        "eval_freq": 5000,
+        "eval_freq": 20000,
         "hidden_dim": 400
     },
     "LL": {
@@ -26,7 +26,7 @@ ENV_SETTINGS = {
         "total_timesteps": 1000000,
         "n_steps": 256,
         "num_envs": 10,
-        "eval_freq": 5000,
+        "eval_freq": 20000,
         "hidden_dim": 400
     },
     "MT10": {
@@ -35,7 +35,7 @@ ENV_SETTINGS = {
         "total_timesteps": 1000000,
         "n_steps": 256,
         "num_envs": 10,
-        "eval_freq": 5000,
+        "eval_freq": 20000,
         "hidden_dim": 400
     }
 }
@@ -133,6 +133,7 @@ def run_trial(trial, args):
         "--n-steps", str(env_config["n_steps"]),
         "--num-envs", str(env_config["num_envs"]),
         "--eval-freq", str(env_config["eval_freq"]),
+        "--eval-episodes", "3",
         "--lr-actor", str(lr_actor),
         "--lr-critic", str(lr_critic),
         "--eps-clip", str(eps_clip),
@@ -154,7 +155,7 @@ def run_trial(trial, args):
     print(f"Command: {' '.join(cmd)}")
     
     # Capture and parse outputs in real-time
-    eval_rewards = deque(maxlen=20)
+    eval_rewards = deque(maxlen=5)
     current_step = 0
     final_rolling_reward = -10000.0
     
@@ -191,11 +192,11 @@ def run_trial(trial, args):
                     reward_val = float(reward_match.group(1))
                     eval_rewards.append(reward_val)
                     
-                    # Compute rolling-20 mean of evaluation rewards
+                    # Compute rolling-5 mean of evaluation rewards
                     rolling_mean = np.mean(eval_rewards)
                     final_rolling_reward = rolling_mean
                     
-                    print(f"[Optuna Parse] Step: {current_step} | New Reward: {reward_val:.2f} | Rolling-20 Mean: {rolling_mean:.2f}")
+                    print(f"[Optuna Parse] Step: {current_step} | New Reward: {reward_val:.2f} | Rolling-5 Mean: {rolling_mean:.2f}")
                     
                     # Report intermediate score to Optuna
                     trial.report(rolling_mean, current_step)
@@ -287,7 +288,7 @@ def main():
     print("\n======================================================")
     print("HPO OPTIMIZATION CAMPAIGN COMPLETE!")
     print(f"Best Trial Number: {study.best_trial.number}")
-    print(f"Best Rolling-20 Mean Evaluation Reward: {study.best_trial.value:.2f}")
+    print(f"Best Rolling-5 Mean Evaluation Reward: {study.best_trial.value:.2f}")
     print("Best Parameters:")
     for k, v in study.best_trial.params.items():
         print(f"  - {k}: {v}")
