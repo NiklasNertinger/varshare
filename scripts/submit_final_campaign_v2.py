@@ -74,6 +74,12 @@ trap 'echo "[BASH] Caught SIGUSR1, forwarding to Python (PID=$CHILD_PID)..."; ki
 CHILD_PID=$!
 wait $CHILD_PID
 EXIT_CODE=$?
+
+if [ $EXIT_CODE -gt 128 ]; then
+    echo "[BASH] wait interrupted (code $EXIT_CODE). Re-waiting for Python to finish..."
+    wait $CHILD_PID
+    EXIT_CODE=$?
+fi
 """
     
     sbatch_script = f"""#!/bin/bash

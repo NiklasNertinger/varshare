@@ -138,9 +138,19 @@ trap 'echo "[BASH] Caught SIGUSR1, forwarding to Python (PID=$CHILD_PID)..."; ki
 CHILD_PID=$!
 echo "[BASH] Python child PID: $CHILD_PID"
 
-# Wait for Python to finish (wait is interruptible by signals)
+# Wait for Python to finish.
+# NOTE: When bash receives SIGUSR1, `wait` is interrupted and returns 128+10=138.
+# The trap handler forwards the signal to Python, but Python is still running.
+# We must wait AGAIN to get Python's actual exit code (99).
 wait $CHILD_PID
 EXIT_CODE=$?
+
+if [ $EXIT_CODE -gt 128 ]; then
+    # wait was interrupted by a signal - re-wait for the child's real exit code
+    echo "[BASH] wait interrupted (code $EXIT_CODE). Re-waiting for Python to finish..."
+    wait $CHILD_PID
+    EXIT_CODE=$?
+fi
 
 echo ""
 echo "Script exited with code: $EXIT_CODE"
