@@ -802,6 +802,13 @@ def train(report_callback=None):
             vf.write(f"{'='*60}\n")
         print(f"[RESUME] Verification report written to {verify_path}")
         
+        # Restore wall-clock timing so W&B metrics are continuous
+        if "elapsed_time" in checkpoint:
+            start_time = time.time() - checkpoint["elapsed_time"]
+            print(f"[RESUME] Restored elapsed time: {checkpoint['elapsed_time']:.1f}s")
+        if "eval_time_accumulated" in checkpoint:
+            eval_time_accumulated = checkpoint["eval_time_accumulated"]
+        
         # Load history json if it exists to append to it
         hist_path = os.path.join(seed_dir, "history.json")
         if os.path.exists(hist_path):
@@ -1214,7 +1221,9 @@ def train(report_callback=None):
                 "rng_torch": torch.get_rng_state(),
                 "rng_numpy": np.random.get_state(),
                 "rng_random": random.getstate(),
-                "rng_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None
+                "rng_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
+                "elapsed_time": time.time() - start_time,
+                "eval_time_accumulated": eval_time_accumulated
             }
             torch.save(checkpoint, checkpoint_path)
             
