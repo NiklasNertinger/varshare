@@ -46,6 +46,7 @@ def submit_job(phase, env_key, name, script, base_args, hpo_args, hidden_dim, st
         "--eval-freq", str(eval_freq),
         "--env-type", ENV_SETTINGS[env_key]["env_type"],
         "--hidden-dim", str(hidden_dim),
+        "--wandb-project", "varshare-v2-test",
         "--analysis-dir", f"/netscratch/{os.environ.get('USER', 'nertinger')}/varshare/analysis/final_eval_v2/phase{phase}/{env_key}/{name}"
     ]
     
