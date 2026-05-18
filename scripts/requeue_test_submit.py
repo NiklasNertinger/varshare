@@ -1,16 +1,20 @@
 """
-SLURM Requeue Test Script
-=========================
+SLURM Requeue Test Script (v3)
+==============================
 Purpose: Verify that the SIGUSR1 -> checkpoint -> requeue -> resume pipeline
 works correctly for EVERY training script type.
 
+IMPORTANT: MetaWorld environment initialization takes 3-5 minutes on CPU.
+The time limit must be long enough for init to complete AND some training
+to happen before SIGUSR1 fires.
+
 How it works:
-  1. Each job runs with a 2-minute time limit.
-  2. SLURM sends SIGUSR1 at 1 minute (--signal=B:USR1@60).
-  3. The Python script catches the signal, saves checkpoint.pt, exits with code 99.
-  4. The bash wrapper detects exit code 99 and requeues the job.
-  5. On restart, the script finds checkpoint.pt, loads it, and resumes training.
-  6. The second run completes naturally (remaining steps finish within 2 minutes).
+  1. Each job runs with a 10-minute time limit.
+  2. SLURM sends SIGUSR1 at 8 minutes (--signal=B:USR1@120).
+  3. By then, MetaWorld init is done and training is underway.
+  4. The Python script catches the signal, saves checkpoint.pt, exits with code 99.
+  5. The bash wrapper detects exit code 99 and requeues the job.
+  6. On restart, the script finds checkpoint.pt, loads it, and resumes training.
 
 Verification checklist (check the .out log files):
   [1] First run prints: "[WARNING] Caught SIGUSR1 from SLURM!"
@@ -24,14 +28,9 @@ Verification checklist (check the .out log files):
 
 import os
 import subprocess
+import shutil
 
 # We test one representative method per training script:
-#   - det_base    -> train_routing.py (simple, no gradient tricks)
-#   - det_routing -> train_routing.py (GR-Share with PCGrad routing)
-#   - shared      -> train_baselines.py (simplest baseline)
-#   - pcgrad      -> train_baselines.py (PCGrad baseline)
-#   - soft_mod    -> train_baselines.py (Soft Modularization)
-#   - paco        -> train_baselines.py (PaCo)
 METHODS = {
     "det_base":    ("train_routing.py",   ["--variant", "base"]),
     "det_routing": ("train_routing.py",   ["--variant", "routing"]),
@@ -41,16 +40,25 @@ METHODS = {
     "paco":        ("train_baselines.py", ["--algo", "paco"]),
 }
 
-# Use enough steps that the job CAN'T finish in 1 minute on CPU.
-# With n_steps=512, num_envs=10, each update = 5120 steps.
-# 1M steps = ~195 updates. On CPU with MetaWorld, this takes ~10+ minutes.
+# 1M steps: enough that training can't finish in 5 minutes of actual compute.
+# With n_steps=512, num_envs=10, that's ~195 PPO updates.
 TOTAL_STEPS = 1000000
 NUM_ENVS = 10
 N_STEPS = 512
 BATCH_SIZE = 512
-EVAL_FREQ = 500000  # Eval once at the end, not during the test
+EVAL_FREQ = 500000  # Avoid eval overhead during the test
 HIDDEN_DIM = 256
 WANDB_PROJECT = "varshare-requeue-test"
+
+# SLURM timing:
+#   MetaWorld init takes ~3-5 min on CPU.
+#   We need at least 5 min for init + some training time before the signal.
+#   --time=00:10:00  -> 10 minute hard limit
+#   --signal=B:USR1@120 -> SIGUSR1 at the 8-minute mark (2 min before end)
+#   This gives ~3-5 min for init + 3-5 min training before signal.
+SLURM_TIME = "00:10:00"
+SIGNAL_SPEC = "B:USR1@120"  # 120 seconds before end = signal at 8 min
+
 
 def submit_all():
     user = os.environ.get("USER", "nertinger")
@@ -60,26 +68,28 @@ def submit_all():
     # Clean up old checkpoints and logs from previous test attempts
     print("Cleaning up old requeue test data...")
     for name in METHODS:
+        # Clean old analysis (checkpoint files)
         old_analysis = os.path.join(base_analysis, name)
+        if os.path.exists(old_analysis):
+            shutil.rmtree(old_analysis)
+            print(f"  Removed: {old_analysis}")
+        # Clean old logs
         old_logs = os.path.join(base_logs, name)
-        # Remove old checkpoint files so we get a fresh test
-        checkpoint_glob = os.path.join(old_analysis, "requeue_test_" + name, "seed_1", "checkpoint.pt")
-        if os.path.exists(checkpoint_glob):
-            os.remove(checkpoint_glob)
-            print(f"  Removed old checkpoint: {checkpoint_glob}")
+        if os.path.exists(old_logs):
+            shutil.rmtree(old_logs)
+            print(f"  Removed: {old_logs}")
     
     print()
     print("=" * 60)
-    print("  SLURM REQUEUE TEST SUBMISSION")
-    print("  Time limit: 2 min | Signal: USR1 at 1 min")
+    print("  SLURM REQUEUE TEST SUBMISSION (v3)")
+    print(f"  Time limit: {SLURM_TIME} | Signal: USR1 at 8 min")
     print("  CPU-only (batch partition) for fast scheduling")
-    print("  Total steps: 1,000,000 (guarantees >1 min runtime)")
+    print(f"  Total steps: {TOTAL_STEPS:,}")
     print("=" * 60)
     
     submitted = 0
     
     for name, (script, base_args) in METHODS.items():
-        # Build the analysis dir so checkpoints go to a unique, clean location
         analysis_dir = f"/netscratch/{user}/varshare/analysis/requeue_test/{name}"
         log_dir = f"/netscratch/{user}/varshare/logs/requeue_test/{name}"
         os.makedirs(log_dir, exist_ok=True)
@@ -102,10 +112,6 @@ def submit_all():
         all_args = base_args + config_args
         full_cmd = f"python {script} " + " ".join(all_args) + " --seed 1"
         
-        # Key SLURM settings for the test:
-        #   --time=00:02:00       : 2-minute time limit
-        #   --signal=B:USR1@60    : Send SIGUSR1 60 seconds before the end (= at 1 min)
-        #   --open-mode=append    : Append to log files on requeue (don't overwrite!)
         sbatch_script = f"""#!/bin/bash
 #SBATCH --job-name=rq_{name}
 #SBATCH --output={log_dir}/%A.out
@@ -113,8 +119,8 @@ def submit_all():
 #SBATCH --partition=batch
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
-#SBATCH --time=00:02:00
-#SBATCH --signal=B:USR1@60
+#SBATCH --time={SLURM_TIME}
+#SBATCH --signal={SIGNAL_SPEC}
 #SBATCH --open-mode=append
 
 source /netscratch/$USER/varshare/venv/bin/activate
@@ -162,17 +168,18 @@ fi
     print(f"  W&B Project: {WANDB_PROJECT}")
     print(f"  Monitor logs: {base_logs}/")
     print(f"{'=' * 60}")
-    print(f"\nTimeline:")
-    print(f"  0:00 - Job starts, initializes MetaWorld environments")
-    print(f"  1:00 - SLURM sends SIGUSR1 signal")
-    print(f"  1:00-1:05 - Python catches signal, finishes current update, saves checkpoint")
-    print(f"  1:05 - Python exits with code 99, bash requeues the job")
-    print(f"  1:10 - Job restarts, finds checkpoint, resumes W&B run")
-    print(f"  3:00 - Second run hits 2-min limit, gets another SIGUSR1")
-    print(f"         (this will repeat until all 1M steps are done)")
-    print(f"\nVerification:")
-    print(f"  cat /netscratch/{user}/varshare/logs/requeue_test/det_base/*.out")
-    print(f"  Look for: [WARNING] Caught SIGUSR1 -> [CHECKPOINT] -> [REQUEUE] -> [RESUME]")
+    print(f"\nExpected timeline:")
+    print(f"  0:00 - 4:00  : MetaWorld environment initialization (CPU is slow)")
+    print(f"  4:00 - 8:00  : Training begins, progress lines appear in .out")
+    print(f"  8:00         : SLURM sends SIGUSR1 signal")
+    print(f"  8:00 - 8:05  : Python catches signal, finishes update, saves checkpoint")
+    print(f"  8:05         : Python exits with code 99, bash requeues the job")
+    print(f"  8:10 - 12:00 : Job restarts, loads checkpoint, resumes W&B run")
+    print(f"  (repeats until all 1M steps are done)")
+    print(f"\nVerification (after ~10 minutes):")
+    print(f"  cat {base_logs}/det_base/*.out")
+    print(f"  Look for the full sequence:")
+    print(f"    [WARNING] Caught SIGUSR1 -> [CHECKPOINT] -> [REQUEUE] -> [RESUME]")
 
 if __name__ == "__main__":
     submit_all()
