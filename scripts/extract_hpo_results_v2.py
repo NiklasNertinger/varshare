@@ -13,7 +13,7 @@ def main():
         print(f"Error: Database file {db_file} does not exist yet.")
         return
 
-    storage = optuna.storages.RDBStorage(url=storage_uri, engine_kwargs={"timeout": 60})
+    storage = optuna.storages.RDBStorage(url=storage_uri)
     studies = storage.get_all_studies()
     
     method_mapping = {
