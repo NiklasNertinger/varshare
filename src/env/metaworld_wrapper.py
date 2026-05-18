@@ -84,6 +84,12 @@ class MetaWorldWrapper(gym.Env):
         if self.auto_cycle_task and self.num_tasks > 1:
             next_idx = (self.current_task_idx + 1) % self.num_tasks
             self.reset_task(next_idx)
+        else:
+            # CRITICAL FIX: Even if we are not cycling tasks (e.g. during evaluation),
+            # we must still re-sample a random variation (object placement) for the current task.
+            # Otherwise, calling reset() just resets the agent, keeping identical objects, 
+            # leading to exactly 0.0 or 1.0 success rates across all eval episodes.
+            self.reset_task(self.current_task_idx)
             
         if seed is not None:
             self._env.action_space.seed(seed)
