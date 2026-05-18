@@ -27,6 +27,7 @@ if hasattr(signal, "SIGUSR1"):
 
 from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
 from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
+from src.env.normalization import PerTaskVecNormalize
 from src.baselines import ActorCritic
 from src.algo.ppo import PPO
 from src.algo.pcgrad import PCGrad
@@ -210,23 +211,47 @@ def train(report_callback=None):
         print(f"Training on Task ID: {args.task_id}")
     
     # Env Setup
+    class TaskAutoCycleWrapper(gym.Wrapper):
+        def __init__(self, env, num_tasks, initial_task_idx, auto_cycle):
+            super().__init__(env)
+            self.num_tasks = num_tasks
+            self.current_task = initial_task_idx
+            self.auto_cycle = auto_cycle
+            
+        def reset(self, **kwargs):
+            if hasattr(self.env.unwrapped, 'reset_task'):
+                self.env.unwrapped.reset_task(self.current_task)
+            obs, info = self.env.reset(**kwargs)
+            info["task_idx"] = self.current_task
+            return obs, info
+            
+        def step(self, action):
+            obs, reward, terminated, truncated, info = self.env.step(action)
+            info["task_idx"] = self.current_task
+            if terminated or truncated:
+                if self.auto_cycle:
+                    self.current_task = (self.current_task + 1) % self.num_tasks
+            return obs, reward, terminated, truncated, info
+
     def make_env(seed, idx, initial_task_idx=0, auto_cycle_task=False):
         def thunk():
-            if args.env_type == "ComplexCartPole":
-                env = ComplexCartPole()
-            elif args.env_type == "IdenticalCartPole":
-                env = IdenticalCartPole()
-            elif args.env_type == "MultiTaskLunarLander":
-                env = MultiTaskLunarLander(task_idx=initial_task_idx, continuous=(args.algo in ["paco", "soft_mod", "care", "moore"]))
-            elif args.env_type == "IdenticalLunarLander":
-                env = IdenticalLunarLander(continuous=(args.algo in ["paco", "soft_mod", "care", "moore"]))
-            elif args.env_type == "metaworld":
+            if args.env_type == "metaworld":
                 env = MetaWorldWrapper(
                     benchmark=args.mt_setting, 
                     seed=seed, 
                     initial_task_idx=initial_task_idx,
                     auto_cycle_task=auto_cycle_task
                 )
+            else:
+                if args.env_type == "ComplexCartPole":
+                    env = ComplexCartPole(task_idx=initial_task_idx)
+                elif args.env_type == "IdenticalCartPole":
+                    env = IdenticalCartPole(task_idx=initial_task_idx)
+                elif args.env_type == "MultiTaskLunarLander":
+                    env = MultiTaskLunarLander(task_idx=initial_task_idx, continuous=(args.algo in ["paco", "soft_mod", "care", "moore"]))
+                elif args.env_type == "IdenticalLunarLander":
+                    env = IdenticalLunarLander(task_idx=initial_task_idx, continuous=(args.algo in ["paco", "soft_mod", "care", "moore"]))
+                env = TaskAutoCycleWrapper(env, num_tasks, initial_task_idx, auto_cycle_task)
             
             env = gym.wrappers.RecordEpisodeStatistics(env)
             env.action_space.seed(seed)
@@ -246,6 +271,7 @@ def train(report_callback=None):
             for i in range(args.num_envs)
         ]
     )
+    envs = PerTaskVecNormalize(envs, num_tasks, norm_obs=True, norm_reward=True, training=True)
     
     eval_envs = gym.vector.AsyncVectorEnv(
         [
@@ -258,6 +284,8 @@ def train(report_callback=None):
             for i in range(num_tasks)
         ]
     )
+    eval_envs = PerTaskVecNormalize(eval_envs, num_tasks, norm_obs=True, norm_reward=False, training=False)
+    eval_envs.obs_rms = envs.obs_rms
     
     # Model Setup
     hdims = [args.hidden_dim] * 3
@@ -752,9 +780,12 @@ def train(report_callback=None):
         b_values = mb_values.reshape(-1)
         b_task_ids = mb_task_ids.reshape(-1)
         
-        # Full-Rollout Normalization (Matches VarShare)
-        b_returns = (b_returns - b_returns.mean()) / (b_returns.std() + 1e-7)
-        b_advantages = (b_advantages - b_advantages.mean()) / (b_advantages.std() + 1e-7)
+        # Methodological note: Per-Task Advantage Normalization (MTBench High-Performance)
+        # We no longer normalize b_returns because PerTaskVecNormalize handles reward scaling natively.
+        for task_id in torch.unique(b_task_ids):
+            mask = b_task_ids == task_id
+            if mask.sum() > 1:
+                b_advantages[mask] = (b_advantages[mask] - b_advantages[mask].mean()) / (b_advantages[mask].std() + 1e-8)
         
         # Update
         metrics = ppo.update_from_storage(

@@ -4,15 +4,15 @@ import subprocess
 import argparse
 
 ENV_SETTINGS = {
-    "MT10": {"env_type": "metaworld", "mt_setting": "MT10", "steps": 15000000, "eval_freq": 150000, "n_steps": 512, "hidden_dim": 256}
+    "MT10": {"env_type": "metaworld", "mt_setting": "MT10", "steps": 400000, "eval_freq": 20000, "n_steps": 512, "hidden_dim": 256}
 }
 
 PARTITION = "batch"
 CPUS = 8
 MEM = "16G"
-SEEDS = [1, 2]
+SEEDS = [1]
 
-NUM_ENVS = 4
+NUM_ENVS = 10
 BATCH_SIZE = 64
 
 VARIANTS = [

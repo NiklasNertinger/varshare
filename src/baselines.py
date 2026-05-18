@@ -678,7 +678,7 @@ class ActorCritic(nn.Module):
         curr_in = input_dim
         for _ in range(num_layers):
             critic_layers.append(layer_init(nn.Linear(curr_in, hidden_dim)))
-            critic_layers.append(nn.Tanh())
+            critic_layers.append(nn.ELU())
             curr_in = hidden_dim
         critic_layers.append(layer_init(nn.Linear(hidden_dim, 1), std=1.0))
         self.critic = nn.Sequential(*critic_layers)
@@ -688,7 +688,7 @@ class ActorCritic(nn.Module):
         curr_in = input_dim
         for _ in range(num_layers):
             actor_layers.append(layer_init(nn.Linear(curr_in, hidden_dim)))
-            actor_layers.append(nn.Tanh())
+            actor_layers.append(nn.ELU())
             curr_in = hidden_dim
         # Policy head uses standard orthogonal initialization with a gain of 0.01
         # to ensure initial action distributions are near-uniform.

@@ -1,0 +1,436 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=1in]{geometry}
+
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+% Replace citation keys with your own bibliography keys.
+% Suggested placeholders:
+% \cite{pcgrad,cagrad,config,mgda}
+
+\title{Gradient Routing for Multi-Task Reinforcement Learning:\\
+A Minimal Residual-Adapter Formulation}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Problem Setting and Motivation}
+
+We consider the setting of multi-task reinforcement learning (MTRL), where a single model is trained across a collection of tasks
+\[
+\mathcal{T} = \{1,\dots,T\}.
+\]
+A central motivation for MTRL is that different tasks often share underlying structure, so joint training can lead to \emph{constructive interference}: information learned from one task can accelerate learning on others. At the level of gradients, this occurs when task gradients point in compatible directions in parameter space.
+
+At the same time, MTRL can suffer from \emph{destructive interference}, also called \emph{gradient conflict}. Let
+\[
+g_t := \nabla_{\theta} \ell_t(\theta)
+\]
+denote the gradient of the task-$t$ loss with respect to shared parameters $\theta$. For two tasks $i$ and $j$, a simple first-order notion of conflict is
+\[
+\langle g_i, g_j \rangle < 0.
+\]
+In this case, a step that decreases one task's loss may increase the other's. More generally, when several task gradients are aggregated into a single shared update, conflicting directions can partially cancel, slow down optimization, or force the shared model toward an unsatisfactory compromise.
+
+A number of methods have been proposed to address this issue via \emph{gradient surgery} or related conflict-resolution mechanisms, including PCGrad, CAGrad, ConFIG, and MGDA/Pareto-style common descent methods \cite{pcgrad,cagrad,config,mgda}. Their common goal is to replace the raw task gradients by a conflict-resolved update for the shared parameters.
+
+These methods can substantially improve optimization of the shared model. However, by construction, they also suppress or remove some task-specific gradient information. This is often desirable for the shared representation, but it raises the following question: when a gradient component is blocked from entering the shared parameters because it conflicts with other tasks, can that information be preserved elsewhere in a controlled manner?
+
+This motivates the present proposal. We augment the shared parameters with task-specific additive adapters and aim to \emph{route} some of the task-specific gradient information that is \emph{not realized by the final conflict-resolved shared update} into these adapters. The goal is to preserve useful task-specific specialization while still maintaining a strongly shared representation.
+
+\section{Gradient Conflict and Existing Gradient Surgery Methods}
+
+We briefly summarize several relevant approaches.
+
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{PCGrad} \cite{pcgrad}.  
+    PCGrad operates on individual task gradients. If task gradients $g_i$ and $g_j$ conflict, i.e.
+    \[
+    \langle g_i, g_j \rangle < 0,
+    \]
+    then PCGrad modifies one gradient by projecting away its component along the other:
+    \[
+    g_i \leftarrow g_i - \frac{\langle g_i, g_j\rangle}{\|g_j\|^2} g_j.
+    \]
+    This is done across tasks, yielding conflict-reduced task gradients $\tilde g_t$. PCGrad is attractive here because it produces task-wise modified gradients from which a final shared update can be constructed, thereby naturally inducing a discrepancy between each task gradient $g_t$ and the final shared gradient. Moreover, it also makes available the alternative residual $g_t - \tilde g_t$, namely the component removed from task $t$ by the surgery step itself.
+
+    \item \textbf{CAGrad} \cite{cagrad}.  
+    CAGrad seeks a single update direction that remains aligned with the average gradient while being more conservative in the presence of task conflict. It constructs a direction in the convex hull of task gradients,
+    \[
+    d = \sum_{t=1}^T \alpha_t g_t,
+    \qquad
+    \alpha_t \ge 0,\quad \sum_{t=1}^T \alpha_t = 1,
+    \]
+    by solving an auxiliary optimization problem that balances average improvement against conflict aversion. Conceptually, CAGrad produces a global compromise direction rather than editing each task gradient individually.
+
+    \item \textbf{ConFIG} \cite{config}.  
+    ConFIG aims to construct a single conflict-free update direction that remains simultaneously compatible with the task gradients whenever possible. In broad terms, it solves for a direction whose inner products with the task gradients satisfy a consistent alignment criterion, rather than relying on sequential pairwise projections. This can yield a cleaner global direction than pairwise surgery, though it does not as naturally expose a task-wise ``removed part'' as PCGrad does.
+
+    \item \textbf{MGDA / Pareto common descent methods} \cite{mgda}.  
+    These methods seek a common descent direction by solving for coefficients
+    \[
+    d = \sum_{t=1}^T \alpha_t g_t,
+    \qquad
+    \alpha_t \in \Delta_T,
+    \]
+    typically chosen so that $d$ has minimum norm within the convex hull of task gradients. This gives a principled first-order compromise direction and is an important conceptual baseline for multi-objective optimization, although it is less naturally phrased as ``surgery'' on each individual task gradient.
+\end{itemize}
+
+Overall, these methods are effective at reconciling conflicting gradients and allowing the shared model to learn a reasonable compromise representation. However, they may also discard or suppress task-specific information that could be useful if stored separately rather than forced into the shared parameters.
+
+\section{Task-Specific Additive Adapters}
+
+We introduce task-specific additive parameters $\mu_t$ and define the effective parameters for task $t$ as
+\[
+w_t = \theta + \mu_t.
+\]
+Here:
+\begin{itemize}[leftmargin=2em]
+    \item $\theta$ are the shared parameters,
+    \item $\mu_t$ are task-specific additive adapters.
+\end{itemize}
+
+For simplicity, we write this in vector form; in practice, the same construction can be applied layer-wise.
+
+This parameterization preserves a strong shared backbone while allowing task-specific specialization. One might ask why, once we introduce a full set of task-specific parameters, we do not simply train an independent network for each task. The reason is that doing so would remove the possibility of constructive interference entirely. Our aim is \emph{not} to abandon sharing, but rather to use task-specific parameters only where necessary.
+
+To ensure this, the task-specific adapters must be regularized. Intuitively, we would like as much information as possible to remain in the shared parameters $\theta$, and only genuinely task-specific information to be stored in the adapters $\mu_t$.
+
+\section{Core Design Criteria}
+
+This leaves us with three core requirements for the proposed method:
+\begin{enumerate}[label=\arabic*)]
+    \item perform gradient surgery to resolve destructive interference in the shared parameters,
+    \item route some of the removed or excess gradient information into the task-specific adapters,
+    \item regularize the task-specific adapters so as to promote sharing and prevent degenerate task-wise memorization.
+\end{enumerate}
+
+We now propose a minimal method satisfying these three requirements. The purpose of this first construction is primarily conceptual: it is the simplest proof-of-concept formulation that cleanly instantiates the idea of gradient routing.
+
+\section{A Minimal Gradient-Routing Method}
+
+\subsection{High-Level Idea}
+
+For each task $t$, we first compute the raw gradient of the task loss with respect to the effective parameters $w_t = \theta + \mu_t$. We then apply a gradient-surgery rule to obtain conflict-resolved task gradients and, from these, a final shared gradient for the backbone. We interpret the discrepancy between a task's own gradient and this final shared gradient as task-specific residual information and route part of it into the adapter $\mu_t$. To prevent the adapters from storing excessive task-specific information, we additionally apply explicit shrinkage to them during optimization.
+
+In the minimal version proposed here, the adapters are \emph{not} directly optimized using the full task gradient. Instead, they act purely as a repository for routed task-specific residual information.
+
+\subsection{Loss and Notation}
+
+Let $\ell_t(w_t)$ denote the task-$t$ loss, where
+\[
+w_t = \theta + \mu_t.
+\]
+Because of the additive parameterization, we have
+\[
+\nabla_{\theta} \ell_t(\theta+\mu_t)
+=
+\nabla_{\mu_t} \ell_t(\theta+\mu_t)
+=
+\nabla_{w_t} \ell_t(w_t).
+\]
+We therefore define the raw task gradient
+\[
+g_t := \nabla_{w_t}\ell_t(w_t).
+\]
+This is the gradient that task $t$ would like to apply to its effective parameters.
+
+Since the adapters are not directly optimized using the full gradient $\nabla_{\mu_t}\ell_t(w_t)$, the minimal method below is best viewed as an \emph{algorithmic update rule} rather than as gradient descent on a single joint objective. In particular, regularization of the adapters will be introduced directly through their update rule via an explicit shrinkage term.
+
+\subsection{Gradient Surgery}
+
+For the minimal method, we take PCGrad as the surgery mechanism. Starting from the raw gradients $\{g_t\}_{t=1}^T$, PCGrad yields modified gradients
+\[
+\tilde g_t = \mathrm{PCGrad}_t(g_1,\dots,g_T), \qquad t=1,\dots,T.
+\]
+The corresponding shared gradient is then formed by averaging:
+\[
+\bar g_{\theta} := \frac{1}{T}\sum_{t=1}^T \tilde g_t.
+\]
+
+A practical point is that PCGrad is generally \emph{order-dependent}: the final modified gradients can depend on the order in which pairwise projections are applied across tasks. In practice, one therefore typically randomizes the order or averages across random orderings.
+
+\subsection{Routed Residuals and Adapter Shrinkage}
+
+We define the task-specific routed residual as
+\[
+r_t := g_t - \bar g_{\theta}.
+\]
+Thus, $r_t$ measures the discrepancy between task $t$'s desired gradient and the final shared gradient actually applied to the backbone.
+
+This definition has the convenient property
+\[
+\bar g_{\theta} + r_t = g_t.
+\]
+Hence, under plain gradient descent and ignoring shrinkage, choosing routing strength $\alpha = 1$ would make the effective update on task $t$'s full parameters $w_t = \theta + \mu_t$ coincide with the task's raw gradient $g_t$. More generally, $\alpha \in [0,1]$ allows one to interpolate between a purely shared update and a fully task-matched correction.
+
+We update the task-specific adapters using this residual:
+\[
+\bar g_{\mu_t} := \alpha r_t + \lambda \mu_t,
+\]
+where $\alpha \ge 0$ is a routing-strength hyperparameter and $\lambda > 0$ controls the strength of adapter shrinkage. The term $\alpha r_t$ routes task-specific discrepancy into the adapter, while the term $\lambda \mu_t$ pulls the adapter back toward zero.
+
+This shrinkage is closely analogous to $\ell_2$ regularization: if one were to optimize a quadratic penalty
+\[
+\frac{\lambda}{2}\|\mu_t\|^2,
+\]
+its gradient would be exactly $\lambda \mu_t$. In the present minimal formulation, however, this term is introduced directly in the adapter update rule rather than through the gradient of a single global objective.
+
+\subsection{Resulting Updates}
+
+If we write the method in plain gradient-descent form, the parameter updates are
+\begin{align}
+\theta^{+} &= \theta - \eta \bar g_{\theta}
+= \theta - \eta \frac{1}{T}\sum_{t=1}^T \tilde g_t, \\
+\mu_t^{+} &= \mu_t - \eta \bar g_{\mu_t}
+= \mu_t - \eta(\alpha r_t + \lambda \mu_t),
+\qquad t=1,\dots,T.
+\end{align}
+Equivalently,
+\[
+\mu_t^{+}
+=
+(1-\eta\lambda)\mu_t - \eta\alpha r_t.
+\]
+Thus, in the absence of persistent routed residuals, the adapters decay back toward zero. Only task-specific information that repeatedly survives the routing step can accumulate in $\mu_t$.
+
+If Adam or another first-order optimizer is used in practice, then $\bar g_{\theta}$ and $\bar g_{\mu_t}$ should be interpreted as the raw gradients supplied to the optimizer state.
+
+\section{One Full Optimization Step}
+
+We now write one optimization step of the minimal method explicitly and without omissions.
+
+\paragraph{Input.}
+Shared parameters $\theta$, task-specific adapters $\{\mu_t\}_{t=1}^T$, routing strength $\alpha$, shrinkage coefficient $\lambda$, learning rate $\eta$, and a batch of data (or trajectories) for each task.
+
+\paragraph{Step 1: Form task-specific effective parameters.}
+For each task $t$, define
+\[
+w_t = \theta + \mu_t.
+\]
+
+\paragraph{Step 2: Compute task losses.}
+Using the task-specific effective parameters, compute
+\[
+\ell_t(w_t), \qquad t=1,\dots,T.
+\]
+
+\paragraph{Step 3: Compute raw task gradients.}
+For each task $t$, compute
+\[
+g_t := \nabla_{w_t} \ell_t(w_t).
+\]
+Because of the additive parameterization, this is also the gradient of the task loss with respect to both $\theta$ and $\mu_t$.
+
+\paragraph{Step 4: Apply gradient surgery.}
+Apply PCGrad to the collection $\{g_t\}_{t=1}^T$ to obtain modified gradients
+\[
+\tilde g_t = \mathrm{PCGrad}_t(g_1,\dots,g_T), \qquad t=1,\dots,T.
+\]
+Concretely, for a pair of conflicting task gradients $g_i$ and $g_j$ with
+\[
+\langle g_i, g_j\rangle < 0,
+\]
+PCGrad removes from $g_i$ the component along $g_j$:
+\[
+g_i \leftarrow g_i - \frac{\langle g_i, g_j\rangle}{\|g_j\|^2} g_j.
+\]
+Repeating this across tasks yields the final modified gradients $\tilde g_t$. The resulting gradients generally depend on the order in which these pairwise projections are performed.
+
+\paragraph{Step 5: Construct the shared gradient.}
+Aggregate the conflict-resolved task gradients into a shared update:
+\[
+\bar g_{\theta} := \frac{1}{T}\sum_{t=1}^T \tilde g_t.
+\]
+
+\paragraph{Step 6: Construct the routed residuals.}
+For each task $t$, define the routed residual
+\[
+r_t := g_t - \bar g_{\theta}.
+\]
+This measures the discrepancy between task $t$'s desired gradient and the final shared gradient actually applied to the backbone.
+
+\paragraph{Step 7: Construct the adapter gradients.}
+For each task $t$, define
+\[
+\bar g_{\mu_t} := \alpha r_t + \lambda \mu_t.
+\]
+Here, $\alpha r_t$ stores a scaled version of the discrepancy between task $t$'s desired gradient and the shared update, while $\lambda \mu_t$ shrinks the adapter toward zero.
+
+\paragraph{Step 8: Update parameters.}
+Using plain gradient descent, update
+\begin{align}
+\theta^{+} &= \theta - \eta \bar g_{\theta}, \\
+\mu_t^{+} &= \mu_t - \eta \bar g_{\mu_t},
+\qquad t=1,\dots,T.
+\end{align}
+Equivalently,
+\begin{align}
+\theta^{+}
+&=
+\theta - \eta \frac{1}{T}\sum_{t=1}^T \tilde g_t, \\
+\mu_t^{+}
+&=
+(1-\eta\lambda)\mu_t - \eta\alpha(g_t-\bar g_{\theta}).
+\end{align}
+
+\paragraph{Step 9: Repeat.}
+Use the updated parameters for the next optimization step.
+
+\section{Interpretation of the Minimal Method}
+
+This minimal construction satisfies the three design criteria stated above:
+\begin{enumerate}[label=\arabic*)]
+    \item \textbf{Gradient surgery.}  
+    The shared parameters are updated using conflict-resolved gradients $\tilde g_t$, thereby reducing destructive interference.
+
+    \item \textbf{Gradient routing.}  
+    The discrepancy between task $t$'s desired gradient and the final shared gradient,
+    \[
+    g_t - \bar g_{\theta},
+    \]
+    is not discarded entirely, but instead routed into the task-specific adapter $\mu_t$.
+
+    \item \textbf{Regularization.}  
+    The adapters are explicitly shrunk toward zero through the term $\lambda \mu_t$, so that they can only grow when the routed signal is strong and persistent enough to overcome this shrinkage. This plays the same role as an $\ell_2$-style regularizer, even though in the present minimal formulation it is imposed directly through the update rule.
+\end{enumerate}
+
+This is the simplest formulation we are aware of that instantiates the intended design: the shared parameters absorb what can be learned jointly, while task-specific discrepancies that are not realized by the final shared update are allowed to survive in a task-specific but explicitly regularized pathway.
+
+\vspace{0.5em}
+\noindent
+In subsequent sections, one can then analyze the limitations of this minimal construction and consider more refined routing and regularization mechanisms.
+
+
+\section{Potential Limitations of the Minimal Formulation}
+
+While the minimal gradient-routing construction is conceptually simple, it also comes with a number of important limitations. We summarize the most relevant ones below.
+
+\subsection{Discrepancy from the Shared Gradient Does Not Necessarily Imply Task-Specific Structure}
+
+The minimal method treats a discrepancy between a task gradient and the final shared gradient as evidence that the corresponding information should be stored in a task-specific adapter. However, this implication need not hold. Such a discrepancy may arise for several reasons:
+\begin{itemize}
+    \item because the tasks genuinely require different features or behaviors,
+    \item because optimization is still in an early transient phase,
+    \item because gradients are noisy,
+    \item because the shared representation is not yet sufficiently mature.
+\end{itemize}
+
+Thus, the rule
+\[
+\text{``task-specific discrepancy''} \;\Longrightarrow\; \text{``route to } \mu_t \text{''}
+\]
+may be too aggressive. In particular, the method may privatize information that should eventually have become shared.
+
+A simple intuition is the following. Suppose two tasks temporarily disagree on a parameter direction early in training, but later would have converged to a common representation once the backbone has improved. If this discrepancy is immediately routed into the adapters, the method may prematurely commit to task-specific specialization and thereby weaken later sharing.
+
+\subsection{Noisy RL Gradients May Be Stored in the Adapters}
+
+This issue is particularly relevant in reinforcement learning, where gradient estimates are often noisy due to return variance, bootstrapping error, stochastic policies, and changing state visitation distributions. As a consequence, the discrepancy between a task gradient and the final shared gradient can fluctuate strongly even when the underlying tasks are not fundamentally incompatible.
+
+In the minimal formulation, the routed residual
+\[
+r_t = g_t - \bar g_{\theta}
+\]
+is treated as potentially meaningful task-specific information. However, if the discrepancy that produced this residual is mainly due to gradient noise, then the adapter may end up storing noise rather than genuine specialization.
+
+Intuitively, the adapter can become a kind of \emph{buffer for stochastic disagreement}. The shrinkage term helps counteract this effect, but it does not guarantee that only stable and meaningful task-specific structure is retained. If noisy discrepancies occur persistently enough, the adapters may still grow in unhelpful directions.
+
+\subsection{PCGrad is Order-Dependent}
+
+PCGrad modifies task gradients through sequential pairwise projections. As a result, the final modified gradients
+\[
+\tilde g_t
+\]
+can depend on the order in which the tasks are processed.
+
+This is already a limitation of PCGrad in the standard shared-only setting, but it becomes even more important here because the final shared gradient
+\[
+\bar g_{\theta} = \frac{1}{T}\sum_{t=1}^T \tilde g_t
+\]
+inherits this order dependence, and so do the routed residuals
+\[
+r_t = g_t - \bar g_{\theta}.
+\]
+Hence the ordering of tasks does not merely affect the shared update; it also affects which components are interpreted as task-specific and routed into the adapters.
+
+This can lead to undesirable asymmetries. For example, one ordering may yield a shared gradient that is relatively favorable to task $i$, whereas another ordering may produce a shared gradient that is less aligned with $g_i$, thereby causing more information to be routed into $\mu_i$. Thus, the eventual decomposition into shared and task-specific knowledge may depend not only on the data and tasks, but also on the incidental ordering used inside PCGrad.
+
+\subsection{Residual-Definition Ambiguity}
+
+A central design choice in the minimal method is the definition of the routed residual. In the present formulation, we define it as
+\[
+r_t = g_t - \bar g_{\theta},
+\]
+namely the discrepancy between task $t$'s desired gradient and the final shared gradient actually applied to the backbone.
+
+This choice has the attractive property
+\[
+\bar g_{\theta} + r_t = g_t,
+\]
+so that, under plain gradient descent and ignoring shrinkage, setting $\alpha = 1$ exactly reconstructs the raw task gradient at the level of the effective parameters.
+
+However, this is not the only plausible notion of routed information. An alternative would be to define
+\[
+r_t^{\mathrm{alt}} = g_t - \tilde g_t,
+\]
+namely the component removed from task $t$ by the surgery step itself. This alternative corresponds more closely to the conceptual story of ``routing what gradient surgery removed,'' whereas the present definition corresponds to ``routing what the task did not receive after the final shared update was formed.''
+
+Both are defensible, but they lead to different algorithms and different interpretations. This ambiguity highlights that the notion of routed task-specific information is not uniquely defined even in the minimal setting.
+
+\subsection{Optimizer-Induced Distortion}
+
+The clean decomposition into shared and routed gradients is formulated at the level of raw gradients, before they are passed to an optimizer. If one uses Adam or another adaptive method, the actual parameter updates applied to $\theta$ and $\mu_t$ may be scaled very differently.
+
+Indeed, Adam maintains separate first- and second-moment statistics for different parameter groups. Thus, even if the raw gradients satisfy a clean decomposition such as
+\[
+g_t = \bar g_{\theta} + r_t,
+\]
+the resulting parameter steps need not preserve this relationship. In practice, the effective step on the shared parameters may be damped much more strongly or much more weakly than the effective step on the adapters.
+
+This matters because the intended semantics of the method are formulated in terms of routing a particular discrepancy from the shared branch into the task-specific branch. If the optimizer rescales these two branches very differently, then the \emph{actual parameter movement} may no longer match that conceptual routing picture.
+
+A simple intuition is that a component that is small in raw gradient magnitude may nevertheless produce a relatively large adapter update if the optimizer has accumulated very different second-moment estimates for $\mu_t$ than for $\theta$.
+
+\subsection{Identifiability and Redundancy Between Shared and Private Parameters}
+
+Because the effective parameters are given by
+\[
+w_t = \theta + \mu_t,
+\]
+the same functional behavior can often be represented in multiple ways. In particular, a feature can be stored partly in $\theta$ and partly in $\mu_t$ while yielding the same effective parameter vector $w_t$.
+
+This means that the decomposition into shared and task-specific components is generally not identifiable from function values alone. The shrinkage term encourages the adapters to remain small, but it does not fully eliminate this ambiguity.
+
+A minimal example illustrates the point. Suppose for some vector $v$ we replace
+\[
+\theta \leftarrow \theta + v,
+\qquad
+\mu_t \leftarrow \mu_t - v.
+\]
+Then the effective parameter for task $t$ remains unchanged:
+\[
+(\theta + v) + (\mu_t - v) = \theta + \mu_t.
+\]
+Thus, the same task behavior can be realized by many different decompositions into shared and private parameters. This can make the learned decomposition harder to interpret and may lead to redundant storage of similar information across $\theta$ and the adapters.
+
+\subsection{The Minimal Routing Rule May Miss Useful Specialization}
+
+In the minimal formulation, the adapters only learn from the current first-order discrepancy between a task gradient and the final shared gradient. This is a deliberately simple and conservative design choice, but it may also be restrictive.
+
+In particular, there may exist useful task-specific structure that is not well captured by this instantaneous discrepancy. For example, specialization may depend on higher-order effects, on persistent but individually weak signals, or on structure that only becomes apparent over a longer temporal horizon. In such cases, the routed residual may provide only a weak or noisy learning signal even though additional task-specific adaptation would be beneficial.
+
+Thus, while the minimal rule is clean and interpretable, it may still fail to capture some genuinely useful forms of specialization.
+
+\bibliographystyle{plain}
+% \bibliography{references}
+
+\end{document}

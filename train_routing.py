@@ -29,6 +29,7 @@ if hasattr(signal, "SIGUSR1"):
 
 from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
 from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
+from src.env.normalization import PerTaskVecNormalize
 from src.models_routing import DetActorCritic
 from src.algo.ppo import PPO
 
@@ -201,23 +202,48 @@ def train(report_callback=None):
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     print(f"Using device: {device}")
     
+    class TaskAutoCycleWrapper(gym.Wrapper):
+        def __init__(self, env, num_tasks, initial_task_idx, auto_cycle):
+            super().__init__(env)
+            self.num_tasks = num_tasks
+            self.current_task = initial_task_idx
+            self.auto_cycle = auto_cycle
+            
+        def reset(self, **kwargs):
+            if hasattr(self.env.unwrapped, 'reset_task'):
+                self.env.unwrapped.reset_task(self.current_task)
+            obs, info = self.env.reset(**kwargs)
+            info["task_idx"] = self.current_task
+            return obs, info
+            
+        def step(self, action):
+            obs, reward, terminated, truncated, info = self.env.step(action)
+            info["task_idx"] = self.current_task
+            if terminated or truncated:
+                if self.auto_cycle:
+                    self.current_task = (self.current_task + 1) % self.num_tasks
+            return obs, reward, terminated, truncated, info
+
     def make_env(seed, idx, initial_task_idx=0, auto_cycle_task=False):
         def thunk():
-            if args.env_type == "ComplexCartPole":
-                env = ComplexCartPole()
-            elif args.env_type == "IdenticalCartPole":
-                env = IdenticalCartPole()
-            elif args.env_type == "metaworld":
+            if args.env_type == "metaworld":
                 env = MetaWorldWrapper(
                     benchmark=args.mt_setting, 
                     seed=seed, 
                     initial_task_idx=initial_task_idx, 
                     auto_cycle_task=auto_cycle_task
                 )
-            elif args.env_type == "MultiTaskLunarLander":
-                env = MultiTaskLunarLander(task_idx=initial_task_idx)
-            elif args.env_type == "IdenticalLunarLander":
-                env = IdenticalLunarLander(task_idx=initial_task_idx)
+            else:
+                if args.env_type == "ComplexCartPole":
+                    env = ComplexCartPole(task_idx=initial_task_idx)
+                elif args.env_type == "IdenticalCartPole":
+                    env = IdenticalCartPole(task_idx=initial_task_idx)
+                elif args.env_type == "MultiTaskLunarLander":
+                    env = MultiTaskLunarLander(task_idx=initial_task_idx)
+                elif args.env_type == "IdenticalLunarLander":
+                    env = IdenticalLunarLander(task_idx=initial_task_idx)
+                
+                env = TaskAutoCycleWrapper(env, num_tasks, initial_task_idx, auto_cycle_task)
             
             env = gym.wrappers.RecordEpisodeStatistics(env)
             env.action_space.seed(seed)
@@ -237,6 +263,7 @@ def train(report_callback=None):
             for i in range(args.num_envs)
         ]
     )
+    envs = PerTaskVecNormalize(envs, num_tasks, norm_obs=True, norm_reward=True, training=True)
     
     eval_envs = gym.vector.AsyncVectorEnv(
         [
@@ -249,6 +276,8 @@ def train(report_callback=None):
             for i in range(num_tasks)
         ]
     )
+    eval_envs = PerTaskVecNormalize(eval_envs, num_tasks, norm_obs=True, norm_reward=False, training=False)
+    eval_envs.obs_rms = envs.obs_rms # Share running stats
     
     agent = DetActorCritic(
         envs, 
@@ -713,7 +742,12 @@ def train(report_callback=None):
     
     avg_reward = 0.0
     avg_success = 0.0
+    # =====================================================================
+    # METHODOLOGICAL CORE: The Main PPO Training Loop
+    # =====================================================================
     for update in range(start_update, n_updates):
+        # 1. Initialize Storage Buffers for the Minibatch
+        # These hold the trajectory data (states, actions, rewards) collected by the agent
         mb_obs = torch.zeros((n_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
         mb_actions = torch.zeros((n_steps, args.num_envs) + envs.single_action_space.shape).to(device)
         mb_logprobs = torch.zeros((n_steps, args.num_envs)).to(device)
@@ -722,10 +756,15 @@ def train(report_callback=None):
         mb_values = torch.zeros((n_steps, args.num_envs)).to(device)
         mb_task_ids = torch.zeros((n_steps, args.num_envs), dtype=torch.long).to(device)
         
+        # -----------------------------------------------------------------
+        # PHASE 1: Data Collection (Rollout)
+        # The agent interacts with the environments to collect `n_steps` of data
+        # -----------------------------------------------------------------
         for step in range(n_steps):
             global_step += 1 * args.num_envs
             
             with torch.no_grad():
+                # Get the current Task IDs to feed into the GR-Share adapters (mu_t)
                 task_ids_tensor = torch.tensor(current_task_ids, dtype=torch.long).to(device)
                 action, logprob, _, value, _ = agent.get_action_and_value(
                     torch.tensor(obs).float().to(device), 
@@ -738,6 +777,7 @@ def train(report_callback=None):
             mb_values[step] = value.flatten()
             mb_task_ids[step] = task_ids_tensor
             
+            # Step the environment using the sampled action and get the raw reward
             next_obs, rewards, terminations, truncations, infos = envs.step(action.cpu().numpy())
             dones = np.logical_or(terminations, truncations)
             mb_dones[step] = torch.tensor(dones).float().to(device)
@@ -766,16 +806,11 @@ def train(report_callback=None):
                             task_success_window[t].append(info["success"])
             
             # Update current task IDs for any env that auto-cycled / reset
+            # (TaskAutoCycleWrapper and MetaWorldWrapper both place task_idx in final_info)
             if "final_info" in infos:
                 for i, info in enumerate(infos["final_info"]):
                     if info and "task_idx" in info:
                         current_task_ids[i] = info["task_idx"]
-            elif "episode" in infos:
-                if "_episode" in infos:
-                    for i, has_ep in enumerate(infos["_episode"]):
-                        if has_ep:
-                            if args.env_type == "metaworld":
-                                current_task_ids[i] = (current_task_ids[i] + 1) % num_tasks
 
         with torch.no_grad():
             task_ids_tensor = torch.tensor(current_task_ids, dtype=torch.long).to(device)
@@ -785,6 +820,11 @@ def train(report_callback=None):
             )
             next_value = next_value.reshape(1, -1)
             
+        # -----------------------------------------------------------------
+        # PHASE 2: Generalized Advantage Estimation (GAE)
+        # Methodological note: Calculates how much better an action was than the Critic predicted.
+        # This is where reward scale imbalances first manifest!
+        # -----------------------------------------------------------------
         advantages = torch.zeros_like(mb_rewards).to(device)
         lastgaelam = 0
         for t in reversed(range(n_steps)):
@@ -808,9 +848,17 @@ def train(report_callback=None):
         b_values = mb_values.reshape(-1)
         b_task_ids = mb_task_ids.reshape(-1)
         
-        b_returns = (b_returns - b_returns.mean()) / (b_returns.std() + 1e-7)
-        b_advantages = (b_advantages - b_advantages.mean()) / (b_advantages.std() + 1e-7)
+        # Methodological note: Per-Task Advantage Normalization (MTBench High-Performance)
+        # We no longer normalize b_returns because PerTaskVecNormalize handles reward scaling natively.
+        for task_id in torch.unique(b_task_ids):
+            mask = b_task_ids == task_id
+            if mask.sum() > 1:
+                b_advantages[mask] = (b_advantages[mask] - b_advantages[mask].mean()) / (b_advantages[mask].std() + 1e-8)
         
+        # -----------------------------------------------------------------
+        # PHASE 3: Neural Network Update (Backpropagation)
+        # Passes the flattened batch into ppo.py to compute Actor/Critic losses and update weights
+        # -----------------------------------------------------------------
         metrics = ppo.update_from_storage(
             b_obs, b_actions, b_logprobs, b_returns, b_advantages, b_values, task_ids=b_task_ids
         )

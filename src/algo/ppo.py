@@ -155,9 +155,13 @@ class PPO:
         b_inds = np.arange(len(obs))
         clipfracs = []
         td_vars = []
-        approx_kl = 0 # fallback
-        kl_loss = torch.tensor(0.0)
-        grad_norm = 0.0
+        approx_kls = []
+        pg_losses = []
+        v_losses = []
+        entropy_losses = []
+        kl_losses = []
+        grad_norms = []
+        losses = []
 
         for epoch in range(self.update_epochs):
             np.random.shuffle(b_inds)
@@ -180,12 +184,9 @@ class PPO:
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean()
                     approx_kl = ((ratio - 1) - logratio).mean()
-                    clipfracs += [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
+                    clipfracs.append(((ratio - 1.0).abs() > self.clip_coef).float().mean().item())
 
                 mb_advantages = advantages[mb_inds]
-                # Advantage normalization (optional, can be done at rollout-level instead)
-                if getattr(self, 'norm_adv', True):
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
@@ -233,24 +234,32 @@ class PPO:
                                hyper_loss += (param - target) ** 2
                      loss += self.lambda_hyper * hyper_loss
 
-            self.optimizer.zero_grad()
-            loss.backward()
-            grad_norm = nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
-            self.optimizer.step()
-            
-            # Track TD Error Variance
-            td_vars.append((returns[mb_inds] - newvalue).var().item())
+                self.optimizer.zero_grad()
+                loss.backward()
+                grad_norm = nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm)
+                self.optimizer.step()
+                
+                # Track metrics
+                td_vars.append((returns[mb_inds] - newvalue).var(unbiased=False).item())
+                approx_kls.append(approx_kl.item())
+                pg_losses.append(pg_loss.item())
+                v_losses.append(v_loss.item())
+                entropy_losses.append(entropy_loss.item())
+                kl_losses.append(kl_loss.item() if isinstance(kl_loss, torch.Tensor) else kl_loss)
+                grad_norms.append(grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm)
+                losses.append(loss.item())
 
+        mean_kl = np.mean(kl_losses)
         return {
-            "loss": loss.item(),
-            "policy_loss": pg_loss.item(),
-            "value_loss": v_loss.item(),
-            "entropy": entropy_loss.item(),
-            "approx_kl": approx_kl.item(),
+            "loss": np.mean(losses),
+            "policy_loss": np.mean(pg_losses),
+            "value_loss": np.mean(v_losses),
+            "entropy": np.mean(entropy_losses),
+            "approx_kl": np.mean(approx_kls),
             "clip_fraction": np.mean(clipfracs),
             "td_error_variance": np.mean(td_vars) if td_vars else 0.0,
-            "kl_penalty": kl_loss.item() if isinstance(kl_loss, torch.Tensor) else kl_loss,
-            "raw_kl": ((kl_loss.item() if isinstance(kl_loss, torch.Tensor) else kl_loss) / self.kl_beta) if self.kl_beta > 0 else 0.0,
+            "kl_penalty": mean_kl,
+            "raw_kl": (mean_kl / self.kl_beta) if self.kl_beta > 0 else 0.0,
             "kl_beta": self.kl_beta,
-            "grad_norm": grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
+            "grad_norm": np.mean(grad_norms)
         }

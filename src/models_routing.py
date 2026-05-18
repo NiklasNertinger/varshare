@@ -426,7 +426,7 @@ class DetVarShareNetwork(nn.Module):
     def forward(self, x, task_idx):
         for layer in self.layers:
             x = layer(x, task_idx)
-            x = F.tanh(x)
+            x = F.elu(x)
         return x
 
     def get_metrics(self, task_idx):
