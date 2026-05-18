@@ -56,7 +56,7 @@ def submit_all():
     NUM_ENVS = 10
     STEPS = 400000
     EVAL_FREQ = 20000
-    BATCH_SIZE = 64
+    BATCH_SIZE = 512
     
     print("Starting Submission for ALL Algorithms...")
     

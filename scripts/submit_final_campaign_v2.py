@@ -13,7 +13,7 @@ MEM = "16G"
 SEEDS = [1]
 
 NUM_ENVS = 10
-BATCH_SIZE = 64
+BATCH_SIZE = 512
 
 VARIANTS = [
     (1, "soft_mod", "train_baselines.py", ["--algo", "soft_mod", "--num-modules", "4"], "soft_mod", "v5"),
