@@ -66,7 +66,13 @@ def submit_job(phase, env_key, name, script, base_args, hpo_args, hidden_dim, st
     array_str = f"1-{len(SEEDS)}"
     seed_logic = f"""
 echo "Starting Seed $SLURM_ARRAY_TASK_ID"
-{full_cmd} --seed $SLURM_ARRAY_TASK_ID
+
+# Forward SIGUSR1 from bash to the Python child process
+trap 'echo "[BASH] Caught SIGUSR1, forwarding to Python (PID=$CHILD_PID)..."; kill -USR1 $CHILD_PID' USR1
+
+{full_cmd} --seed $SLURM_ARRAY_TASK_ID &
+CHILD_PID=$!
+wait $CHILD_PID
 EXIT_CODE=$?
 """
     
@@ -83,6 +89,7 @@ EXIT_CODE=$?
 
 source /netscratch/$USER/varshare/venv/bin/activate
 export PYTHONPATH=$PYTHONPATH:$HOME/varshare
+export PYTHONUNBUFFERED=1
 
 {seed_logic}
 
