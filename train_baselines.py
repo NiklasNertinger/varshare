@@ -170,13 +170,29 @@ def train(report_callback=None):
     seed_dir = os.path.join(exp_dir, seed_str)
     os.makedirs(seed_dir, exist_ok=True)
     
-    # W&B Initialization
+    # Check for existing checkpoint to enable W&B resume
+    checkpoint_path = os.path.join(seed_dir, "checkpoint.pt")
+    resume_wandb_id = None
+    is_resuming = os.path.exists(checkpoint_path)
+    if is_resuming:
+        try:
+            pre_check = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+            resume_wandb_id = pre_check.get("wandb_id", None)
+            resume_step = pre_check.get("global_step", "?")
+            print(f"[RESUME] Found checkpoint at step {resume_step}. W&B ID: {resume_wandb_id}")
+            del pre_check  # Free memory
+        except Exception as e:
+            print(f"[RESUME] Warning: Could not pre-load checkpoint for W&B resume: {e}")
+    
+    # W&B Initialization (with seamless resume support)
     use_wandb = False
     try:
         wandb.init(
             project=args.wandb_project,
             entity="niklas-nertinger-university-of-oxford",
-            name=run_name,
+            id=resume_wandb_id,
+            resume="must" if resume_wandb_id else "never",
+            name=run_name if not resume_wandb_id else None,
             config=vars(args),
             group=args.algo,
             tags=[args.algo, args.env_type]
@@ -186,7 +202,8 @@ def train(report_callback=None):
         print(f"W&B Initialization Failed: {e}. Running without W&B.")
     
     heartbeat_path = os.path.join(seed_dir, "heartbeat.csv")
-    heartbeat_file = open(heartbeat_path, "w", newline="")
+    heartbeat_mode = "a" if is_resuming else "w"
+    heartbeat_file = open(heartbeat_path, heartbeat_mode, newline="")
     heartbeat_writer = None
     
     # We'll determine num_tasks based on env_type
@@ -925,7 +942,8 @@ def train(report_callback=None):
                 "task_success_window": task_success_window,
                 "current_task_ids": current_task_ids,
                 "model_state_dict": agent.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict()
+                "optimizer_state_dict": optimizer.state_dict(),
+                "wandb_id": wandb.run.id if use_wandb else None
             }
             torch.save(checkpoint, checkpoint_path)
             
