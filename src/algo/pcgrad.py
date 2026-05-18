@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import copy
 import random
 
 class PCGrad:
     def __init__(self, optimizer):
         self.optimizer = optimizer
+        self._zero_grad_cache = {} # Cache for zero tensors to prevent allocation overhead
 
     def zero_grad(self):
         self.optimizer.zero_grad()
@@ -36,7 +36,8 @@ class PCGrad:
         task_grads: list of flattened task gradients
         """
         num_tasks = len(task_grads)
-        pc_grads = copy.deepcopy(task_grads)
+        # Use .clone() instead of the extremely slow copy.deepcopy()
+        pc_grads = [g.clone() for g in task_grads]
         
         # Shuffle tasks to avoid bias
         indices = list(range(num_tasks))
@@ -57,7 +58,8 @@ class PCGrad:
                 dot_product = torch.dot(g_i, g_j)
                 if dot_product < 0:
                     # Resolve conflict: project g_i onto normal plane of g_j
-                    g_i -= (dot_product / (g_j.norm()**2 + 1e-8)) * g_j
+                    norm_j_sq = torch.dot(g_j, g_j) + 1e-8
+                    g_i = g_i - (dot_product / norm_j_sq) * g_j
             
             pc_grads[i] = g_i
             
@@ -72,9 +74,13 @@ class PCGrad:
         for group in self.optimizer.param_groups:
             for p in group['params']:
                 if p.grad is None:
-                    grads.append(torch.zeros_like(p).flatten())
+                    # Use cached zero tensors to prevent massive memory allocation overhead 
+                    # for task-specific heads not active in the current backward pass.
+                    if p not in self._zero_grad_cache:
+                        self._zero_grad_cache[p] = torch.zeros(p.numel(), device=p.device)
+                    grads.append(self._zero_grad_cache[p])
                 else:
-                    grads.append(p.grad.data.flatten())
+                    grads.append(p.grad.view(-1))
         return torch.cat(grads)
 
     def _set_grad(self, flattened_grad):
@@ -85,5 +91,5 @@ class PCGrad:
         for group in self.optimizer.param_groups:
             for p in group['params']:
                 numel = p.numel()
-                p.grad = flattened_grad[idx:idx + numel].view(p.shape).clone()
+                p.grad = flattened_grad[idx:idx + numel].view_as(p).clone()
                 idx += numel
