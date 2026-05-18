@@ -731,7 +731,7 @@ def train(report_callback=None):
     checkpoint_path = os.path.join(seed_dir, "checkpoint.pt")
     if os.path.exists(checkpoint_path):
         print(f"Loading checkpoint from {checkpoint_path}...")
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         agent.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         start_update = checkpoint["update"] + 1
@@ -750,6 +750,57 @@ def train(report_callback=None):
             time_window.extend(checkpoint["time_window"])
         if "last_k_rewards" in checkpoint:
             last_k_rewards.extend(checkpoint["last_k_rewards"])
+        
+        # Restore normalization running statistics (critical for continuity)
+        if "obs_rms" in checkpoint:
+            for t, rms_data in checkpoint["obs_rms"].items():
+                t = int(t)
+                if t in envs.obs_rms:
+                    envs.obs_rms[t].mean = rms_data["mean"]
+                    envs.obs_rms[t].var = rms_data["var"]
+                    envs.obs_rms[t].count = rms_data["count"]
+            eval_envs.obs_rms = envs.obs_rms  # Re-share
+            print(f"[RESUME] Restored obs normalization stats for {len(checkpoint['obs_rms'])} tasks")
+        if "ret_rms" in checkpoint:
+            for t, rms_data in checkpoint["ret_rms"].items():
+                t = int(t)
+                if t in envs.ret_rms:
+                    envs.ret_rms[t].mean = rms_data["mean"]
+                    envs.ret_rms[t].var = rms_data["var"]
+                    envs.ret_rms[t].count = rms_data["count"]
+            print(f"[RESUME] Restored reward normalization stats for {len(checkpoint['ret_rms'])} tasks")
+        
+        # Restore RNG states for reproducibility
+        if "rng_torch" in checkpoint:
+            torch.set_rng_state(checkpoint["rng_torch"])
+        if "rng_numpy" in checkpoint:
+            np.random.set_state(checkpoint["rng_numpy"])
+        if "rng_random" in checkpoint:
+            random.setstate(checkpoint["rng_random"])
+        if "rng_cuda" in checkpoint and torch.cuda.is_available():
+            torch.cuda.set_rng_state(checkpoint["rng_cuda"])
+        
+        # Write verification report
+        verify_path = os.path.join(seed_dir, "requeue_verification.txt")
+        with open(verify_path, "a") as vf:
+            vf.write(f"\n{'='*60}\n")
+            vf.write(f"[RESUME] Loaded checkpoint at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            vf.write(f"  global_step:          {global_step}\n")
+            vf.write(f"  start_update:         {start_update}\n")
+            vf.write(f"  num_episodes:         {num_episodes_finished}\n")
+            vf.write(f"  eval_reward_current:  {eval_reward_current}\n")
+            vf.write(f"  wandb_id:             {checkpoint.get('wandb_id', 'N/A')}\n")
+            param_hash = sum(p.sum().item() for p in agent.parameters())
+            vf.write(f"  model_param_checksum: {param_hash:.6f}\n")
+            if hasattr(envs, 'obs_rms'):
+                for t in sorted(envs.obs_rms.keys()):
+                    vf.write(f"  obs_rms[{t}].mean_sum: {envs.obs_rms[t].mean.sum():.6f}\n")
+                    vf.write(f"  obs_rms[{t}].var_sum:  {envs.obs_rms[t].var.sum():.6f}\n")
+                    vf.write(f"  obs_rms[{t}].count:    {envs.obs_rms[t].count}\n")
+            vf.write(f"  norm_stats_restored:  {'obs_rms' in checkpoint}\n")
+            vf.write(f"  rng_states_restored:  {'rng_torch' in checkpoint}\n")
+            vf.write(f"{'='*60}\n")
+        print(f"[RESUME] Verification report written to {verify_path}")
         
         # Load history json if it exists to append to it
         hist_path = os.path.join(seed_dir, "history.json")
@@ -1132,6 +1183,17 @@ def train(report_callback=None):
 
         if shutdown_requested:
             print(f"\n[CHECKPOINT] Saving state at update {update} (Step {global_step})...")
+            
+            # Serialize normalization running statistics
+            obs_rms_state = {}
+            if hasattr(envs, 'obs_rms'):
+                for t, rms in envs.obs_rms.items():
+                    obs_rms_state[t] = {"mean": rms.mean, "var": rms.var, "count": rms.count}
+            ret_rms_state = {}
+            if hasattr(envs, 'ret_rms'):
+                for t, rms in envs.ret_rms.items():
+                    ret_rms_state[t] = {"mean": rms.mean, "var": rms.var, "count": rms.count}
+            
             checkpoint = {
                 "update": update,
                 "global_step": global_step,
@@ -1146,9 +1208,33 @@ def train(report_callback=None):
                 "current_task_ids": current_task_ids,
                 "model_state_dict": agent.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
-                "wandb_id": wandb.run.id if use_wandb else None
+                "wandb_id": wandb.run.id if use_wandb else None,
+                "obs_rms": obs_rms_state,
+                "ret_rms": ret_rms_state,
+                "rng_torch": torch.get_rng_state(),
+                "rng_numpy": np.random.get_state(),
+                "rng_random": random.getstate(),
+                "rng_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None
             }
             torch.save(checkpoint, checkpoint_path)
+            
+            # Write verification report
+            verify_path = os.path.join(seed_dir, "requeue_verification.txt")
+            with open(verify_path, "a") as vf:
+                vf.write(f"\n{'='*60}\n")
+                vf.write(f"[SAVE] Checkpoint saved at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                vf.write(f"  global_step:          {global_step}\n")
+                vf.write(f"  update:               {update}\n")
+                vf.write(f"  num_episodes:         {num_episodes_finished}\n")
+                vf.write(f"  eval_reward_current:  {eval_reward_current}\n")
+                vf.write(f"  wandb_id:             {wandb.run.id if use_wandb else 'N/A'}\n")
+                param_hash = sum(p.sum().item() for p in agent.parameters())
+                vf.write(f"  model_param_checksum: {param_hash:.6f}\n")
+                for t in sorted(obs_rms_state.keys()):
+                    vf.write(f"  obs_rms[{t}].mean_sum: {obs_rms_state[t]['mean'].sum():.6f}\n")
+                    vf.write(f"  obs_rms[{t}].var_sum:  {obs_rms_state[t]['var'].sum():.6f}\n")
+                    vf.write(f"  obs_rms[{t}].count:    {obs_rms_state[t]['count']}\n")
+                vf.write(f"{'='*60}\n")
             
             # Save history incrementally
             with open(os.path.join(seed_dir, "history.json"), "w") as f:
