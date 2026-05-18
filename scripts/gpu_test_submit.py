@@ -96,7 +96,7 @@ def submit_all():
 #SBATCH --job-name=gpu_{name}
 #SBATCH --output={log_dir}/%A.out
 #SBATCH --error={log_dir}/%A.err
-#SBATCH --partition=gpu
+#SBATCH --partition=RTX3090
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
