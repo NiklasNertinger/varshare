@@ -18,7 +18,7 @@ CPUS = 8
 TIME = "48:00:00" # Long time since they run sequential trials
 
 def generate_and_submit_hpo(method, use_gpu):
-    partition = "gpu" if use_gpu else "batch"
+    partition = "batch" # Use batch for everything as per submit_final_campaign_v2.py
     gpu_flag = "#SBATCH --gpus=1" if use_gpu else ""
     
     log_dir = f"logs/hpo_v6/{method}"
