@@ -135,7 +135,12 @@ if __name__ == "__main__":
     args = parse_args()
     
     os.makedirs("context/HPOs", exist_ok=True)
-    db_path = f"sqlite:///context/HPOs/hpo_{args.method}.db"
+    
+    # Use JournalFileStorage instead of SQLite — designed for parallel cluster workers
+    journal_path = f"context/HPOs/hpo_{args.method}.log"
+    storage = optuna.storages.JournalStorage(
+        optuna.storages.JournalFileStorage(journal_path)
+    )
     
     # Pruner: ASHA with 2M step grace period
     pruner = optuna.pruners.SuccessiveHalvingPruner(
@@ -151,7 +156,7 @@ if __name__ == "__main__":
     
     study = optuna.create_study(
         study_name=f"hpo_{args.method}_{args.mt_setting}",
-        storage=db_path,
+        storage=storage,
         load_if_exists=True,
         direction="maximize",
         pruner=pruner,
