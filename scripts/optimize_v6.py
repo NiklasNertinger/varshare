@@ -82,7 +82,7 @@ def objective(trial, args):
             base_cmd.extend(["--num-experts", str(k)])
             
     # Subprocess tracking
-    print(f"\\n--- Starting Trial {trial.number} for {args.method} ---")
+    print(f"\n--- Starting Trial {trial.number} for {args.method} ---")
     
     process = subprocess.Popen(
         base_cmd,
@@ -92,38 +92,47 @@ def objective(trial, args):
         bufsize=1
     )
     
-    # Regex to parse the evaluation logging
-    # Example format: Eval Global Step: 50000 | Rolling-20 Mean Reward: 12.345
-    eval_regex = re.compile(r"Eval Global Step:\s*(\d+)\s*\|\s*Rolling-20 Mean Reward:\s*([-\d.]+)")
+    # Regex patterns matching actual training script output:
+    #   ">>> Running Evaluation at Step 50000..."
+    #   "Eval Reward: 1187.08 | Eval Success: 0.10"
+    step_regex = re.compile(r"Running Evaluation at Step (\d+)")
+    eval_regex = re.compile(r"Eval Reward:\s*([-\d.]+)\s*\|\s*Eval Success:\s*([-\d.]+)")
     
     best_reward = float('-inf')
+    current_eval_step = 0
     
     try:
         for line in process.stdout:
             print(line, end="") # Stream to SLURM logs
-            match = eval_regex.search(line)
-            if match:
-                step = int(match.group(1))
-                reward = float(match.group(2))
+            
+            # Track which step we're evaluating at
+            step_match = step_regex.search(line)
+            if step_match:
+                current_eval_step = int(step_match.group(1))
+            
+            # Capture the eval reward
+            eval_match = eval_regex.search(line)
+            if eval_match and current_eval_step > 0:
+                reward = float(eval_match.group(1))
                 
                 if reward > best_reward:
                     best_reward = reward
                     
-                trial.report(reward, step)
+                trial.report(reward, current_eval_step)
                 if trial.should_prune():
-                    print(f"\\n[Optuna] Trial {trial.number} pruned at step {step} with reward {reward}.")
+                    print(f"\n[Optuna] Trial {trial.number} PRUNED at step {current_eval_step} with reward {reward}.")
                     process.terminate()
                     process.wait()
                     raise optuna.exceptions.TrialPruned()
                     
         process.wait()
         if process.returncode != 0:
-            print(f"\\n[WARNING] Subprocess crashed with exit code {process.returncode}")
+            print(f"\n[WARNING] Subprocess crashed with exit code {process.returncode}")
             raise optuna.exceptions.TrialPruned()
             
     except Exception as e:
         if not isinstance(e, optuna.exceptions.TrialPruned):
-            print(f"\\n[ERROR] Trial execution failed: {e}")
+            print(f"\n[ERROR] Trial execution failed: {e}")
             if process.poll() is None:
                 process.terminate()
                 process.wait()
@@ -165,7 +174,7 @@ if __name__ == "__main__":
     
     study.optimize(lambda trial: objective(trial, args), n_trials=args.trials)
     
-    print(f"\\n--- Study Completed for {args.method} ---")
+    print(f"\n--- Study Completed for {args.method} ---")
     print("Best Trial:", study.best_trial.number)
     print("Best Reward:", study.best_value)
     print("Best Params:", study.best_params)
