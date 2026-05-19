@@ -25,9 +25,13 @@ def sigusr1_handler(signum, frame):
 if hasattr(signal, "SIGUSR1"):
     signal.signal(signal.SIGUSR1, sigusr1_handler)
 
-from src.env import ComplexCartPole, IdenticalCartPole, MetaWorldWrapper
-from src.env.toy_multitask import MultiTaskLunarLander, IdenticalLunarLander
-from src.env.normalization import PerTaskVecNormalize
+# Import newly refactored utility modules
+from src.utils.seed import set_global_seeds
+from src.utils.environment import make_vectorized_envs
+from src.utils.logging import init_logging, log_metrics
+from src.utils.evaluation import evaluate_agent
+from src.utils.checkpointing import save_checkpoint, pre_load_wandb_id, write_verification_report
+
 from src.baselines import ActorCritic
 from src.algo.ppo import PPO
 from src.algo.pcgrad import PCGrad
@@ -77,6 +81,7 @@ def parse_args():
     
     # Architecture
     parser.add_argument("--hidden-dim", type=int, default=400, help="Network hidden dimension")
+    parser.add_argument("--scale-dim", type=lambda x: (str(x).lower() == 'true'), default=False, help="Scale hidden dim by 1/sqrt(K)")
     parser.add_argument("--wandb-project", type=str, default="varshare-bench-mt10", help="W&B project name")
 
     args = parser.parse_args()
@@ -91,76 +96,12 @@ def get_parameter_counts(model):
     total_params = sum(p.numel() for p in model.parameters())
     return total_params, total_params # No differentiation for standard models
 
-def evaluate(agent, envs, device, num_episodes=5, num_tasks=5, algo="shared", oracle_task=0):
-    agent.eval()
-    
-    # Identify which task indices we should evaluate
-    eval_tasks = [oracle_task] if algo == "oracle" else list(range(num_tasks))
-    
-    # Track completed episode counts, rewards, and successes for each task idx
-    completed_rewards = {i: [] for i in eval_tasks}
-    completed_successes = {i: [] for i in eval_tasks}
-    
-    # Track episodic return and success accumulators
-    current_rewards = np.zeros(num_tasks)
-    current_successes = np.zeros(num_tasks)
-    
-    obs, info = envs.reset()
-    
-    # Continue until all environments we care about have completed exactly num_episodes episodes
-    while any(len(completed_rewards[i]) < num_episodes for i in eval_tasks):
-        obs_tensor = torch.Tensor(obs).to(device)
-        # Vectorized tasks: each environment slot i maps to task index i
-        task_ids = torch.arange(num_tasks, device=device)
-        
-        with torch.no_grad():
-            actions, _, _, _ = agent.get_action_and_value(obs_tensor, task_idx=task_ids, sample=False)
-            
-        obs, rewards, terminations, truncations, infos = envs.step(actions.cpu().numpy())
-        
-        current_rewards += rewards
-        
-        # Track success rates in info if present
-        if "success" in infos:
-            current_successes = np.maximum(current_successes, infos["success"])
-        
-        # Process completed episodes
-        dones = terminations | truncations
-        for idx in range(num_tasks):
-            if dones[idx]:
-                if idx in completed_rewards:
-                    if len(completed_rewards[idx]) < num_episodes:
-                        # Extract success if available in final_info
-                        success_val = current_successes[idx]
-                        if "final_info" in infos and infos["final_info"] is not None:
-                            f_info = infos["final_info"][idx]
-                            if f_info is not None and "success" in f_info:
-                                success_val = f_info["success"]
-                                
-                        completed_rewards[idx].append(current_rewards[idx])
-                        completed_successes[idx].append(success_val)
-                        
-                # Reset accumulators for the next episode
-                current_rewards[idx] = 0.0
-                current_successes[idx] = 0.0
-                    
-    # Format and average results
-    task_stats = {}
-    for i in eval_tasks:
-        task_stats[i] = {
-            "reward": np.mean(completed_rewards[i]) if completed_rewards[i] else 0.0,
-            "success": np.mean(completed_successes[i]) if completed_successes[i] else 0.0
-        }
-        
-    agent.train()
-    return task_stats
-
 def train(report_callback=None):
     args = parse_args()
     timestamp = int(time.time())
-    run_name = f"{args.exp_name}_{args.algo}_s{args.seed}_{timestamp}"
+    run_name = f"{args.algo}_{args.exp_name}_s{args.seed}_{timestamp}"
     if args.algo == "oracle":
-        run_name += f"_t{args.task_id}"
+        run_name = f"{args.algo}_t{args.task_id}_{args.exp_name}_s{args.seed}_{timestamp}"
     
     # 1. Directory Structure
     exp_dir = os.path.join(args.analysis_dir, args.exp_name)
@@ -170,44 +111,18 @@ def train(report_callback=None):
     seed_dir = os.path.join(exp_dir, seed_str)
     os.makedirs(seed_dir, exist_ok=True)
     
-    # Check for existing checkpoint to enable W&B resume
     checkpoint_path = os.path.join(seed_dir, "checkpoint.pt")
-    resume_wandb_id = None
-    is_resuming = os.path.exists(checkpoint_path)
-    if is_resuming:
-        try:
-            pre_check = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-            resume_wandb_id = pre_check.get("wandb_id", None)
-            resume_step = pre_check.get("global_step", "?")
-            print(f"[RESUME] Found checkpoint at step {resume_step}. W&B ID: {resume_wandb_id}")
-            del pre_check  # Free memory
-        except Exception as e:
-            print(f"[RESUME] Warning: Could not pre-load checkpoint for W&B resume: {e}")
+    is_resuming, resume_wandb_id, resume_step = pre_load_wandb_id(checkpoint_path)
     
-    # W&B Initialization (with seamless resume support)
-    use_wandb = False
-    try:
-        wandb.init(
-            project=args.wandb_project,
-            entity="niklas-nertinger-university-of-oxford",
-            id=resume_wandb_id,
-            resume="must" if resume_wandb_id else "never",
-            name=run_name if not resume_wandb_id else None,
-            config=vars(args),
-            group=args.algo,
-            tags=[args.algo, args.env_type]
-        )
-        use_wandb = True
-    except Exception as e:
-        print(f"W&B Initialization Failed: {e}. Running without W&B.")
+    use_wandb, heartbeat_path, wandb_run_id = init_logging(args, seed_dir, run_name, resume_wandb_id)
     
-    heartbeat_path = os.path.join(seed_dir, "heartbeat.csv")
     heartbeat_mode = "a" if is_resuming else "w"
     heartbeat_file = open(heartbeat_path, heartbeat_mode, newline="")
     heartbeat_writer = None
     
     # We'll determine num_tasks based on env_type
     if args.env_type == "metaworld":
+        from src.env import MetaWorldWrapper
         # Temporary wrapper to get num_tasks
         temp_env = MetaWorldWrapper(benchmark=args.mt_setting, seed=args.seed)
         num_tasks = temp_env.num_tasks
@@ -216,10 +131,7 @@ def train(report_callback=None):
         num_tasks = 5
     
     # Seeding
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = args.cuda
+    set_global_seeds(args.seed, use_cuda=args.cuda)
     
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     print(f"Using device: {device}")
@@ -228,84 +140,21 @@ def train(report_callback=None):
         print(f"Training on Task ID: {args.task_id}")
     
     # Env Setup
-    class TaskAutoCycleWrapper(gym.Wrapper):
-        def __init__(self, env, num_tasks, initial_task_idx, auto_cycle):
-            super().__init__(env)
-            self.num_tasks = num_tasks
-            self.current_task = initial_task_idx
-            self.auto_cycle = auto_cycle
-            
-        def reset(self, **kwargs):
-            if hasattr(self.env.unwrapped, 'reset_task'):
-                self.env.unwrapped.reset_task(self.current_task)
-            obs, info = self.env.reset(**kwargs)
-            info["task_idx"] = self.current_task
-            return obs, info
-            
-        def step(self, action):
-            obs, reward, terminated, truncated, info = self.env.step(action)
-            info["task_idx"] = self.current_task
-            if terminated or truncated:
-                if self.auto_cycle:
-                    self.current_task = (self.current_task + 1) % self.num_tasks
-            return obs, reward, terminated, truncated, info
-
-    def make_env(seed, idx, initial_task_idx=0, auto_cycle_task=False):
-        def thunk():
-            if args.env_type == "metaworld":
-                env = MetaWorldWrapper(
-                    benchmark=args.mt_setting, 
-                    seed=seed, 
-                    initial_task_idx=initial_task_idx,
-                    auto_cycle_task=auto_cycle_task
-                )
-            else:
-                if args.env_type == "ComplexCartPole":
-                    env = ComplexCartPole(task_idx=initial_task_idx)
-                elif args.env_type == "IdenticalCartPole":
-                    env = IdenticalCartPole(task_idx=initial_task_idx)
-                elif args.env_type == "MultiTaskLunarLander":
-                    env = MultiTaskLunarLander(task_idx=initial_task_idx, continuous=(args.algo in ["paco", "soft_mod", "care", "moore"]))
-                elif args.env_type == "IdenticalLunarLander":
-                    env = IdenticalLunarLander(task_idx=initial_task_idx, continuous=(args.algo in ["paco", "soft_mod", "care", "moore"]))
-                env = TaskAutoCycleWrapper(env, num_tasks, initial_task_idx, auto_cycle_task)
-            
-            env = gym.wrappers.RecordEpisodeStatistics(env)
-            env.action_space.seed(seed)
-            if hasattr(env.observation_space, 'seed'):
-                env.observation_space.seed(seed)
-            return env
-        return thunk
-
-    envs = gym.vector.AsyncVectorEnv(
-        [
-            make_env(
-                args.seed + i, 
-                i, 
-                initial_task_idx=(args.task_id if args.algo == "oracle" else i % num_tasks),
-                auto_cycle_task=(args.algo in ["shared", "pcgrad", "paco", "soft_mod", "care", "moore", "independent"])
-            ) 
-            for i in range(args.num_envs)
-        ]
-    )
-    envs = PerTaskVecNormalize(envs, num_tasks, norm_obs=True, norm_reward=True, training=True)
-    
-    eval_envs = gym.vector.AsyncVectorEnv(
-        [
-            make_env(
-                args.seed + 1000 + i, 
-                i, 
-                initial_task_idx=(args.task_id if args.algo == "oracle" else i % num_tasks),
-                auto_cycle_task=False
-            ) 
-            for i in range(num_tasks)
-        ]
-    )
-    eval_envs = PerTaskVecNormalize(eval_envs, num_tasks, norm_obs=True, norm_reward=False, training=False)
-    eval_envs.obs_rms = envs.obs_rms
+    envs, eval_envs = make_vectorized_envs(args, num_tasks)
     
     # Model Setup
-    hdims = [args.hidden_dim] * 3
+    effective_dim = args.hidden_dim
+    if args.scale_dim:
+        import math
+        k = 1
+        if args.algo == "soft_mod":
+            k = args.num_modules
+        elif args.algo in ["paco", "care", "moore"]:
+            k = args.num_experts
+        if k > 1:
+            effective_dim = int(args.hidden_dim / math.sqrt(k))
+    
+    hdims = [effective_dim] * 3
     if args.algo == "paco":
         from src.baselines import PaCoActorCritic
         agent = PaCoActorCritic(
@@ -894,7 +743,18 @@ def train(report_callback=None):
         if args.eval_mode and global_step >= next_eval_step:
             eval_start = time.time()
             print(f"\n>>> Running Evaluation at Step {global_step}...")
-            task_stats = evaluate(agent, eval_envs, device, num_episodes=args.eval_episodes, num_tasks=num_tasks, algo=args.algo, oracle_task=args.task_id)
+            
+            # Determine which tasks to evaluate based on algorithm
+            eval_tasks = [args.task_id] if args.algo == "oracle" else list(range(num_tasks))
+            
+            task_stats = evaluate_agent(
+                agent=agent, 
+                envs=eval_envs, 
+                device=device, 
+                num_episodes=args.eval_episodes, 
+                num_tasks=num_tasks, 
+                eval_tasks=eval_tasks
+            )
             
             eval_reward_mean = np.mean([s["reward"] for s in task_stats.values()])
             eval_success_mean = np.mean([s["success"] for s in task_stats.values()])
@@ -956,17 +816,19 @@ def train(report_callback=None):
             full_metrics[f"eval/reward_task_{t}"] = eval_metrics.get(f"eval/reward_task_{t}", 0.0)
             full_metrics[f"eval/success_task_{t}"] = eval_metrics.get(f"eval/success_task_{t}", 0.0)
             
-        if heartbeat_writer is None:
-            heartbeat_writer = csv.DictWriter(heartbeat_file, fieldnames=list(full_metrics.keys()))
-            heartbeat_writer.writeheader()
-            
-        heartbeat_writer.writerow(full_metrics)
-        heartbeat_file.flush()
-        
-        if use_wandb:
-            try:
-                wandb.log(full_metrics, step=global_step)
-            except Exception as e:
+        # Dynamically dispatch to W&B and CSV
+        try:
+            heartbeat_writer = log_metrics(
+                global_step=global_step,
+                metrics=full_metrics,
+                use_wandb=use_wandb,
+                heartbeat_file=heartbeat_file,
+                heartbeat_writer=heartbeat_writer,
+                heartbeat_path=heartbeat_path,
+                is_resuming=is_resuming
+            )
+        except Exception as e:
+            if use_wandb:
                 print(f"W&B Log Failed: {e}. Disabling W&B for remainder of run.")
                 use_wandb = False
         
@@ -987,60 +849,40 @@ def train(report_callback=None):
                 torch.save(chkpt, os.path.join(seed_dir, f"checkpoint_step_{global_step}.pt"))
 
         if shutdown_requested:
-            print(f"\n[CHECKPOINT] Saving state at update {update} (Step {global_step})...")
+            save_checkpoint(
+                checkpoint_path=checkpoint_path,
+                agent=agent,
+                optimizer=optimizer,
+                envs=envs,
+                global_step=global_step,
+                update=update,
+                num_episodes_finished=num_episodes_finished,
+                next_eval_step=next_eval_step,
+                eval_reward_current=eval_reward_current,
+                eval_metrics=eval_metrics,
+                task_reward_window=task_reward_window,
+                task_success_window=task_success_window,
+                time_window=[],
+                last_k_rewards=[],
+                current_task_ids=current_task_ids,
+                start_time=start_time,
+                eval_time_accumulated=eval_time_accumulated,
+                wandb_run_id=wandb.run.id if use_wandb else None,
+                total_grad_steps=total_grad_steps
+            )
             
-            # Serialize normalization running statistics
-            obs_rms_state = {}
-            if hasattr(envs, 'obs_rms'):
-                for t, rms in envs.obs_rms.items():
-                    obs_rms_state[t] = {"mean": rms.mean, "var": rms.var, "count": rms.count}
-            ret_rms_state = {}
-            if hasattr(envs, 'ret_rms'):
-                for t, rms in envs.ret_rms.items():
-                    ret_rms_state[t] = {"mean": rms.mean, "var": rms.var, "count": rms.count}
-            
-            checkpoint = {
-                "update": update,
-                "global_step": global_step,
-                "total_grad_steps": total_grad_steps,
-                "num_episodes_finished": num_episodes_finished,
-                "next_eval_step": next_eval_step,
-                "eval_reward_current": eval_reward_current,
-                "eval_metrics": eval_metrics,
-                "task_reward_window": task_reward_window,
-                "task_success_window": task_success_window,
-                "current_task_ids": current_task_ids,
-                "model_state_dict": agent.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "wandb_id": wandb.run.id if use_wandb else None,
-                "obs_rms": obs_rms_state,
-                "ret_rms": ret_rms_state,
-                "rng_torch": torch.get_rng_state(),
-                "rng_numpy": np.random.get_state(),
-                "rng_random": random.getstate(),
-                "rng_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
-                "elapsed_time": time.time() - start_time,
-                "eval_time_accumulated": eval_time_accumulated
-            }
-            torch.save(checkpoint, checkpoint_path)
-            
-            # Write verification report
             verify_path = os.path.join(seed_dir, "requeue_verification.txt")
-            with open(verify_path, "a") as vf:
-                vf.write(f"\n{'='*60}\n")
-                vf.write(f"[SAVE] Checkpoint saved at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                vf.write(f"  global_step:          {global_step}\n")
-                vf.write(f"  update:               {update}\n")
-                vf.write(f"  num_episodes:         {num_episodes_finished}\n")
-                vf.write(f"  eval_reward_current:  {eval_reward_current}\n")
-                vf.write(f"  wandb_id:             {wandb.run.id if use_wandb else 'N/A'}\n")
-                param_hash = sum(p.sum().item() for p in agent.parameters())
-                vf.write(f"  model_param_checksum: {param_hash:.6f}\n")
-                for t in sorted(obs_rms_state.keys()):
-                    vf.write(f"  obs_rms[{t}].mean_sum: {obs_rms_state[t]['mean'].sum():.6f}\n")
-                    vf.write(f"  obs_rms[{t}].var_sum:  {obs_rms_state[t]['var'].sum():.6f}\n")
-                    vf.write(f"  obs_rms[{t}].count:    {obs_rms_state[t]['count']}\n")
-                vf.write(f"{'='*60}\n")
+            write_verification_report(
+                verify_path=verify_path,
+                event_type="SAVE",
+                global_step=global_step,
+                update=update,
+                num_episodes_finished=num_episodes_finished,
+                eval_reward_current=eval_reward_current,
+                wandb_id=wandb.run.id if use_wandb else "N/A",
+                agent=agent,
+                envs=envs
+            )
             
             # Save history incrementally
             with open(os.path.join(seed_dir, "history.json"), "w") as f:
