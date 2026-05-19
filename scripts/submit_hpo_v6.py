@@ -6,7 +6,7 @@ TRIALS_PER_METHOD = 80
 MAX_CONCURRENT = 8  # Max simultaneous jobs per method via SLURM %throttle
 
 METHODS_CPU = ["shared", "paco", "soft_mod", "care", "moore", "pcgrad", "cagrad"]
-METHODS_GPU = ["base", "routing"]
+METHODS_GPU = ["base", "routing", "det_pcgrad"]
 
 ENV_TYPE = "metaworld"
 MT_SETTING = "MT10"

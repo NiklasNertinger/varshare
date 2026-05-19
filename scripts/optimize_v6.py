@@ -23,7 +23,7 @@ def objective(trial, args):
     # Base commands
     base_cmd = [
         "python", 
-        "train_routing.py" if args.method in ["base", "routing"] else "train_baselines.py",
+        "train_routing.py" if args.method in ["base", "routing", "det_pcgrad"] else "train_baselines.py",
         "--total-timesteps", "10000000",
         "--n-steps", "256",
         "--batch-size", "256",
@@ -44,14 +44,15 @@ def objective(trial, args):
     ]
 
     # Assign algorithm/variant flags
-    if args.method in ["base", "routing"]:
-        base_cmd.extend(["--variant", args.method])
+    if args.method in ["base", "routing", "det_pcgrad"]:
+        variant_name = "pcgrad" if args.method == "det_pcgrad" else args.method
+        base_cmd.extend(["--variant", variant_name])
         base_cmd.extend(["--scale-dim", "True"]) # Divided by sqrt(2)
     else:
         base_cmd.extend(["--algo", args.method])
 
     # 2. Method-Specific Hyperparameters
-    if args.method in ["base", "routing"]:
+    if args.method in ["base", "routing", "det_pcgrad"]:
         mu_l2_coef = trial.suggest_float("mu-l2-coef", 1e-4, 1e-1, log=True)
         lr_task_scale = trial.suggest_float("lr-task-scale", 0.01, 2.0, log=True)
         base_cmd.extend(["--mu-l2-coef", str(mu_l2_coef), "--lr-task-scale", str(lr_task_scale)])
