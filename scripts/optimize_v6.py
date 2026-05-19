@@ -3,6 +3,7 @@ import argparse
 import subprocess
 import os
 import re
+from collections import deque
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -29,11 +30,11 @@ def objective(trial, args):
         "--num-envs", "10",
         "--eval-mode", "True",
         "--eval-freq", "50000",
-        "--eval-episodes", "1",
+        "--eval-episodes", "3",
         "--env-type", args.env_type,
         "--mt-setting", args.mt_setting,
         "--hidden-dim", "256",
-        "--wandb-project", f"varshare-hpo-{args.method}",
+        "--wandb-project", "varshare-hpo-mt10",
         "--exp-name", f"hpo_{args.method}_trial_{trial.number}",
         "--lr-actor", str(lr_actor),
         "--lr-critic", str(lr_critic),
@@ -98,7 +99,9 @@ def objective(trial, args):
     step_regex = re.compile(r"Running Evaluation at Step (\d+)")
     eval_regex = re.compile(r"Eval Reward:\s*([-\d.]+)\s*\|\s*Eval Success:\s*([-\d.]+)")
     
-    best_reward = float('-inf')
+    # Rolling-20 window of eval success rates for stable pruning signal
+    success_window = deque(maxlen=20)
+    best_success = float('-inf')
     current_eval_step = 0
     
     try:
@@ -110,17 +113,19 @@ def objective(trial, args):
             if step_match:
                 current_eval_step = int(step_match.group(1))
             
-            # Capture the eval reward
+            # Capture the eval success rate
             eval_match = eval_regex.search(line)
             if eval_match and current_eval_step > 0:
-                reward = float(eval_match.group(1))
+                success = float(eval_match.group(2))
+                success_window.append(success)
+                rolling_success = sum(success_window) / len(success_window)
                 
-                if reward > best_reward:
-                    best_reward = reward
+                if rolling_success > best_success:
+                    best_success = rolling_success
                     
-                trial.report(reward, current_eval_step)
+                trial.report(rolling_success, current_eval_step)
                 if trial.should_prune():
-                    print(f"\n[Optuna] Trial {trial.number} PRUNED at step {current_eval_step} with reward {reward}.")
+                    print(f"\n[Optuna] Trial {trial.number} PRUNED at step {current_eval_step} with rolling-20 success {rolling_success:.4f}.")
                     process.terminate()
                     process.wait()
                     raise optuna.exceptions.TrialPruned()
@@ -138,7 +143,7 @@ def objective(trial, args):
                 process.wait()
             raise e
 
-    return best_reward
+    return best_success
 
 if __name__ == "__main__":
     args = parse_args()
@@ -176,5 +181,5 @@ if __name__ == "__main__":
     
     print(f"\n--- Study Completed for {args.method} ---")
     print("Best Trial:", study.best_trial.number)
-    print("Best Reward:", study.best_value)
+    print("Best Rolling-20 Success:", study.best_value)
     print("Best Params:", study.best_params)
