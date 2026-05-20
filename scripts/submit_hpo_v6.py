@@ -57,10 +57,17 @@ if __name__ == "__main__":
     
     os.makedirs("context/HPOs", exist_ok=True)
     
+    # Submit routing first as requested
+    print("Submitting routing first...")
+    generate_and_submit_hpo("routing", use_gpu=True)
+    
+    # Submit other GPU methods
+    for method in METHODS_GPU:
+        if method != "routing":
+            generate_and_submit_hpo(method, use_gpu=True)
+        
+    # Submit CPU methods
     for method in METHODS_CPU:
         generate_and_submit_hpo(method, use_gpu=False)
-        
-    for method in METHODS_GPU:
-        generate_and_submit_hpo(method, use_gpu=True)
         
     print("\nAll HPO jobs submitted successfully!")
