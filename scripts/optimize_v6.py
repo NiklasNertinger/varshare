@@ -34,7 +34,7 @@ def objective(trial, args):
         "--env-type", args.env_type,
         "--mt-setting", args.mt_setting,
         "--hidden-dim", "256",
-        "--wandb-project", "varshare-hpo-mt10",
+        "--wandb-project", "varshare-hpo-mt10-v2",
         "--exp-name", f"hpo_{args.method}_trial_{trial.number}",
         "--lr-actor", str(lr_actor),
         "--lr-critic", str(lr_critic),
